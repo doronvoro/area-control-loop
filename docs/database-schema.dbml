@@ -13,6 +13,7 @@ Table auth_users {
 // Customers (Companies/Organizations)
 Table customers {
   id uuid [pk]
+  finding_id uuid [ref: > findings.id, not null, note: 'Reference to finding']
   user_id uuid [ref: > auth_users.id, unique, note: 'References auth.users.id - customer owner/admin']
   name text [not null]
   description text
@@ -20,6 +21,7 @@ Table customers {
   updated_at timestamptz [default: `now()`]
   
   indexes {
+    finding_id
     user_id
     name
   }
@@ -28,6 +30,7 @@ Table customers {
 // Invitations (Unified table for customer and worker invitations)
 Table invitations {
   id uuid [pk]
+  finding_id uuid [ref: > findings.id, not null, note: 'Reference to finding']
   invitation_type text [not null, note: 'customer or worker']
   invited_by_user_id uuid [ref: > auth_users.id, note: 'User who sent the invitation (admin for customers, worker for workers)']
   invited_user_id uuid [ref: > auth_users.id, note: 'User created when invitation is accepted']
@@ -42,6 +45,7 @@ Table invitations {
   updated_at timestamptz [default: `now()`]
   
   indexes {
+    finding_id
     invitation_type
     invited_by_user_id
     invited_user_id
@@ -56,6 +60,7 @@ Table invitations {
 // Workers (belong to customers, linked to auth users)
 Table workers {
   id uuid [pk]
+  finding_id uuid [ref: > findings.id, not null, note: 'Reference to finding']
   customer_id uuid [ref: > customers.id, note: 'References customers.id']
   user_id uuid [ref: > auth_users.id, unique, note: 'References auth.users.id']
   name text [not null]
@@ -64,6 +69,7 @@ Table workers {
   updated_at timestamptz [default: `now()`]
   
   indexes {
+    finding_id
     customer_id
     user_id
     type
@@ -74,12 +80,14 @@ Table workers {
 // Areas
 Table areas {
   id uuid [pk]
+  finding_id uuid [ref: > findings.id, not null, note: 'Reference to finding']
   name text [not null]
   description text
   created_at timestamptz [default: `now()`]
   updated_at timestamptz [default: `now()`]
   
   indexes {
+    finding_id
     name
   }
 }
@@ -87,12 +95,14 @@ Table areas {
 // Customer Areas (Junction Table)
 Table customer_areas {
   id uuid [pk]
+  finding_id uuid [ref: > findings.id, not null, note: 'Reference to finding']
   customer_id uuid [ref: > customers.id]
   area_id uuid [ref: > areas.id]
   created_at timestamptz [default: `now()`]
   updated_at timestamptz [default: `now()`]
   
   indexes {
+    finding_id
     (customer_id, area_id) [unique]
     customer_id
     area_id
@@ -102,6 +112,7 @@ Table customer_areas {
 // Sub Areas (Hierarchical structure with parent-child relationships)
 Table sub_areas {
   id uuid [pk]
+  finding_id uuid [ref: > findings.id, not null, note: 'Reference to finding']
   area_id uuid [ref: > areas.id]
   parent_sub_area_id uuid [ref: - sub_areas.id, note: 'References parent sub_area.id for hierarchical structure']
   level integer [not null, default: 1, note: 'Hierarchy level (1 = root, 2 = child, etc.)']
@@ -113,6 +124,7 @@ Table sub_areas {
   updated_at timestamptz [default: `now()`]
   
   indexes {
+    finding_id
     area_id
     parent_sub_area_id
     level
@@ -123,6 +135,7 @@ Table sub_areas {
 // Report Areas
 Table report_areas {
   id uuid [pk]
+  finding_id uuid [ref: > findings.id, not null, note: 'Reference to finding']
   area_id uuid [ref: > areas.id]
   type text [not null, note: 'Type of report area']
   name text [not null]
@@ -131,6 +144,7 @@ Table report_areas {
   updated_at timestamptz [default: `now()`]
   
   indexes {
+    finding_id
     area_id
     type
     name
@@ -140,12 +154,14 @@ Table report_areas {
 // Action Types
 Table action_types {
   id uuid [pk]
+  finding_id uuid [ref: > findings.id, not null, note: 'Reference to finding']
   name text [not null]
   description text
   created_at timestamptz [default: `now()`]
   updated_at timestamptz [default: `now()`]
   
   indexes {
+    finding_id
     name
   }
 }
@@ -153,12 +169,14 @@ Table action_types {
 // Unit Types
 Table unit_types {
   id uuid [pk]
+  finding_id uuid [ref: > findings.id, not null, note: 'Reference to finding']
   name text [not null]
   description text
   created_at timestamptz [default: `now()`]
   updated_at timestamptz [default: `now()`]
   
   indexes {
+    finding_id
     name
   }
 }
@@ -166,6 +184,7 @@ Table unit_types {
 // Findings
 Table findings {
   id uuid [pk]
+  finding_id uuid [ref: > findings.id, not null, note: 'Reference to finding']
   name text [not null]
   description text
   severity text [note: 'Severity level of the finding']
@@ -173,6 +192,7 @@ Table findings {
   updated_at timestamptz [default: `now()`]
   
   indexes {
+    finding_id
     name
     severity
   }
@@ -182,6 +202,7 @@ Table findings {
 // TODO: add actions_area_report_id fk to actions_area_report
 Table monitoring_area_report {
   id uuid [pk]
+  finding_id uuid [ref: > findings.id, not null, note: 'Reference to finding']
   area_report_id uuid [ref: > report_areas.id]
   sub_area_id uuid [ref: > sub_areas.id]
   finding_id uuid [ref: > findings.id, note: 'Reference to finding']
@@ -194,6 +215,7 @@ Table monitoring_area_report {
   updated_at timestamptz [default: `now()`]
   
   indexes {
+    finding_id
     (area_report_id, sub_area_id) [unique]
     area_report_id
     sub_area_id
@@ -207,6 +229,7 @@ Table monitoring_area_report {
 // Actions Area Report
 Table actions_area_report {
   id uuid [pk]
+  finding_id uuid [ref: > findings.id, not null, note: 'Reference to finding']
   area_report_id uuid [ref: > report_areas.id]
   sub_area_id uuid [ref: > sub_areas.id]
   finding_id uuid [ref: > findings.id, note: 'Reference to finding']
@@ -221,6 +244,7 @@ Table actions_area_report {
   updated_at timestamptz [default: `now()`]
   
   indexes {
+    finding_id
     area_report_id
     sub_area_id
     finding_id
@@ -231,3 +255,54 @@ Table actions_area_report {
   }
 }
 
+
+// Materials
+Table materials {
+  id uuid [pk]
+  finding_id uuid [ref: > findings.id, not null, note: 'Reference to finding']
+  name text [not null]
+  description text
+  created_at timestamptz [default: `now()`]
+  updated_at timestamptz [default: `now()`]
+  
+  indexes {
+    finding_id
+    name
+  }
+}
+
+// Crops
+Table crops {
+  id uuid [pk]
+  finding_id uuid [ref: > findings.id, not null, note: 'Reference to finding']
+  name text [not null]
+  description text
+  created_at timestamptz [default: `now()`]
+  updated_at timestamptz [default: `now()`]
+  
+  indexes {
+    finding_id
+    name
+  }
+}
+
+// Recommend Material
+Table recommend_material {
+  id uuid [pk]
+  finding_id uuid [ref: > findings.id, not null, note: 'Reference to finding']
+  material_id uuid [ref: > materials.id, not null, note: 'Reference to material']
+  dosage text [not null]
+  unit_type_id uuid [ref: > unit_types.id, not null, note: 'Unit type for dosage']
+  action_type_id uuid [ref: > action_types.id, not null, note: 'Type of action']
+  crop_id uuid [ref: > crops.id, not null, note: 'Reference to crop']
+  created_at timestamptz [default: `now()`]
+  updated_at timestamptz [default: `now()`]
+  
+  indexes {
+    finding_id
+    material_id
+    unit_type_id
+    action_type_id
+    crop_id
+  }
+}

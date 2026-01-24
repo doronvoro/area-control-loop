@@ -6,12 +6,40 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "create-admin": "tsx scripts/create-admin-user.ts",
+    "create-workers": "tsx scripts/create-sample-workers.ts",
+    "seed-data": "tsx scripts/seed-comprehensive-data.ts",
+    "update-hebrew": "tsx scripts/update-hebrew-descriptions.ts",
+    "update-areas": "tsx scripts/update-areas-subareas.ts",
+    "update-area-names": "tsx scripts/update-area-names.ts",
+    "assign-roles": "tsx scripts/assign-roles.ts",
+    "create-test-users": "tsx scripts/create-test-users.ts"
   },
   "dependencies": {
+    "@hookform/resolvers": "^5.2.2",
+    "@radix-ui/react-alert-dialog": "^1.1.15",
+    "@radix-ui/react-checkbox": "^1.3.3",
+    "@radix-ui/react-dialog": "^1.1.15",
+    "@radix-ui/react-label": "^2.1.8",
+    "@radix-ui/react-select": "^2.2.6",
+    "@radix-ui/react-slot": "^1.2.4",
+    "@supabase/ssr": "^0.8.0",
+    "@supabase/supabase-js": "^2.91.1",
+    "@types/uuid": "^10.0.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.1.0",
+    "lucide-react": "^0.563.0",
     "next": "16.1.4",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "react-hook-form": "^7.71.1",
+    "sonner": "^2.0.7",
+    "tailwind-merge": "^3.4.0",
+    "tailwindcss-rtl": "^0.9.0",
+    "uuid": "^13.0.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -20,7 +48,12 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.1.4",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.5",
+    "prettier": "^3.8.1",
     "tailwindcss": "^4",
+    "tsx": "^4.21.0",
+    "tw-animate-css": "^1.4.0",
     "typescript": "^5"
   }
 }
