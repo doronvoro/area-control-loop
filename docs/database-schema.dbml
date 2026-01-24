@@ -1,0 +1,233 @@
+// Pest Management Application Database Schema
+// Import this file into https://dbdiagram.io to visualize the schema
+
+// Auth Users (managed by Supabase Auth)
+Table auth_users {
+  id uuid [pk, note: 'Supabase Auth User ID']
+  email text
+  encrypted_password text
+  created_at timestamptz
+  Note: 'Admin users can invite customers. Check user_metadata or separate admin_users table for admin role'
+}
+
+// Customers (Companies/Organizations)
+Table customers {
+  id uuid [pk]
+  user_id uuid [ref: > auth_users.id, unique, note: 'References auth.users.id - customer owner/admin']
+  name text [not null]
+  description text
+  created_at timestamptz [default: `now()`]
+  updated_at timestamptz [default: `now()`]
+  
+  indexes {
+    user_id
+    name
+  }
+}
+
+// Invitations (Unified table for customer and worker invitations)
+Table invitations {
+  id uuid [pk]
+  invitation_type text [not null, note: 'customer or worker']
+  invited_by_user_id uuid [ref: > auth_users.id, note: 'User who sent the invitation (admin for customers, worker for workers)']
+  invited_user_id uuid [ref: > auth_users.id, note: 'User created when invitation is accepted']
+  customer_id uuid [ref: > customers.id, note: 'Required for worker invitations, null for customer invitations']
+  email text [not null]
+  name text [not null]
+  worker_type text [note: 'פקח or רסס - only for worker invitations']
+  token text [not null, unique]
+  status text [not null, default: 'pending', note: 'pending, accepted, expired, cancelled']
+  expires_at timestamptz [not null]
+  created_at timestamptz [default: `now()`]
+  updated_at timestamptz [default: `now()`]
+  
+  indexes {
+    invitation_type
+    invited_by_user_id
+    invited_user_id
+    customer_id
+    email
+    token
+    status
+    expires_at
+  }
+}
+
+// Workers (belong to customers, linked to auth users)
+Table workers {
+  id uuid [pk]
+  customer_id uuid [ref: > customers.id, note: 'References customers.id']
+  user_id uuid [ref: > auth_users.id, unique, note: 'References auth.users.id']
+  name text [not null]
+  type text [not null, note: 'פקח or רסס']
+  created_at timestamptz [default: `now()`]
+  updated_at timestamptz [default: `now()`]
+  
+  indexes {
+    customer_id
+    user_id
+    type
+    name
+  }
+}
+
+// Areas
+Table areas {
+  id uuid [pk]
+  name text [not null]
+  description text
+  created_at timestamptz [default: `now()`]
+  updated_at timestamptz [default: `now()`]
+  
+  indexes {
+    name
+  }
+}
+
+// Customer Areas (Junction Table)
+Table customer_areas {
+  id uuid [pk]
+  customer_id uuid [ref: > customers.id]
+  area_id uuid [ref: > areas.id]
+  created_at timestamptz [default: `now()`]
+  updated_at timestamptz [default: `now()`]
+  
+  indexes {
+    (customer_id, area_id) [unique]
+    customer_id
+    area_id
+  }
+}
+
+// Sub Areas (Hierarchical structure with parent-child relationships)
+Table sub_areas {
+  id uuid [pk]
+  area_id uuid [ref: > areas.id]
+  parent_sub_area_id uuid [ref: - sub_areas.id, note: 'References parent sub_area.id for hierarchical structure']
+  level integer [not null, default: 1, note: 'Hierarchy level (1 = root, 2 = child, etc.)']
+  name text [not null]
+  variety text
+  rows text
+  display text
+  created_at timestamptz [default: `now()`]
+  updated_at timestamptz [default: `now()`]
+  
+  indexes {
+    area_id
+    parent_sub_area_id
+    level
+    name
+  }
+}
+
+// Report Areas
+Table report_areas {
+  id uuid [pk]
+  area_id uuid [ref: > areas.id]
+  type text [not null, note: 'Type of report area']
+  name text [not null]
+  description text
+  created_at timestamptz [default: `now()`]
+  updated_at timestamptz [default: `now()`]
+  
+  indexes {
+    area_id
+    type
+    name
+  }
+}
+
+// Action Types
+Table action_types {
+  id uuid [pk]
+  name text [not null]
+  description text
+  created_at timestamptz [default: `now()`]
+  updated_at timestamptz [default: `now()`]
+  
+  indexes {
+    name
+  }
+}
+
+// Unit Types
+Table unit_types {
+  id uuid [pk]
+  name text [not null]
+  description text
+  created_at timestamptz [default: `now()`]
+  updated_at timestamptz [default: `now()`]
+  
+  indexes {
+    name
+  }
+}
+
+// Findings
+Table findings {
+  id uuid [pk]
+  name text [not null]
+  description text
+  severity text [note: 'Severity level of the finding']
+  created_at timestamptz [default: `now()`]
+  updated_at timestamptz [default: `now()`]
+  
+  indexes {
+    name
+    severity
+  }
+}
+
+// Monitoring Area Report
+// TODO: add actions_area_report_id fk to actions_area_report
+Table monitoring_area_report {
+  id uuid [pk]
+  area_report_id uuid [ref: > report_areas.id]
+  sub_area_id uuid [ref: > sub_areas.id]
+  finding_id uuid [ref: > findings.id, note: 'Reference to finding']
+  recommend_material text [note: 'Recommended material for pest control']
+  recommend_dosage text [note: 'Recommended dosage']
+  recommend_unit_type_id uuid [ref: > unit_types.id, note: 'Unit type for recommended dosage']
+  recommend_action_type_id uuid [ref: > action_types.id, note: 'Recommended action type']
+  status text [default: 'pending', note: 'Status of the monitoring (monitoring_status enum)']
+  created_at timestamptz [default: `now()`]
+  updated_at timestamptz [default: `now()`]
+  
+  indexes {
+    (area_report_id, sub_area_id) [unique]
+    area_report_id
+    sub_area_id
+    finding_id
+    recommend_action_type_id
+    recommend_unit_type_id
+    status
+  }
+}
+
+// Actions Area Report
+Table actions_area_report {
+  id uuid [pk]
+  area_report_id uuid [ref: > report_areas.id]
+  sub_area_id uuid [ref: > sub_areas.id]
+  finding_id uuid [ref: > findings.id, note: 'Reference to finding']
+  material text [note: 'Material used']
+  dosage text [note: 'Dosage applied']
+  unit_type_id uuid [ref: > unit_types.id, note: 'Unit type for dosage']
+  action_type_id uuid [ref: > action_types.id, note: 'Type of action taken']
+  action_time timestamptz [note: 'Time when the action was taken']
+  status text [default: 'planned', note: 'Status of the action (action_status enum)']
+  notes text [note: 'Additional notes about the action']
+  created_at timestamptz [default: `now()`]
+  updated_at timestamptz [default: `now()`]
+  
+  indexes {
+    area_report_id
+    sub_area_id
+    finding_id
+    action_type_id
+    unit_type_id
+    status
+    action_time
+  }
+}
+
