@@ -90,7 +90,19 @@ export function ActionForm({
   const form = useForm<ActionFormData>({
     resolver: zodResolver(actionSchema),
     defaultValues: {
-      status: 'planned' as string,
+      worker_id: '',
+      area_id: '',
+      monitoring_report_id: '',
+      sub_area_id: '',
+      finding_id: '',
+      material: '',
+      dosage: '',
+      unit_type_id: '',
+      action_type_id: '',
+      action_time: '',
+      status: 'planned',
+      notes: '',
+      update_monitoring_status: '',
     },
   });
 

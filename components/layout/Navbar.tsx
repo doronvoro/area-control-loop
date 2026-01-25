@@ -8,6 +8,7 @@ import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { supabase } from '@/lib/supabase/client';
 import { getDirection } from '@/lib/rtl';
 import { Menu } from 'lucide-react';
+import { Logo } from './Logo';
 
 const menuItems = [
   { href: '/dashboard', label: 'דשבורד' },
@@ -24,24 +25,65 @@ const adminMenuItems = [
 export function Navbar() {
   const [open, setOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [userName, setUserName] = useState<string>('');
+  const [userRole, setUserRole] = useState<string>('');
   const pathname = usePathname();
   const router = useRouter();
   const dir = getDirection();
 
   useEffect(() => {
-    const checkAdmin = async () => {
+    const loadUserInfo = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        const { data } = await supabase
-          .from('user_roles')
-          .select('roles(name)')
-          .eq('user_id', user.id);
-        const hasAdminRole = data?.some((ur: any) => ur.roles?.name === 'admin');
+        // Get user name from metadata or from customer/worker table
+        const nameFromMetadata = user.user_metadata?.name || user.email?.split('@')[0] || '';
+        
+        // Try to get name from customer or worker table
+        const [customerResult, workerResult, rolesResult] = await Promise.all([
+          supabase
+            .from('customers')
+            .select('name')
+            .eq('user_id', user.id)
+            .single(),
+          supabase
+            .from('workers')
+            .select('name')
+            .eq('user_id', user.id)
+            .single(),
+          supabase
+            .from('user_roles')
+            .select('roles(name, display_name)')
+            .eq('user_id', user.id),
+        ]);
+
+        // Determine the best name to display
+        let displayName = nameFromMetadata;
+        if (customerResult.data?.name) {
+          displayName = customerResult.data.name;
+        } else if (workerResult.data?.name) {
+          displayName = workerResult.data.name;
+        }
+        setUserName(displayName);
+
+        // Get role information
+        const roles = rolesResult.data || [];
+        const roleNames = roles
+          .map((ur: any) => ur.roles?.display_name || ur.roles?.name)
+          .filter(Boolean);
+        
+        if (roleNames.length > 0) {
+          setUserRole(roleNames.join(', '));
+        } else {
+          setUserRole('ללא תפקיד');
+        }
+
+        // Check if admin
+        const hasAdminRole = roles.some((ur: any) => ur.roles?.name === 'admin');
         setIsAdmin(hasAdminRole || false);
       }
     };
-    checkAdmin();
-  }, [supabase]);
+    loadUserInfo();
+  }, []);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -65,6 +107,14 @@ export function Navbar() {
               </SheetTrigger>
               <SheetContent side="right" dir={dir}>
                 <nav className="flex flex-col gap-4 mt-8">
+                  {userName && (
+                    <div className="flex flex-col items-end px-3 py-2 border-b border-border mb-2">
+                      <span className="text-base font-medium text-foreground">{userName}</span>
+                      {userRole && (
+                        <span className="text-sm text-muted-foreground">{userRole}</span>
+                      )}
+                    </div>
+                  )}
                   {allMenuItems.map((item) => (
                     <Link
                       key={item.href}
@@ -90,9 +140,7 @@ export function Navbar() {
               </SheetContent>
             </Sheet>
 
-            <Link href="/dashboard" className="text-xl font-bold">
-              Area Control Loop
-            </Link>
+            <Logo size="md" />
           </div>
 
           <div className="hidden md:flex items-center gap-4">
@@ -109,6 +157,14 @@ export function Navbar() {
                 {item.label}
               </Link>
             ))}
+            {userName && (
+              <div className="flex flex-col items-end px-3 py-1 border-r border-border mr-2">
+                <span className="text-sm font-medium text-foreground">{userName}</span>
+                {userRole && (
+                  <span className="text-xs text-muted-foreground">{userRole}</span>
+                )}
+              </div>
+            )}
             <Button variant="outline" onClick={handleLogout} size="sm">
               התנתק
             </Button>

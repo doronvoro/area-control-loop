@@ -17,6 +17,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: 'Area Control Loop',
   description: 'Area control loop application for monitoring and actions',
+  icons: {
+    icon: '/logo-icon.svg',
+    shortcut: '/logo-icon.svg',
+    apple: '/logo-icon.svg',
+  },
 };
 
 export default function RootLayout({
@@ -31,6 +36,7 @@ export default function RootLayout({
     <html lang={lang} dir={dir}>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        suppressHydrationWarning
       >
         {children}
         <Toaster position="top-center" richColors dir="rtl" />
