@@ -18,9 +18,8 @@
       "command": "npx",
       "args": [
         "-y",
-        "@anthropic/mcp-git"
-      ],
-      "env": {}
+        "@anthropic/claude-code-mcp-git"
+      ]
     },
     "vercel": {
       "type": "stdio",
@@ -29,7 +28,9 @@
         "-y",
         "@vercel/mcp"
       ],
-      "env": {}
+      "env": {
+        "VERCEL_TOKEN": "2PlTtxJBarnwqoNoe2yHKEzQ"
+      }
     }
   }
 }

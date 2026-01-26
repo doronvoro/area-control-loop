@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Pencil, Plus, Trash2, Settings } from 'lucide-react';
@@ -34,9 +34,16 @@ interface SubArea {
   children?: SubArea[];
 }
 
+interface Customer {
+  id: string;
+  name: string;
+}
+
 interface AreasListProps {
   areas: Area[];
   customerId?: string | null;
+  customers?: Customer[];
+  isAdmin?: boolean;
   canCreateArea: boolean;
   canUpdateArea: boolean;
   canDeleteArea: boolean;
@@ -48,6 +55,8 @@ interface AreasListProps {
 export function AreasList({
   areas,
   customerId,
+  customers = [],
+  isAdmin = false,
   canCreateArea,
   canUpdateArea,
   canDeleteArea,
@@ -198,6 +207,8 @@ export function AreasList({
         <AreaForm
           area={selectedArea}
           customerId={customerId || undefined}
+          customers={customers}
+          isAdmin={isAdmin}
           open={editAreaOpen}
           onOpenChange={setEditAreaOpen}
           onSuccess={handleAreaUpdateSuccess}

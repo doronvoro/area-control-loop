@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -22,15 +22,28 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 
 const areaSchema = z.object({
   name: z.string().min(1, 'שם השטח נדרש'),
   description: z.string().optional(),
+  customer_id: z.string().optional(),
 });
 
 type AreaFormData = z.infer<typeof areaSchema>;
+
+interface Customer {
+  id: string;
+  name: string;
+}
 
 interface AreaFormProps {
   area?: {
@@ -39,29 +52,55 @@ interface AreaFormProps {
     description?: string | null;
   } | null;
   customerId?: string | null;
+  customers?: Customer[];
+  isAdmin?: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
 }
 
-export function AreaForm({ area, customerId, open, onOpenChange, onSuccess }: AreaFormProps) {
+export function AreaForm({ area, customerId, customers = [], isAdmin = false, open, onOpenChange, onSuccess }: AreaFormProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Show customer selector for admins when creating new area
+  const showCustomerSelector = isAdmin && !area && customers.length > 0;
 
   const form = useForm<AreaFormData>({
     resolver: zodResolver(areaSchema),
     defaultValues: {
       name: area?.name || '',
       description: area?.description || '',
+      customer_id: customerId || '',
     },
   });
+
+  // Reset form when dialog opens/closes or area changes
+  useEffect(() => {
+    if (open) {
+      form.reset({
+        name: area?.name || '',
+        description: area?.description || '',
+        customer_id: customerId || '',
+      });
+    }
+  }, [open, area, customerId, form]);
 
   const onSubmit = async (data: AreaFormData) => {
     setLoading(true);
     setError(null);
 
+    // For admins creating new areas, require customer selection
+    if (showCustomerSelector && !data.customer_id) {
+      setError('יש לבחור לקוח');
+      setLoading(false);
+      return;
+    }
+
     try {
       const method = area ? 'PUT' : 'POST';
+      const selectedCustomerId = data.customer_id || customerId;
+
       const response = await fetch('/api/areas', {
         method,
         headers: {
@@ -69,8 +108,9 @@ export function AreaForm({ area, customerId, open, onOpenChange, onSuccess }: Ar
         },
         body: JSON.stringify({
           ...(area ? { id: area.id } : {}),
-          ...data,
-          ...(customerId && !area ? { customer_id: customerId } : {}),
+          name: data.name,
+          description: data.description,
+          ...(selectedCustomerId && !area ? { customer_id: selectedCustomerId } : {}),
         }),
       });
 
@@ -109,6 +149,33 @@ export function AreaForm({ area, customerId, open, onOpenChange, onSuccess }: Ar
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            {showCustomerSelector && (
+              <FormField
+                control={form.control}
+                name="customer_id"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>לקוח</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value || ''}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="בחר לקוח" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {customers.map((customer) => (
+                          <SelectItem key={customer.id} value={customer.id}>
+                            {customer.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
             <FormField
               control={form.control}
               name="name"

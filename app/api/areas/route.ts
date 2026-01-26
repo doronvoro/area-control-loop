@@ -1,7 +1,7 @@
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { getCurrentCustomer, getCurrentWorker, requireAuth } from '@/lib/auth';
-import { hasPermission } from '@/lib/permissions';
+import { hasPermission, hasRole } from '@/lib/permissions';
 
 export async function GET(request: Request) {
   try {
@@ -39,7 +39,7 @@ export async function GET(request: Request) {
 export async function PUT(request: Request) {
   try {
     await requireAuth();
-    
+
     // Check permission
     const canUpdate = await hasPermission('update_area');
     if (!canUpdate) {
@@ -59,15 +59,15 @@ export async function PUT(request: Request) {
       );
     }
 
-    const supabase = await createClient();
-    const updateData: any = {
-      name,
-      description: description || null,
-      updated_at: new Date().toISOString(),
-    };
-    const query = supabase.from('areas') as any;
-    const { data, error } = await query
-      .update(updateData)
+    // Use admin client to bypass RLS (permissions already checked above)
+    const adminClient = createAdminClient();
+    const { data, error } = await adminClient
+      .from('areas')
+      .update({
+        name,
+        description: description || null,
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', id)
       .select()
       .single();
@@ -83,7 +83,7 @@ export async function PUT(request: Request) {
 export async function POST(request: Request) {
   try {
     await requireAuth();
-    
+
     // Check permission
     const canCreate = await hasPermission('create_area');
     if (!canCreate) {
@@ -103,16 +103,16 @@ export async function POST(request: Request) {
       );
     }
 
-    const supabase = await createClient();
-    
+    // Use admin client to bypass RLS (permissions already checked above)
+    const adminClient = createAdminClient();
+
     // Create area
-    const insertData: any = {
-      name,
-      description: description || null,
-    };
-    const query = supabase.from('areas') as any;
-    const { data: areaData, error: areaError } = await query
-      .insert(insertData)
+    const { data: areaData, error: areaError } = await adminClient
+      .from('areas')
+      .insert({
+        name,
+        description: description || null,
+      })
       .select()
       .single();
 
@@ -120,14 +120,13 @@ export async function POST(request: Request) {
 
     // If customer_id is provided, link area to customer
     if (customer_id && areaData) {
-      const linkData: any = {
-        customer_id,
-        area_id: areaData.id,
-      };
-      const { error: linkError } = await supabase
+      const { error: linkError } = await adminClient
         .from('customer_areas')
-        .insert(linkData);
-      
+        .insert({
+          customer_id,
+          area_id: areaData.id,
+        });
+
       if (linkError) {
         console.error('Error linking area to customer:', linkError);
         // Don't fail the request, area was created successfully
@@ -143,7 +142,7 @@ export async function POST(request: Request) {
 export async function DELETE(request: Request) {
   try {
     await requireAuth();
-    
+
     // Check permission
     const canDelete = await hasPermission('delete_area');
     if (!canDelete) {
@@ -163,9 +162,12 @@ export async function DELETE(request: Request) {
       );
     }
 
-    const supabase = await createClient();
-    const query = supabase.from('areas') as any;
-    const { error } = await query.delete().eq('id', id);
+    // Use admin client to bypass RLS (permissions already checked above)
+    const adminClient = createAdminClient();
+    const { error } = await adminClient
+      .from('areas')
+      .delete()
+      .eq('id', id);
 
     if (error) throw error;
 

@@ -19,6 +19,7 @@ const menuItems = [
 ];
 
 const adminMenuItems = [
+  { href: '/admin/customers', label: 'לקוחות' },
   { href: '/admin/recommend-materials', label: 'המלצות חומרים' },
 ];
 
@@ -44,12 +45,12 @@ export function Navbar() {
             .from('customers')
             .select('name')
             .eq('user_id', user.id)
-            .single(),
+            .maybeSingle(),
           supabase
             .from('workers')
             .select('name')
             .eq('user_id', user.id)
-            .single(),
+            .maybeSingle(),
           supabase
             .from('user_roles')
             .select('roles(name, display_name)')
