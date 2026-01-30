@@ -14,12 +14,12 @@ const menuItems = [
   { href: '/dashboard', label: 'דשבורד' },
   { href: '/monitoring', label: 'ניטור' },
   { href: '/actions', label: 'פעולות' },
+  { href: '/areas', label: 'אזורים' },
   { href: '/reports', label: 'דוחות' },
-  { href: '/areas', label: 'שטחים' },
+  { href: '/manage', label: 'ניהול' },
 ];
 
 const adminMenuItems = [
-  { href: '/admin/customers', label: 'לקוחות' },
   { href: '/admin/recommend-materials', label: 'המלצות חומרים' },
 ];
 
