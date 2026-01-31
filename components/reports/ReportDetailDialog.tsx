@@ -26,6 +26,7 @@ interface ReportAreaData {
   type: string;
   description?: string;
   created_at: string;
+  report_number?: number;
   area?: { id: string; name: string };
   monitoring_reports?: SubAreaReport[];
   action_reports?: SubAreaReport[];
@@ -82,12 +83,18 @@ export function ReportDetailDialog({ reportArea, open, onOpenChange }: ReportDet
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-xl">{reportArea.name}</DialogTitle>
+          <DialogTitle className="text-xl">
+            {reportArea.report_number ? `דוח #${reportArea.report_number}` : reportArea.name}
+          </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
           {/* Report Header Info */}
           <div className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <span className="text-muted-foreground">שם: </span>
+              <span className="font-medium">{reportArea.name}</span>
+            </div>
             <div>
               <span className="text-muted-foreground">שטח: </span>
               <span className="font-medium">{reportArea.area?.name || '-'}</span>

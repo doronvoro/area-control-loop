@@ -34,6 +34,7 @@ interface ReportAreaData {
   type: string;
   description?: string;
   created_at: string;
+  report_number?: number;
   area?: { id: string; name: string };
   monitoring_reports?: SubAreaReport[];
   action_reports?: SubAreaReport[];
@@ -87,6 +88,7 @@ export function ReportsTable({ reportAreas }: ReportsTableProps) {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>מס׳ דוח</TableHead>
                 <TableHead>תאריך</TableHead>
                 <TableHead>שם הדוח</TableHead>
                 <TableHead>שטח</TableHead>
@@ -102,10 +104,11 @@ export function ReportsTable({ reportAreas }: ReportsTableProps) {
                   className="cursor-pointer hover:bg-muted/50"
                   onClick={() => handleRowClick(reportArea)}
                 >
+                  <TableCell className="font-medium">{reportArea.report_number || '-'}</TableCell>
                   <TableCell>
                     {new Date(reportArea.created_at).toLocaleDateString('he-IL')}
                   </TableCell>
-                  <TableCell className="font-medium">{reportArea.name}</TableCell>
+                  <TableCell>{reportArea.name}</TableCell>
                   <TableCell>{reportArea.area?.name || '-'}</TableCell>
                   <TableCell>
                     <Badge variant="secondary">
@@ -120,7 +123,7 @@ export function ReportsTable({ reportAreas }: ReportsTableProps) {
               ))}
               {reportAreas.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground">
                     אין דוחות
                   </TableCell>
                 </TableRow>

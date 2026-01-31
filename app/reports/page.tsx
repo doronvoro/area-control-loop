@@ -11,7 +11,7 @@ export default async function ReportsPage() {
   const { data: reportAreas } = await supabase
     .from('report_areas')
     .select(
-      `*,
+      `id, name, type, description, created_at, report_number,
       area:areas(id, name),
       monitoring_reports:monitoring_area_report(
         *,
