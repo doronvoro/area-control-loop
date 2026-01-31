@@ -13,19 +13,24 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ReportDetailDialog } from './ReportDetailDialog';
 
+interface Treatment {
+  id: string;
+  dosage?: number | null;
+  status: string;
+  notes?: string | null;
+  action_time?: string | null;
+  material?: { name: string; description?: string | null } | null;
+  action_type?: { name: string; description?: string | null } | null;
+  unit_type?: { name: string; description?: string | null } | null;
+}
+
 interface SubAreaReport {
   id: string;
-  action_time?: string;
   created_at: string;
   status: string;
-  notes?: string;
-  recommend_dosage?: number;
-  sub_area?: { id: string; name: string };
-  finding?: { name: string; description?: string };
-  action_type?: { name: string; description?: string };
-  recommend_action_type?: { name: string; description?: string };
-  recommend_material?: { name: string; description?: string };
-  recommend_unit_type?: { name: string; description?: string };
+  sub_area?: { id: string; name: string } | null;
+  finding?: { name: string; description?: string | null } | null;
+  treatments?: Treatment[];
 }
 
 interface ReportAreaData {

@@ -17,7 +17,16 @@ export async function GET() {
     const { data, error } = await supabase
       .from('actions_area_report')
       .select(
-        '*, area_report:report_areas(*), sub_area:sub_areas(*), finding:findings(*), unit_type:unit_types(*), action_type:action_types(*)'
+        `*,
+        area_report:report_areas(*),
+        sub_area:sub_areas(*),
+        finding:findings(*),
+        treatments:action_treatments(
+          *,
+          material:materials(*),
+          unit_type:unit_types(*),
+          action_type:action_types(*)
+        )`
       )
       .order('created_at', { ascending: false });
 
@@ -55,7 +64,7 @@ export async function POST(request: Request) {
         .from('report_areas')
         .select('id')
         .eq('area_id', area_id)
-        .eq('type', 'actions') as { data: { id: string }[] | null };
+        .eq('type', 'action') as { data: { id: string }[] | null };
 
       let reportAreaId: string;
 
@@ -73,7 +82,7 @@ export async function POST(request: Request) {
         const { data: newReportArea, error: createError } = await query
           .insert({
             area_id,
-            type: 'actions',
+            type: 'action',
             name: `דוח פעולה - ${areaData?.name || 'שטח'}`,
             description: 'דוח פעולה שנוצר ע"י מנהל',
           })
@@ -94,18 +103,56 @@ export async function POST(request: Request) {
             area_report_id: reportAreaId,
             sub_area_id: entry.sub_area_id,
             finding_id: entry.finding_id,
-            material: entry.material || null,
-            dosage: entry.dosage || null,
-            unit_type_id: entry.unit_type_id || null,
-            action_type_id: entry.action_type_id || null,
-            action_time: entry.action_time || null,
             status: entry.status || 'planned',
-            notes: entry.notes || null,
           } as any)
           .select()
           .single();
 
         if (actionError) throw actionError;
+
+        // Create treatments if provided
+        if (entry.treatments && Array.isArray(entry.treatments)) {
+          for (const treatment of entry.treatments) {
+            const parsedDosage = treatment.dosage
+              ? (typeof treatment.dosage === 'string' ? parseFloat(treatment.dosage) : treatment.dosage)
+              : null;
+
+            const { error: treatmentError } = await (supabase
+              .from('action_treatments') as any)
+              .insert({
+                action_report_id: (actionData as any).id,
+                material_id: treatment.material_id || null,
+                dosage: parsedDosage,
+                unit_type_id: treatment.unit_type_id || null,
+                action_type_id: treatment.action_type_id || null,
+                status: treatment.status || 'pending',
+                notes: treatment.notes || null,
+                action_time: treatment.action_time || null,
+              });
+
+            if (treatmentError) throw treatmentError;
+          }
+        } else if (entry.action_type_id || entry.material_id) {
+          // Legacy format - create single treatment from entry fields
+          const parsedDosage = entry.dosage
+            ? (typeof entry.dosage === 'string' ? parseFloat(entry.dosage) : entry.dosage)
+            : null;
+
+          const { error: treatmentError } = await (supabase
+            .from('action_treatments') as any)
+            .insert({
+              action_report_id: (actionData as any).id,
+              material_id: entry.material_id || null,
+              dosage: parsedDosage,
+              unit_type_id: entry.unit_type_id || null,
+              action_type_id: entry.action_type_id || null,
+              status: entry.status || 'pending',
+              notes: entry.notes || null,
+              action_time: entry.action_time || null,
+            });
+
+          if (treatmentError) throw treatmentError;
+        }
 
         // If linked to monitoring report, update it
         if (entry.monitoring_report_id && actionData) {
@@ -131,6 +178,9 @@ export async function POST(request: Request) {
       area_report_id,
       sub_area_id,
       finding_id,
+      treatments,
+      // Legacy fields
+      material_id,
       material,
       dosage,
       unit_type_id,
@@ -149,18 +199,56 @@ export async function POST(request: Request) {
         area_report_id,
         sub_area_id,
         finding_id,
-        material: material || null,
-        dosage: dosage || null,
-        unit_type_id: unit_type_id || null,
-        action_type_id: action_type_id || null,
-        action_time: action_time || null,
         status: status || 'planned',
-        notes: notes || null,
       } as any)
       .select()
       .single();
 
     if (actionError) throw actionError;
+
+    // Create treatments if provided
+    if (treatments && Array.isArray(treatments)) {
+      for (const treatment of treatments) {
+        const parsedDosage = treatment.dosage
+          ? (typeof treatment.dosage === 'string' ? parseFloat(treatment.dosage) : treatment.dosage)
+          : null;
+
+        const { error: treatmentError } = await (supabase
+          .from('action_treatments') as any)
+          .insert({
+            action_report_id: (actionData as any).id,
+            material_id: treatment.material_id || null,
+            dosage: parsedDosage,
+            unit_type_id: treatment.unit_type_id || null,
+            action_type_id: treatment.action_type_id || null,
+            status: treatment.status || 'pending',
+            notes: treatment.notes || null,
+            action_time: treatment.action_time || null,
+          });
+
+        if (treatmentError) throw treatmentError;
+      }
+    } else if (action_type_id || material_id || material) {
+      // Legacy format - create single treatment from legacy fields
+      const parsedDosage = dosage
+        ? (typeof dosage === 'string' ? parseFloat(dosage) : dosage)
+        : null;
+
+      const { error: treatmentError } = await (supabase
+        .from('action_treatments') as any)
+        .insert({
+          action_report_id: (actionData as any).id,
+          material_id: material_id || null,
+          dosage: parsedDosage,
+          unit_type_id: unit_type_id || null,
+          action_type_id: action_type_id || null,
+          status: 'pending',
+          notes: notes || null,
+          action_time: action_time || null,
+        });
+
+      if (treatmentError) throw treatmentError;
+    }
 
     // If linked to monitoring report, update it
     if (monitoring_report_id && actionData) {

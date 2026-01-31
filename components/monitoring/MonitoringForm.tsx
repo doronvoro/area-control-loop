@@ -26,13 +26,18 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, Plus, Trash2 } from 'lucide-react';
 
+const treatmentSchema = z.object({
+  action_type_id: z.string().optional(),
+  material_id: z.string().optional(),
+  dosage: z.string().optional(),
+  unit_type_id: z.string().optional(),
+  notes: z.string().optional(),
+});
+
 const subAreaEntrySchema = z.object({
   sub_area_id: z.string().min(1, 'נדרש לבחור תת-שטח'),
   finding_id: z.string().min(1, 'נדרש לבחור ממצא'),
-  recommend_action_type_id: z.string().optional(),
-  recommend_material_id: z.string().optional(),
-  recommend_dosage: z.string().optional(),
-  recommend_unit_type_id: z.string().optional(),
+  treatments: z.array(treatmentSchema),
 });
 
 const monitoringSchema = z.object({
@@ -67,14 +72,17 @@ export function MonitoringForm({
 
   // Per-entry indexed state for cascade data
   const [entryActionTypes, setEntryActionTypes] = useState<Record<number, any[]>>({});
-  const [entryMaterials, setEntryMaterials] = useState<Record<number, any[]>>({});
   const [entryCropIds, setEntryCropIds] = useState<Record<number, string | null>>({});
-  const [entryRecommendedDosage, setEntryRecommendedDosage] = useState<Record<number, string>>({});
-  const [entryRecommendedUnitTypeId, setEntryRecommendedUnitTypeId] = useState<Record<number, string>>({});
+
+  // Per-treatment indexed state: key is "entryIndex-treatmentIndex"
+  const [treatmentMaterials, setTreatmentMaterials] = useState<Record<string, any[]>>({});
+  const [treatmentRecommendedDosage, setTreatmentRecommendedDosage] = useState<Record<string, string>>({});
+  const [treatmentRecommendedUnitTypeId, setTreatmentRecommendedUnitTypeId] = useState<Record<string, string>>({});
 
   // Per-entry loading states
   const [entryLoadingActionTypes, setEntryLoadingActionTypes] = useState<Record<number, boolean>>({});
-  const [entryLoadingMaterials, setEntryLoadingMaterials] = useState<Record<number, boolean>>({});
+  // Per-treatment loading states
+  const [treatmentLoadingMaterials, setTreatmentLoadingMaterials] = useState<Record<string, boolean>>({});
 
   // Loading states
   const [loadingInspectors, setLoadingInspectors] = useState(false);
@@ -90,10 +98,7 @@ export function MonitoringForm({
       entries: [{
         sub_area_id: '',
         finding_id: '',
-        recommend_action_type_id: '',
-        recommend_material_id: '',
-        recommend_dosage: '',
-        recommend_unit_type_id: '',
+        treatments: [],
       }],
     },
   });
@@ -116,10 +121,7 @@ export function MonitoringForm({
       form.setValue('entries', [{
         sub_area_id: '',
         finding_id: '',
-        recommend_action_type_id: '',
-        recommend_material_id: '',
-        recommend_dosage: '',
-        recommend_unit_type_id: '',
+        treatments: [],
       }]);
       setSubAreas([]);
       resetAllEntryState();
@@ -137,10 +139,7 @@ export function MonitoringForm({
       form.setValue('entries', [{
         sub_area_id: '',
         finding_id: '',
-        recommend_action_type_id: '',
-        recommend_material_id: '',
-        recommend_dosage: '',
-        recommend_unit_type_id: '',
+        treatments: [],
       }]);
       resetAllEntryState();
     } else {
@@ -152,11 +151,11 @@ export function MonitoringForm({
   const resetAllEntryState = () => {
     setEntryCropIds({});
     setEntryActionTypes({});
-    setEntryMaterials({});
-    setEntryRecommendedDosage({});
-    setEntryRecommendedUnitTypeId({});
+    setTreatmentMaterials({});
+    setTreatmentRecommendedDosage({});
+    setTreatmentRecommendedUnitTypeId({});
     setEntryLoadingActionTypes({});
-    setEntryLoadingMaterials({});
+    setTreatmentLoadingMaterials({});
   };
 
   const fetchInspectorsAndAreas = async (customerId: string) => {
@@ -216,31 +215,33 @@ export function MonitoringForm({
     }
   };
 
-  const fetchMaterialsForEntry = async (cropId: string, actionTypeId: string, index: number) => {
-    setEntryLoadingMaterials(prev => ({ ...prev, [index]: true }));
+  const fetchMaterialsForTreatment = async (cropId: string, actionTypeId: string, entryIndex: number, treatmentIndex: number) => {
+    const key = `${entryIndex}-${treatmentIndex}`;
+    setTreatmentLoadingMaterials(prev => ({ ...prev, [key]: true }));
     try {
       const res = await fetch(`/api/cascade?type=materials&cropId=${cropId}&actionTypeId=${actionTypeId}`);
       if (res.ok) {
         const data = await res.json();
-        setEntryMaterials(prev => ({ ...prev, [index]: data }));
+        setTreatmentMaterials(prev => ({ ...prev, [key]: data }));
       }
     } catch (err) {
       console.error('Error fetching materials:', err);
     } finally {
-      setEntryLoadingMaterials(prev => ({ ...prev, [index]: false }));
+      setTreatmentLoadingMaterials(prev => ({ ...prev, [key]: false }));
     }
   };
 
-  const fetchDosageForEntry = async (cropId: string, actionTypeId: string, materialId: string, index: number) => {
+  const fetchDosageForTreatment = async (cropId: string, actionTypeId: string, materialId: string, entryIndex: number, treatmentIndex: number) => {
+    const key = `${entryIndex}-${treatmentIndex}`;
     try {
       const res = await fetch(`/api/cascade?type=dosage&cropId=${cropId}&actionTypeId=${actionTypeId}&materialId=${materialId}`);
       if (res.ok) {
         const data = await res.json();
         if (data) {
-          setEntryRecommendedDosage(prev => ({ ...prev, [index]: data.dosage?.toString() || '' }));
-          setEntryRecommendedUnitTypeId(prev => ({ ...prev, [index]: data.unit_type_id || '' }));
-          form.setValue(`entries.${index}.recommend_dosage`, data.dosage?.toString() || '');
-          form.setValue(`entries.${index}.recommend_unit_type_id`, data.unit_type_id || '');
+          setTreatmentRecommendedDosage(prev => ({ ...prev, [key]: data.dosage?.toString() || '' }));
+          setTreatmentRecommendedUnitTypeId(prev => ({ ...prev, [key]: data.unit_type_id || '' }));
+          form.setValue(`entries.${entryIndex}.treatments.${treatmentIndex}.dosage`, data.dosage?.toString() || '');
+          form.setValue(`entries.${entryIndex}.treatments.${treatmentIndex}.unit_type_id`, data.unit_type_id || '');
         }
       }
     } catch (err) {
@@ -259,29 +260,20 @@ export function MonitoringForm({
 
     // Reset dependent fields for this entry
     form.setValue(`entries.${index}.finding_id`, '');
-    form.setValue(`entries.${index}.recommend_action_type_id`, '');
-    form.setValue(`entries.${index}.recommend_material_id`, '');
-    form.setValue(`entries.${index}.recommend_dosage`, '');
-    form.setValue(`entries.${index}.recommend_unit_type_id`, '');
+    form.setValue(`entries.${index}.treatments`, []);
 
     setEntryActionTypes(prev => ({ ...prev, [index]: [] }));
-    setEntryMaterials(prev => ({ ...prev, [index]: [] }));
-    setEntryRecommendedDosage(prev => ({ ...prev, [index]: '' }));
-    setEntryRecommendedUnitTypeId(prev => ({ ...prev, [index]: '' }));
+    // Clean up treatment-related state for this entry
+    cleanupTreatmentStateForEntry(index);
   };
 
   const handleFindingChange = (findingId: string, index: number) => {
     form.setValue(`entries.${index}.finding_id`, findingId);
     const cropId = entryCropIds[index];
 
-    // Reset dependent fields
-    form.setValue(`entries.${index}.recommend_action_type_id`, '');
-    form.setValue(`entries.${index}.recommend_material_id`, '');
-    form.setValue(`entries.${index}.recommend_dosage`, '');
-    form.setValue(`entries.${index}.recommend_unit_type_id`, '');
-    setEntryMaterials(prev => ({ ...prev, [index]: [] }));
-    setEntryRecommendedDosage(prev => ({ ...prev, [index]: '' }));
-    setEntryRecommendedUnitTypeId(prev => ({ ...prev, [index]: '' }));
+    // Reset treatments when finding changes
+    form.setValue(`entries.${index}.treatments`, []);
+    cleanupTreatmentStateForEntry(index);
 
     if (findingId && cropId) {
       fetchActionTypesForEntry(cropId, index);
@@ -290,42 +282,91 @@ export function MonitoringForm({
     }
   };
 
-  const handleActionTypeChange = (actionTypeId: string, index: number) => {
-    form.setValue(`entries.${index}.recommend_action_type_id`, actionTypeId);
-    const cropId = entryCropIds[index];
+  const cleanupTreatmentStateForEntry = (entryIndex: number) => {
+    // Remove all treatment state for this entry
+    const cleanupState = <T,>(state: Record<string, T>): Record<string, T> => {
+      const newState: Record<string, T> = {};
+      Object.keys(state).forEach(key => {
+        if (!key.startsWith(`${entryIndex}-`)) {
+          newState[key] = state[key];
+        }
+      });
+      return newState;
+    };
+    setTreatmentMaterials(cleanupState);
+    setTreatmentRecommendedDosage(cleanupState);
+    setTreatmentRecommendedUnitTypeId(cleanupState);
+    setTreatmentLoadingMaterials(cleanupState);
+  };
 
-    // Reset dependent fields
-    form.setValue(`entries.${index}.recommend_material_id`, '');
-    form.setValue(`entries.${index}.recommend_dosage`, '');
-    form.setValue(`entries.${index}.recommend_unit_type_id`, '');
-    setEntryRecommendedDosage(prev => ({ ...prev, [index]: '' }));
-    setEntryRecommendedUnitTypeId(prev => ({ ...prev, [index]: '' }));
+  const handleTreatmentActionTypeChange = (actionTypeId: string, entryIndex: number, treatmentIndex: number) => {
+    form.setValue(`entries.${entryIndex}.treatments.${treatmentIndex}.action_type_id`, actionTypeId);
+    const cropId = entryCropIds[entryIndex];
+    const key = `${entryIndex}-${treatmentIndex}`;
+
+    // Reset dependent fields for this treatment
+    form.setValue(`entries.${entryIndex}.treatments.${treatmentIndex}.material_id`, '');
+    form.setValue(`entries.${entryIndex}.treatments.${treatmentIndex}.dosage`, '');
+    form.setValue(`entries.${entryIndex}.treatments.${treatmentIndex}.unit_type_id`, '');
+    setTreatmentRecommendedDosage(prev => ({ ...prev, [key]: '' }));
+    setTreatmentRecommendedUnitTypeId(prev => ({ ...prev, [key]: '' }));
 
     if (cropId && actionTypeId) {
-      fetchMaterialsForEntry(cropId, actionTypeId, index);
+      fetchMaterialsForTreatment(cropId, actionTypeId, entryIndex, treatmentIndex);
     } else {
-      setEntryMaterials(prev => ({ ...prev, [index]: [] }));
+      setTreatmentMaterials(prev => ({ ...prev, [key]: [] }));
     }
   };
 
-  const handleMaterialChange = (materialId: string, index: number) => {
-    form.setValue(`entries.${index}.recommend_material_id`, materialId);
-    const cropId = entryCropIds[index];
-    const actionTypeId = form.getValues(`entries.${index}.recommend_action_type_id`);
+  const handleTreatmentMaterialChange = (materialId: string, entryIndex: number, treatmentIndex: number) => {
+    form.setValue(`entries.${entryIndex}.treatments.${treatmentIndex}.material_id`, materialId);
+    const cropId = entryCropIds[entryIndex];
+    const actionTypeId = form.getValues(`entries.${entryIndex}.treatments.${treatmentIndex}.action_type_id`);
 
     if (cropId && actionTypeId && materialId) {
-      fetchDosageForEntry(cropId, actionTypeId, materialId, index);
+      fetchDosageForTreatment(cropId, actionTypeId, materialId, entryIndex, treatmentIndex);
     }
+  };
+
+  const addTreatment = (entryIndex: number) => {
+    const currentTreatments = form.getValues(`entries.${entryIndex}.treatments`) || [];
+    form.setValue(`entries.${entryIndex}.treatments`, [
+      ...currentTreatments,
+      { action_type_id: '', material_id: '', dosage: '', unit_type_id: '', notes: '' }
+    ]);
+  };
+
+  const removeTreatment = (entryIndex: number, treatmentIndex: number) => {
+    const currentTreatments = form.getValues(`entries.${entryIndex}.treatments`) || [];
+    const newTreatments = currentTreatments.filter((_, i) => i !== treatmentIndex);
+    form.setValue(`entries.${entryIndex}.treatments`, newTreatments);
+
+    // Rebuild treatment state with shifted indices
+    const rebuildTreatmentState = <T,>(state: Record<string, T>): Record<string, T> => {
+      const newState: Record<string, T> = {};
+      Object.keys(state).forEach(key => {
+        const [eIdx, tIdx] = key.split('-').map(Number);
+        if (eIdx !== entryIndex) {
+          newState[key] = state[key];
+        } else if (tIdx < treatmentIndex) {
+          newState[key] = state[key];
+        } else if (tIdx > treatmentIndex) {
+          newState[`${eIdx}-${tIdx - 1}`] = state[key];
+        }
+      });
+      return newState;
+    };
+    setTreatmentMaterials(rebuildTreatmentState);
+    setTreatmentRecommendedDosage(rebuildTreatmentState);
+    setTreatmentRecommendedUnitTypeId(rebuildTreatmentState);
+    setTreatmentLoadingMaterials(rebuildTreatmentState);
   };
 
   const addEntry = () => {
     append({
       sub_area_id: '',
       finding_id: '',
-      recommend_action_type_id: '',
-      recommend_material_id: '',
-      recommend_dosage: '',
-      recommend_unit_type_id: '',
+      treatments: [],
     });
   };
 
@@ -345,13 +386,27 @@ export function MonitoringForm({
       return newState;
     };
 
+    // Rebuild treatment state with shifted entry indices
+    const rebuildTreatmentState = <T,>(state: Record<string, T>): Record<string, T> => {
+      const newState: Record<string, T> = {};
+      Object.keys(state).forEach(key => {
+        const [eIdx, tIdx] = key.split('-').map(Number);
+        if (eIdx < index) {
+          newState[key] = state[key];
+        } else if (eIdx > index) {
+          newState[`${eIdx - 1}-${tIdx}`] = state[key];
+        }
+      });
+      return newState;
+    };
+
     setEntryCropIds(rebuildState);
     setEntryActionTypes(rebuildState);
-    setEntryMaterials(rebuildState);
-    setEntryRecommendedDosage(rebuildState);
-    setEntryRecommendedUnitTypeId(rebuildState);
     setEntryLoadingActionTypes(rebuildState);
-    setEntryLoadingMaterials(rebuildState);
+    setTreatmentMaterials(rebuildTreatmentState);
+    setTreatmentRecommendedDosage(rebuildTreatmentState);
+    setTreatmentRecommendedUnitTypeId(rebuildTreatmentState);
+    setTreatmentLoadingMaterials(rebuildTreatmentState);
   };
 
   const onSubmit = async (data: MonitoringFormData) => {
@@ -534,7 +589,7 @@ export function MonitoringForm({
                 {fields.map((field, index) => {
                   const entrySubAreaId = form.watch(`entries.${index}.sub_area_id`);
                   const entryFindingId = form.watch(`entries.${index}.finding_id`);
-                  const entryActionTypeId = form.watch(`entries.${index}.recommend_action_type_id`);
+                  const treatments = form.watch(`entries.${index}.treatments`) || [];
                   const cropId = entryCropIds[index];
 
                   return (
@@ -618,131 +673,175 @@ export function MonitoringForm({
                             </FormItem>
                           )}
                         />
-
-                        {/* Action type select */}
-                        <FormField
-                          control={form.control}
-                          name={`entries.${index}.recommend_action_type_id`}
-                          render={({ field: actionField }) => (
-                            <FormItem>
-                              <FormLabel className="font-medium">
-                                סוג פעולה
-                                {entryLoadingActionTypes[index] && <LoadingSpinner />}
-                              </FormLabel>
-                              <Select
-                                onValueChange={(v) => handleActionTypeChange(v, index)}
-                                value={actionField.value}
-                                disabled={!entryFindingId || !cropId || entryLoadingActionTypes[index]}
-                              >
-                                <FormControl>
-                                  <SelectTrigger className="h-11">
-                                    <SelectValue placeholder={
-                                      !entryFindingId
-                                        ? 'בחר ממצא תחילה'
-                                        : !cropId
-                                        ? 'אין גידול מוגדר'
-                                        : 'בחר סוג פעולה'
-                                    } />
-                                  </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                  {(entryActionTypes[index] || []).map((actionType) => (
-                                    <SelectItem key={actionType.id} value={actionType.id}>
-                                      {actionType.description || actionType.name}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-
-                        {/* Material select */}
-                        <FormField
-                          control={form.control}
-                          name={`entries.${index}.recommend_material_id`}
-                          render={({ field: materialField }) => (
-                            <FormItem>
-                              <FormLabel className="font-medium">
-                                חומר מומלץ
-                                {entryLoadingMaterials[index] && <LoadingSpinner />}
-                              </FormLabel>
-                              <Select
-                                onValueChange={(v) => handleMaterialChange(v, index)}
-                                value={materialField.value}
-                                disabled={!entryActionTypeId || entryLoadingMaterials[index]}
-                              >
-                                <FormControl>
-                                  <SelectTrigger className="h-11">
-                                    <SelectValue placeholder={
-                                      !entryActionTypeId ? 'בחר סוג פעולה תחילה' : 'בחר חומר'
-                                    } />
-                                  </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                  {(entryMaterials[index] || []).map((material) => (
-                                    <SelectItem key={material.id} value={material.id}>
-                                      {material.description || material.name}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-
-                        {/* Dosage input */}
-                        <FormField
-                          control={form.control}
-                          name={`entries.${index}.recommend_dosage`}
-                          render={({ field: dosageField }) => (
-                            <FormItem>
-                              <FormLabel className="font-medium">מינון</FormLabel>
-                              <FormControl>
-                                <Input
-                                  {...dosageField}
-                                  value={dosageField.value || ''}
-                                  placeholder={
-                                    entryRecommendedDosage[index]
-                                      ? `מומלץ: ${entryRecommendedDosage[index]}`
-                                      : 'הזן מינון'
-                                  }
-                                  className="h-11"
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-
-                        {/* Unit type select */}
-                        <FormField
-                          control={form.control}
-                          name={`entries.${index}.recommend_unit_type_id`}
-                          render={({ field: unitField }) => (
-                            <FormItem>
-                              <FormLabel className="font-medium">יחידת מידה</FormLabel>
-                              <Select onValueChange={unitField.onChange} value={unitField.value}>
-                                <FormControl>
-                                  <SelectTrigger className="h-11">
-                                    <SelectValue placeholder="בחר יחידת מידה" />
-                                  </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                  {unitTypes.map((unit) => (
-                                    <SelectItem key={unit.id} value={unit.id}>
-                                      {unit.description || unit.name}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
                       </div>
+
+                      {/* Treatments Section */}
+                      {entryFindingId && (
+                        <div className="space-y-3 pt-2 border-t">
+                          <div className="flex items-center justify-between">
+                            <span className="font-medium text-sm">טיפולים מומלצים</span>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => addTreatment(index)}
+                              disabled={!cropId || entryLoadingActionTypes[index]}
+                            >
+                              <Plus className="h-3 w-3 me-1" />
+                              הוסף טיפול
+                            </Button>
+                          </div>
+
+                          {treatments.length === 0 && (
+                            <p className="text-sm text-muted-foreground text-center py-2">
+                              לחץ &quot;הוסף טיפול&quot; להוספת המלצות טיפול
+                            </p>
+                          )}
+
+                          {treatments.map((treatment, tIndex) => {
+                            const treatmentKey = `${index}-${tIndex}`;
+                            const treatmentActionTypeId = form.watch(`entries.${index}.treatments.${tIndex}.action_type_id`);
+
+                            return (
+                              <Card key={tIndex} className="p-3 space-y-3 bg-background">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-sm text-muted-foreground">טיפול {tIndex + 1}</span>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => removeTreatment(index, tIndex)}
+                                  >
+                                    <Trash2 className="h-3 w-3 text-destructive" />
+                                  </Button>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                  {/* Action type select */}
+                                  <FormField
+                                    control={form.control}
+                                    name={`entries.${index}.treatments.${tIndex}.action_type_id`}
+                                    render={({ field: actionField }) => (
+                                      <FormItem>
+                                        <FormLabel className="font-medium text-sm">
+                                          סוג פעולה
+                                          {entryLoadingActionTypes[index] && <LoadingSpinner />}
+                                        </FormLabel>
+                                        <Select
+                                          onValueChange={(v) => handleTreatmentActionTypeChange(v, index, tIndex)}
+                                          value={actionField.value}
+                                          disabled={!cropId || entryLoadingActionTypes[index]}
+                                        >
+                                          <FormControl>
+                                            <SelectTrigger className="h-10">
+                                              <SelectValue placeholder={
+                                                !cropId ? 'אין גידול מוגדר' : 'בחר סוג פעולה'
+                                              } />
+                                            </SelectTrigger>
+                                          </FormControl>
+                                          <SelectContent>
+                                            {(entryActionTypes[index] || []).map((actionType) => (
+                                              <SelectItem key={actionType.id} value={actionType.id}>
+                                                {actionType.description || actionType.name}
+                                              </SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
+
+                                  {/* Material select */}
+                                  <FormField
+                                    control={form.control}
+                                    name={`entries.${index}.treatments.${tIndex}.material_id`}
+                                    render={({ field: materialField }) => (
+                                      <FormItem>
+                                        <FormLabel className="font-medium text-sm">
+                                          חומר מומלץ
+                                          {treatmentLoadingMaterials[treatmentKey] && <LoadingSpinner />}
+                                        </FormLabel>
+                                        <Select
+                                          onValueChange={(v) => handleTreatmentMaterialChange(v, index, tIndex)}
+                                          value={materialField.value}
+                                          disabled={!treatmentActionTypeId || treatmentLoadingMaterials[treatmentKey]}
+                                        >
+                                          <FormControl>
+                                            <SelectTrigger className="h-10">
+                                              <SelectValue placeholder={
+                                                !treatmentActionTypeId ? 'בחר סוג פעולה תחילה' : 'בחר חומר'
+                                              } />
+                                            </SelectTrigger>
+                                          </FormControl>
+                                          <SelectContent>
+                                            {(treatmentMaterials[treatmentKey] || []).map((material) => (
+                                              <SelectItem key={material.id} value={material.id}>
+                                                {material.description || material.name}
+                                              </SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
+
+                                  {/* Dosage input */}
+                                  <FormField
+                                    control={form.control}
+                                    name={`entries.${index}.treatments.${tIndex}.dosage`}
+                                    render={({ field: dosageField }) => (
+                                      <FormItem>
+                                        <FormLabel className="font-medium text-sm">מינון</FormLabel>
+                                        <FormControl>
+                                          <Input
+                                            {...dosageField}
+                                            value={dosageField.value || ''}
+                                            placeholder={
+                                              treatmentRecommendedDosage[treatmentKey]
+                                                ? `מומלץ: ${treatmentRecommendedDosage[treatmentKey]}`
+                                                : 'הזן מינון'
+                                            }
+                                            className="h-10"
+                                          />
+                                        </FormControl>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
+
+                                  {/* Unit type select */}
+                                  <FormField
+                                    control={form.control}
+                                    name={`entries.${index}.treatments.${tIndex}.unit_type_id`}
+                                    render={({ field: unitField }) => (
+                                      <FormItem>
+                                        <FormLabel className="font-medium text-sm">יחידת מידה</FormLabel>
+                                        <Select onValueChange={unitField.onChange} value={unitField.value}>
+                                          <FormControl>
+                                            <SelectTrigger className="h-10">
+                                              <SelectValue placeholder="בחר יחידת מידה" />
+                                            </SelectTrigger>
+                                          </FormControl>
+                                          <SelectContent>
+                                            {unitTypes.map((unit) => (
+                                              <SelectItem key={unit.id} value={unit.id}>
+                                                {unit.description || unit.name}
+                                              </SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
+                                </div>
+                              </Card>
+                            );
+                          })}
+                        </div>
+                      )}
                     </Card>
                   );
                 })}

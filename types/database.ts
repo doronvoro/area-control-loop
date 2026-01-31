@@ -169,10 +169,6 @@ export interface Database {
           area_report_id: string;
           sub_area_id: string;
           finding_id: string;
-          recommend_material_id: string | null;
-          recommend_dosage: number | null;
-          recommend_unit_type_id: string | null;
-          recommend_action_type_id: string | null;
           actions_area_report_id: string | null;
           status: string;
           created_at: string;
@@ -183,10 +179,6 @@ export interface Database {
           area_report_id: string;
           sub_area_id: string;
           finding_id: string;
-          recommend_material_id?: string | null;
-          recommend_dosage?: number | null;
-          recommend_unit_type_id?: string | null;
-          recommend_action_type_id?: string | null;
           actions_area_report_id?: string | null;
           status?: string;
           created_at?: string;
@@ -197,12 +189,46 @@ export interface Database {
           area_report_id?: string;
           sub_area_id?: string;
           finding_id?: string;
-          recommend_material_id?: string | null;
-          recommend_dosage?: number | null;
-          recommend_unit_type_id?: string | null;
-          recommend_action_type_id?: string | null;
           actions_area_report_id?: string | null;
           status?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      monitoring_treatments: {
+        Row: {
+          id: string;
+          monitoring_report_id: string;
+          material_id: string | null;
+          dosage: number | null;
+          unit_type_id: string | null;
+          action_type_id: string | null;
+          status: string;
+          notes: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          monitoring_report_id: string;
+          material_id?: string | null;
+          dosage?: number | null;
+          unit_type_id?: string | null;
+          action_type_id?: string | null;
+          status?: string;
+          notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          monitoring_report_id?: string;
+          material_id?: string | null;
+          dosage?: number | null;
+          unit_type_id?: string | null;
+          action_type_id?: string | null;
+          status?: string;
+          notes?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -213,13 +239,7 @@ export interface Database {
           area_report_id: string;
           sub_area_id: string;
           finding_id: string;
-          material: string | null;
-          dosage: string | null;
-          unit_type_id: string | null;
-          action_type_id: string | null;
-          action_time: string | null;
           status: string;
-          notes: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -228,13 +248,7 @@ export interface Database {
           area_report_id: string;
           sub_area_id: string;
           finding_id: string;
-          material?: string | null;
-          dosage?: string | null;
-          unit_type_id?: string | null;
-          action_type_id?: string | null;
-          action_time?: string | null;
           status?: string;
-          notes?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -243,13 +257,48 @@ export interface Database {
           area_report_id?: string;
           sub_area_id?: string;
           finding_id?: string;
-          material?: string | null;
-          dosage?: string | null;
+          status?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      action_treatments: {
+        Row: {
+          id: string;
+          action_report_id: string;
+          material_id: string | null;
+          dosage: number | null;
+          unit_type_id: string | null;
+          action_type_id: string | null;
+          status: string;
+          notes: string | null;
+          action_time: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          action_report_id: string;
+          material_id?: string | null;
+          dosage?: number | null;
           unit_type_id?: string | null;
           action_type_id?: string | null;
-          action_time?: string | null;
           status?: string;
           notes?: string | null;
+          action_time?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          action_report_id?: string;
+          material_id?: string | null;
+          dosage?: number | null;
+          unit_type_id?: string | null;
+          action_type_id?: string | null;
+          status?: string;
+          notes?: string | null;
+          action_time?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -261,6 +310,7 @@ export interface Database {
           type: string;
           name: string;
           description: string | null;
+          report_number: number;
           created_at: string;
           updated_at: string;
         };
@@ -270,6 +320,7 @@ export interface Database {
           type: string;
           name: string;
           description?: string | null;
+          report_number?: number;
           created_at?: string;
           updated_at?: string;
         };
@@ -279,6 +330,7 @@ export interface Database {
           type?: string;
           name?: string;
           description?: string | null;
+          report_number?: number;
           created_at?: string;
           updated_at?: string;
         };

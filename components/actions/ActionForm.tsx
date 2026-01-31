@@ -26,6 +26,16 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Plus, Trash2 } from 'lucide-react';
 
+const treatmentSchema = z.object({
+  action_type_id: z.string().min(1, 'נדרש לבחור סוג פעולה'),
+  material_id: z.string().optional(),
+  material: z.string().min(1, 'נדרש להזין חומר'),
+  dosage: z.string().min(1, 'נדרש להזין מינון'),
+  unit_type_id: z.string().min(1, 'נדרש לבחור יחידת מידה'),
+  status: z.string(),
+  notes: z.string().optional(),
+});
+
 const subAreaEntrySchema = z.object({
   source: z.enum(['monitoring', 'standalone']),
   monitoring_report_id: z.string().optional(),
@@ -34,12 +44,7 @@ const subAreaEntrySchema = z.object({
   finding_id: z.string().min(1, 'נדרש לבחור ממצא'),
   finding_name: z.string().optional(),
   crop_id: z.string().optional(),
-  action_type_id: z.string().min(1, 'נדרש לבחור סוג פעולה'),
-  material_id: z.string().optional(),
-  material: z.string().min(1, 'נדרש להזין חומר'),
-  dosage: z.string().min(1, 'נדרש להזין מינון'),
-  unit_type_id: z.string().min(1, 'נדרש לבחור יחידת מידה'),
-  status: z.string(),
+  treatments: z.array(treatmentSchema).min(1, 'נדרש לפחות טיפול אחד'),
 });
 
 const actionSchema = z.object({
@@ -90,7 +95,10 @@ export function ActionForm({
 
   // Entry-specific cascade data (indexed by entry index)
   const [entryActionTypes, setEntryActionTypes] = useState<Record<number, any[]>>({});
-  const [entryMaterials, setEntryMaterials] = useState<Record<number, any[]>>({});
+
+  // Treatment-specific cascade data (indexed by "entryIndex-treatmentIndex")
+  const [treatmentMaterials, setTreatmentMaterials] = useState<Record<string, any[]>>({});
+  const [treatmentLoadingMaterials, setTreatmentLoadingMaterials] = useState<Record<string, boolean>>({});
 
   // Loading states
   const [loadingWorkers, setLoadingWorkers] = useState(false);
@@ -111,12 +119,17 @@ export function ActionForm({
           finding_id: '',
           finding_name: '',
           crop_id: '',
-          action_type_id: '',
-          material_id: '',
-          material: '',
-          dosage: '',
-          unit_type_id: '',
-          status: 'planned',
+          treatments: [
+            {
+              action_type_id: '',
+              material_id: '',
+              material: '',
+              dosage: '',
+              unit_type_id: '',
+              status: 'planned',
+              notes: '',
+            },
+          ],
         },
       ],
     },
@@ -159,16 +172,22 @@ export function ActionForm({
         finding_id: '',
         finding_name: '',
         crop_id: '',
-        action_type_id: '',
-        material_id: '',
-        material: '',
-        dosage: '',
-        unit_type_id: '',
-        status: 'planned',
+        treatments: [
+          {
+            action_type_id: '',
+            material_id: '',
+            material: '',
+            dosage: '',
+            unit_type_id: '',
+            status: 'planned',
+            notes: '',
+          },
+        ],
       },
     ]);
     setEntryActionTypes({});
-    setEntryMaterials({});
+    setTreatmentMaterials({});
+    setTreatmentLoadingMaterials({});
   };
 
   const fetchActionWorkers = async (customerId: string) => {
@@ -237,31 +256,68 @@ export function ActionForm({
 
     const entries = reports
       .filter((r: any) => !r.already_has_action)
-      .map((report: any) => ({
-        source: 'monitoring' as const,
-        monitoring_report_id: report.monitoring_report_id,
-        sub_area_id: report.sub_area_id,
-        sub_area_display: report.sub_area_display || report.sub_area_name,
-        finding_id: report.finding_id,
-        finding_name: report.finding_name,
-        crop_id: report.effective_crop_id || '',
-        action_type_id: report.recommend_action_type_id || '',
-        material_id: report.recommend_material_id || '',
-        material: report.recommend_material_name || '',
-        dosage: report.recommend_dosage?.toString() || '',
-        unit_type_id: report.recommend_unit_type_id || '',
-        status: 'planned',
-      }));
+      .map((report: any) => {
+        // Convert monitoring treatments to action treatments
+        const treatments = (report.treatments || []).map((t: any) => ({
+          action_type_id: t.action_type_id || '',
+          material_id: t.material_id || '',
+          material: t.material?.description || t.material?.name || '',
+          dosage: t.dosage?.toString() || '',
+          unit_type_id: t.unit_type_id || '',
+          status: 'planned',
+          notes: t.notes || '',
+        }));
+
+        // If no treatments from monitoring, use backwards-compatible fields or create empty
+        if (treatments.length === 0 && report.recommend_action_type_id) {
+          treatments.push({
+            action_type_id: report.recommend_action_type_id || '',
+            material_id: report.recommend_material_id || '',
+            material: report.recommend_material_name || '',
+            dosage: report.recommend_dosage?.toString() || '',
+            unit_type_id: report.recommend_unit_type_id || '',
+            status: 'planned',
+            notes: '',
+          });
+        }
+
+        // Ensure at least one treatment
+        if (treatments.length === 0) {
+          treatments.push({
+            action_type_id: '',
+            material_id: '',
+            material: '',
+            dosage: '',
+            unit_type_id: '',
+            status: 'planned',
+            notes: '',
+          });
+        }
+
+        return {
+          source: 'monitoring' as const,
+          monitoring_report_id: report.monitoring_report_id,
+          sub_area_id: report.sub_area_id,
+          sub_area_display: report.sub_area_display || report.sub_area_name,
+          finding_id: report.finding_id,
+          finding_name: report.finding_name,
+          crop_id: report.effective_crop_id || '',
+          treatments,
+        };
+      });
 
     if (entries.length > 0) {
       form.setValue('entries', entries);
       // Pre-load cascade data for each entry
-      entries.forEach((entry: any, index: number) => {
+      entries.forEach((entry: any, entryIndex: number) => {
         if (entry.crop_id && entry.finding_id) {
-          fetchActionTypes(entry.crop_id, entry.finding_id, index);
-          if (entry.action_type_id) {
-            fetchMaterials(entry.crop_id, entry.finding_id, entry.action_type_id, index);
-          }
+          fetchActionTypes(entry.crop_id, entry.finding_id, entryIndex);
+          // Pre-load materials for each treatment with an action type
+          entry.treatments.forEach((treatment: any, treatmentIndex: number) => {
+            if (treatment.action_type_id) {
+              fetchMaterialsForTreatment(entry.crop_id, entry.finding_id, treatment.action_type_id, entryIndex, treatmentIndex);
+            }
+          });
         }
       });
     } else {
@@ -281,19 +337,23 @@ export function ActionForm({
     }
   }, []);
 
-  const fetchMaterials = useCallback(async (cropId: string, findingId: string, actionTypeId: string, entryIndex: number) => {
+  const fetchMaterialsForTreatment = useCallback(async (cropId: string, findingId: string, actionTypeId: string, entryIndex: number, treatmentIndex: number) => {
+    const key = `${entryIndex}-${treatmentIndex}`;
+    setTreatmentLoadingMaterials((prev) => ({ ...prev, [key]: true }));
     try {
       const response = await fetch(`/api/cascade?type=materials&cropId=${cropId}&findingId=${findingId}&actionTypeId=${actionTypeId}`);
       if (response.ok) {
         const data = await response.json();
-        setEntryMaterials((prev) => ({ ...prev, [entryIndex]: data }));
+        setTreatmentMaterials((prev) => ({ ...prev, [key]: data }));
       }
     } catch (err) {
       console.error('Error fetching materials:', err);
+    } finally {
+      setTreatmentLoadingMaterials((prev) => ({ ...prev, [key]: false }));
     }
   }, []);
 
-  const fetchDosage = useCallback(async (cropId: string, findingId: string, actionTypeId: string, materialId: string, entryIndex: number) => {
+  const fetchDosageForTreatment = useCallback(async (cropId: string, findingId: string, actionTypeId: string, materialId: string, entryIndex: number, treatmentIndex: number) => {
     try {
       const response = await fetch(
         `/api/cascade?type=dosage&cropId=${cropId}&findingId=${findingId}&actionTypeId=${actionTypeId}&materialId=${materialId}`
@@ -301,14 +361,28 @@ export function ActionForm({
       if (response.ok) {
         const data = await response.json();
         if (data) {
-          form.setValue(`entries.${entryIndex}.dosage`, data.dosage?.toString() || '');
-          form.setValue(`entries.${entryIndex}.unit_type_id`, data.unit_type_id || '');
+          form.setValue(`entries.${entryIndex}.treatments.${treatmentIndex}.dosage`, data.dosage?.toString() || '');
+          form.setValue(`entries.${entryIndex}.treatments.${treatmentIndex}.unit_type_id`, data.unit_type_id || '');
         }
       }
     } catch (err) {
       console.error('Error fetching dosage:', err);
     }
   }, [form]);
+
+  const cleanupTreatmentStateForEntry = (entryIndex: number) => {
+    const cleanupState = <T,>(state: Record<string, T>): Record<string, T> => {
+      const newState: Record<string, T> = {};
+      Object.keys(state).forEach(key => {
+        if (!key.startsWith(`${entryIndex}-`)) {
+          newState[key] = state[key];
+        }
+      });
+      return newState;
+    };
+    setTreatmentMaterials(cleanupState);
+    setTreatmentLoadingMaterials(cleanupState);
+  };
 
   const handleSubAreaChange = (subAreaId: string, entryIndex: number) => {
     const subArea = subAreas.find((sa) => sa.id === subAreaId);
@@ -322,15 +396,13 @@ export function ActionForm({
       // Reset dependent fields
       form.setValue(`entries.${entryIndex}.finding_id`, '');
       form.setValue(`entries.${entryIndex}.finding_name`, '');
-      form.setValue(`entries.${entryIndex}.action_type_id`, '');
-      form.setValue(`entries.${entryIndex}.material_id`, '');
-      form.setValue(`entries.${entryIndex}.material`, '');
-      form.setValue(`entries.${entryIndex}.dosage`, '');
-      form.setValue(`entries.${entryIndex}.unit_type_id`, '');
+      form.setValue(`entries.${entryIndex}.treatments`, [
+        { action_type_id: '', material_id: '', material: '', dosage: '', unit_type_id: '', status: 'planned', notes: '' }
+      ]);
 
       // Clear cascade data
       setEntryActionTypes((prev) => ({ ...prev, [entryIndex]: [] }));
-      setEntryMaterials((prev) => ({ ...prev, [entryIndex]: [] }));
+      cleanupTreatmentStateForEntry(entryIndex);
     }
   };
 
@@ -341,50 +413,87 @@ export function ActionForm({
     form.setValue(`entries.${entryIndex}.finding_id`, findingId);
     form.setValue(`entries.${entryIndex}.finding_name`, finding?.name || '');
 
-    // Reset dependent fields
-    form.setValue(`entries.${entryIndex}.action_type_id`, '');
-    form.setValue(`entries.${entryIndex}.material_id`, '');
-    form.setValue(`entries.${entryIndex}.material`, '');
-    form.setValue(`entries.${entryIndex}.dosage`, '');
-    form.setValue(`entries.${entryIndex}.unit_type_id`, '');
+    // Reset treatments
+    form.setValue(`entries.${entryIndex}.treatments`, [
+      { action_type_id: '', material_id: '', material: '', dosage: '', unit_type_id: '', status: 'planned', notes: '' }
+    ]);
 
     // Clear cascade data
-    setEntryMaterials((prev) => ({ ...prev, [entryIndex]: [] }));
+    cleanupTreatmentStateForEntry(entryIndex);
 
     if (cropId && findingId) {
       fetchActionTypes(cropId, findingId, entryIndex);
     }
   };
 
-  const handleActionTypeChange = (actionTypeId: string, entryIndex: number) => {
+  const handleTreatmentActionTypeChange = (actionTypeId: string, entryIndex: number, treatmentIndex: number) => {
     const cropId = form.getValues(`entries.${entryIndex}.crop_id`);
     const findingId = form.getValues(`entries.${entryIndex}.finding_id`);
-    form.setValue(`entries.${entryIndex}.action_type_id`, actionTypeId);
+    const key = `${entryIndex}-${treatmentIndex}`;
 
-    // Reset dependent fields
-    form.setValue(`entries.${entryIndex}.material_id`, '');
-    form.setValue(`entries.${entryIndex}.material`, '');
-    form.setValue(`entries.${entryIndex}.dosage`, '');
-    form.setValue(`entries.${entryIndex}.unit_type_id`, '');
+    form.setValue(`entries.${entryIndex}.treatments.${treatmentIndex}.action_type_id`, actionTypeId);
+
+    // Reset dependent fields for this treatment
+    form.setValue(`entries.${entryIndex}.treatments.${treatmentIndex}.material_id`, '');
+    form.setValue(`entries.${entryIndex}.treatments.${treatmentIndex}.material`, '');
+    form.setValue(`entries.${entryIndex}.treatments.${treatmentIndex}.dosage`, '');
+    form.setValue(`entries.${entryIndex}.treatments.${treatmentIndex}.unit_type_id`, '');
 
     if (cropId && findingId && actionTypeId) {
-      fetchMaterials(cropId, findingId, actionTypeId, entryIndex);
+      fetchMaterialsForTreatment(cropId, findingId, actionTypeId, entryIndex, treatmentIndex);
+    } else {
+      setTreatmentMaterials((prev) => ({ ...prev, [key]: [] }));
     }
   };
 
-  const handleMaterialChange = (materialId: string, entryIndex: number) => {
+  const handleTreatmentMaterialChange = (materialId: string, entryIndex: number, treatmentIndex: number) => {
     const cropId = form.getValues(`entries.${entryIndex}.crop_id`);
     const findingId = form.getValues(`entries.${entryIndex}.finding_id`);
-    const actionTypeId = form.getValues(`entries.${entryIndex}.action_type_id`);
-    const materials = entryMaterials[entryIndex] || [];
+    const actionTypeId = form.getValues(`entries.${entryIndex}.treatments.${treatmentIndex}.action_type_id`);
+    const key = `${entryIndex}-${treatmentIndex}`;
+    const materials = treatmentMaterials[key] || [];
     const material = materials.find((m: any) => m.id === materialId);
 
-    form.setValue(`entries.${entryIndex}.material_id`, materialId);
-    form.setValue(`entries.${entryIndex}.material`, material?.description || material?.name || '');
+    form.setValue(`entries.${entryIndex}.treatments.${treatmentIndex}.material_id`, materialId);
+    form.setValue(`entries.${entryIndex}.treatments.${treatmentIndex}.material`, material?.description || material?.name || '');
 
     if (cropId && findingId && actionTypeId && materialId) {
-      fetchDosage(cropId, findingId, actionTypeId, materialId, entryIndex);
+      fetchDosageForTreatment(cropId, findingId, actionTypeId, materialId, entryIndex, treatmentIndex);
     }
+  };
+
+  const addTreatmentToEntry = (entryIndex: number) => {
+    const currentTreatments = form.getValues(`entries.${entryIndex}.treatments`) || [];
+    form.setValue(`entries.${entryIndex}.treatments`, [
+      ...currentTreatments,
+      { action_type_id: '', material_id: '', material: '', dosage: '', unit_type_id: '', status: 'planned', notes: '' }
+    ]);
+  };
+
+  const removeTreatmentFromEntry = (entryIndex: number, treatmentIndex: number) => {
+    const currentTreatments = form.getValues(`entries.${entryIndex}.treatments`) || [];
+    if (currentTreatments.length <= 1) return; // Keep at least one treatment
+
+    const newTreatments = currentTreatments.filter((_, i) => i !== treatmentIndex);
+    form.setValue(`entries.${entryIndex}.treatments`, newTreatments);
+
+    // Rebuild treatment state with shifted indices
+    const rebuildTreatmentState = <T,>(state: Record<string, T>): Record<string, T> => {
+      const newState: Record<string, T> = {};
+      Object.keys(state).forEach(key => {
+        const [eIdx, tIdx] = key.split('-').map(Number);
+        if (eIdx !== entryIndex) {
+          newState[key] = state[key];
+        } else if (tIdx < treatmentIndex) {
+          newState[key] = state[key];
+        } else if (tIdx > treatmentIndex) {
+          newState[`${eIdx}-${tIdx - 1}`] = state[key];
+        }
+      });
+      return newState;
+    };
+    setTreatmentMaterials(rebuildTreatmentState);
+    setTreatmentLoadingMaterials(rebuildTreatmentState);
   };
 
   const addEntry = () => {
@@ -395,12 +504,9 @@ export function ActionForm({
       finding_id: '',
       finding_name: '',
       crop_id: '',
-      action_type_id: '',
-      material_id: '',
-      material: '',
-      dosage: '',
-      unit_type_id: '',
-      status: 'planned',
+      treatments: [
+        { action_type_id: '', material_id: '', material: '', dosage: '', unit_type_id: '', status: 'planned', notes: '' }
+      ],
     });
   };
 
@@ -419,12 +525,15 @@ export function ActionForm({
           entries: data.entries.map((entry) => ({
             sub_area_id: entry.sub_area_id,
             finding_id: entry.finding_id,
-            action_type_id: entry.action_type_id,
-            material: entry.material,
-            dosage: entry.dosage,
-            unit_type_id: entry.unit_type_id,
-            status: entry.status,
             monitoring_report_id: entry.monitoring_report_id || null,
+            treatments: entry.treatments.map((t) => ({
+              action_type_id: t.action_type_id,
+              material_id: t.material_id || null,
+              dosage: t.dosage,
+              unit_type_id: t.unit_type_id,
+              status: t.status,
+              notes: t.notes || null,
+            })),
           })),
         }),
       });
@@ -447,12 +556,9 @@ export function ActionForm({
             finding_id: '',
             finding_name: '',
             crop_id: '',
-            action_type_id: '',
-            material_id: '',
-            material: '',
-            dosage: '',
-            unit_type_id: '',
-            status: 'planned',
+            treatments: [
+              { action_type_id: '', material_id: '', material: '', dosage: '', unit_type_id: '', status: 'planned', notes: '' }
+            ],
           },
         ],
       });
@@ -462,7 +568,8 @@ export function ActionForm({
       }
       setSubAreas([]);
       setEntryActionTypes({});
-      setEntryMaterials({});
+      setTreatmentMaterials({});
+      setTreatmentLoadingMaterials({});
 
       setTimeout(() => {
         setSuccess(false);
@@ -615,21 +722,22 @@ export function ActionForm({
                 </Button>
               </div>
 
-              {fields.map((field, index) => {
-                const entry = form.watch(`entries.${index}`);
+              {fields.map((field, entryIndex) => {
+                const entry = form.watch(`entries.${entryIndex}`);
                 const isFromMonitoring = entry?.source === 'monitoring';
+                const treatments = entry?.treatments || [];
 
                 return (
                   <Card key={field.id} className="p-4">
                     <div className="grid gap-4">
                       <div className="flex items-center justify-between">
-                        <span className="font-medium">רשומה {index + 1}</span>
+                        <span className="font-medium">רשומה {entryIndex + 1}</span>
                         {fields.length > 1 && (
                           <Button
                             type="button"
                             variant="ghost"
                             size="sm"
-                            onClick={() => remove(index)}
+                            onClick={() => remove(entryIndex)}
                           >
                             <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
@@ -652,12 +760,12 @@ export function ActionForm({
                         ) : (
                           <FormField
                             control={form.control}
-                            name={`entries.${index}.sub_area_id`}
+                            name={`entries.${entryIndex}.sub_area_id`}
                             render={({ field: subField }) => (
                               <FormItem>
                                 <FormLabel>תת-שטח</FormLabel>
                                 <Select
-                                  onValueChange={(value) => handleSubAreaChange(value, index)}
+                                  onValueChange={(value) => handleSubAreaChange(value, entryIndex)}
                                   value={subField.value}
                                   disabled={!watchAreaId || loadingSubAreas}
                                 >
@@ -703,20 +811,20 @@ export function ActionForm({
                         ) : (
                           <FormField
                             control={form.control}
-                            name={`entries.${index}.finding_id`}
+                            name={`entries.${entryIndex}.finding_id`}
                             render={({ field: findingField }) => (
                               <FormItem>
                                 <FormLabel>ממצא</FormLabel>
                                 <Select
-                                  onValueChange={(value) => handleFindingChange(value, index)}
+                                  onValueChange={(value) => handleFindingChange(value, entryIndex)}
                                   value={findingField.value}
-                                  disabled={!form.watch(`entries.${index}.sub_area_id`)}
+                                  disabled={!form.watch(`entries.${entryIndex}.sub_area_id`)}
                                 >
                                   <FormControl>
                                     <SelectTrigger>
                                       <SelectValue
                                         placeholder={
-                                          !form.watch(`entries.${index}.sub_area_id`)
+                                          !form.watch(`entries.${entryIndex}.sub_area_id`)
                                             ? 'בחר תחילה תת-שטח'
                                             : 'בחר ממצא'
                                         }
@@ -736,145 +844,188 @@ export function ActionForm({
                             )}
                           />
                         )}
+                      </div>
 
-                        {/* Action Type */}
-                        <FormField
-                          control={form.control}
-                          name={`entries.${index}.action_type_id`}
-                          render={({ field: actionField }) => (
-                            <FormItem>
-                              <FormLabel>סוג פעולה</FormLabel>
-                              <Select
-                                onValueChange={(value) => handleActionTypeChange(value, index)}
-                                value={actionField.value}
-                                disabled={isFromMonitoring ? false : !form.watch(`entries.${index}.finding_id`)}
-                              >
-                                <FormControl>
-                                  <SelectTrigger>
-                                    <SelectValue
-                                      placeholder={
-                                        !isFromMonitoring && !form.watch(`entries.${index}.finding_id`)
-                                          ? 'בחר תחילה ממצא'
-                                          : 'בחר סוג פעולה'
-                                      }
-                                    />
-                                  </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                  {(entryActionTypes[index]?.length > 0 ? entryActionTypes[index] : actionTypes).map((actionType: any) => (
-                                    <SelectItem key={actionType.id} value={actionType.id}>
-                                      {actionType.description || actionType.name}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
+                      {/* Treatments Section */}
+                      <div className="space-y-3 pt-2 border-t">
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium text-sm">טיפולים</span>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => addTreatmentToEntry(entryIndex)}
+                          >
+                            <Plus className="h-3 w-3 me-1" />
+                            הוסף טיפול
+                          </Button>
+                        </div>
 
-                        {/* Material Selection */}
-                        <FormField
-                          control={form.control}
-                          name={`entries.${index}.material_id`}
-                          render={({ field: materialField }) => (
-                            <FormItem>
-                              <FormLabel>חומר מומלץ</FormLabel>
-                              <Select
-                                onValueChange={(value) => handleMaterialChange(value, index)}
-                                value={materialField.value || ''}
-                                disabled={!form.watch(`entries.${index}.action_type_id`)}
-                              >
-                                <FormControl>
-                                  <SelectTrigger>
-                                    <SelectValue
-                                      placeholder={
-                                        !form.watch(`entries.${index}.action_type_id`)
-                                          ? 'בחר תחילה סוג פעולה'
-                                          : 'בחר חומר'
-                                      }
-                                    />
-                                  </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                  {(entryMaterials[index] || []).map((material: any) => (
-                                    <SelectItem key={material.id} value={material.id}>
-                                      {material.description || material.name}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
+                        {treatments.map((treatment, treatmentIndex) => {
+                          const treatmentKey = `${entryIndex}-${treatmentIndex}`;
+                          const treatmentActionTypeId = form.watch(`entries.${entryIndex}.treatments.${treatmentIndex}.action_type_id`);
 
-                        {/* Dosage */}
-                        <FormField
-                          control={form.control}
-                          name={`entries.${index}.dosage`}
-                          render={({ field: dosageField }) => (
-                            <FormItem>
-                              <FormLabel>מינון</FormLabel>
-                              <FormControl>
-                                <Input {...dosageField} placeholder="מינון" />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
+                          return (
+                            <Card key={treatmentIndex} className="p-3 bg-muted/30">
+                              <div className="flex items-center justify-between mb-3">
+                                <span className="text-sm text-muted-foreground">טיפול {treatmentIndex + 1}</span>
+                                {treatments.length > 1 && (
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => removeTreatmentFromEntry(entryIndex, treatmentIndex)}
+                                  >
+                                    <Trash2 className="h-3 w-3 text-destructive" />
+                                  </Button>
+                                )}
+                              </div>
 
-                        {/* Unit Type */}
-                        <FormField
-                          control={form.control}
-                          name={`entries.${index}.unit_type_id`}
-                          render={({ field: unitField }) => (
-                            <FormItem>
-                              <FormLabel>יחידת מידה</FormLabel>
-                              <Select onValueChange={unitField.onChange} value={unitField.value}>
-                                <FormControl>
-                                  <SelectTrigger>
-                                    <SelectValue placeholder="בחר יחידת מידה" />
-                                  </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                  {unitTypes.map((unit) => (
-                                    <SelectItem key={unit.id} value={unit.id}>
-                                      {unit.description || unit.name}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                {/* Action Type */}
+                                <FormField
+                                  control={form.control}
+                                  name={`entries.${entryIndex}.treatments.${treatmentIndex}.action_type_id`}
+                                  render={({ field: actionField }) => (
+                                    <FormItem>
+                                      <FormLabel className="text-sm">סוג פעולה</FormLabel>
+                                      <Select
+                                        onValueChange={(value) => handleTreatmentActionTypeChange(value, entryIndex, treatmentIndex)}
+                                        value={actionField.value}
+                                        disabled={!isFromMonitoring && !form.watch(`entries.${entryIndex}.finding_id`)}
+                                      >
+                                        <FormControl>
+                                          <SelectTrigger>
+                                            <SelectValue
+                                              placeholder={
+                                                !isFromMonitoring && !form.watch(`entries.${entryIndex}.finding_id`)
+                                                  ? 'בחר תחילה ממצא'
+                                                  : 'בחר סוג פעולה'
+                                              }
+                                            />
+                                          </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent>
+                                          {(entryActionTypes[entryIndex]?.length > 0 ? entryActionTypes[entryIndex] : actionTypes).map((actionType: any) => (
+                                            <SelectItem key={actionType.id} value={actionType.id}>
+                                              {actionType.description || actionType.name}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
 
-                        {/* Status */}
-                        <FormField
-                          control={form.control}
-                          name={`entries.${index}.status`}
-                          render={({ field: statusField }) => (
-                            <FormItem>
-                              <FormLabel>סטטוס</FormLabel>
-                              <Select onValueChange={statusField.onChange} value={statusField.value}>
-                                <FormControl>
-                                  <SelectTrigger>
-                                    <SelectValue placeholder="בחר סטטוס" />
-                                  </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                  {statusOptions.map((option) => (
-                                    <SelectItem key={option.value} value={option.value}>
-                                      {option.label}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
+                                {/* Material Selection */}
+                                <FormField
+                                  control={form.control}
+                                  name={`entries.${entryIndex}.treatments.${treatmentIndex}.material_id`}
+                                  render={({ field: materialField }) => (
+                                    <FormItem>
+                                      <FormLabel className="text-sm">חומר</FormLabel>
+                                      <Select
+                                        onValueChange={(value) => handleTreatmentMaterialChange(value, entryIndex, treatmentIndex)}
+                                        value={materialField.value || ''}
+                                        disabled={!treatmentActionTypeId || treatmentLoadingMaterials[treatmentKey]}
+                                      >
+                                        <FormControl>
+                                          <SelectTrigger>
+                                            <SelectValue
+                                              placeholder={
+                                                !treatmentActionTypeId
+                                                  ? 'בחר תחילה סוג פעולה'
+                                                  : treatmentLoadingMaterials[treatmentKey]
+                                                    ? 'טוען...'
+                                                    : 'בחר חומר'
+                                              }
+                                            />
+                                          </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent>
+                                          {(treatmentMaterials[treatmentKey] || []).map((material: any) => (
+                                            <SelectItem key={material.id} value={material.id}>
+                                              {material.description || material.name}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+
+                                {/* Dosage */}
+                                <FormField
+                                  control={form.control}
+                                  name={`entries.${entryIndex}.treatments.${treatmentIndex}.dosage`}
+                                  render={({ field: dosageField }) => (
+                                    <FormItem>
+                                      <FormLabel className="text-sm">מינון</FormLabel>
+                                      <FormControl>
+                                        <Input {...dosageField} placeholder="מינון" />
+                                      </FormControl>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+
+                                {/* Unit Type */}
+                                <FormField
+                                  control={form.control}
+                                  name={`entries.${entryIndex}.treatments.${treatmentIndex}.unit_type_id`}
+                                  render={({ field: unitField }) => (
+                                    <FormItem>
+                                      <FormLabel className="text-sm">יחידת מידה</FormLabel>
+                                      <Select onValueChange={unitField.onChange} value={unitField.value}>
+                                        <FormControl>
+                                          <SelectTrigger>
+                                            <SelectValue placeholder="בחר יחידת מידה" />
+                                          </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent>
+                                          {unitTypes.map((unit) => (
+                                            <SelectItem key={unit.id} value={unit.id}>
+                                              {unit.description || unit.name}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+
+                                {/* Status */}
+                                <FormField
+                                  control={form.control}
+                                  name={`entries.${entryIndex}.treatments.${treatmentIndex}.status`}
+                                  render={({ field: statusField }) => (
+                                    <FormItem>
+                                      <FormLabel className="text-sm">סטטוס</FormLabel>
+                                      <Select onValueChange={statusField.onChange} value={statusField.value}>
+                                        <FormControl>
+                                          <SelectTrigger>
+                                            <SelectValue placeholder="בחר סטטוס" />
+                                          </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent>
+                                          {statusOptions.map((option) => (
+                                            <SelectItem key={option.value} value={option.value}>
+                                              {option.label}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                              </div>
+                            </Card>
+                          );
+                        })}
                       </div>
                     </div>
                   </Card>

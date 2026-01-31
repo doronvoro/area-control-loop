@@ -17,7 +17,16 @@ export async function GET() {
     const { data, error } = await supabase
       .from('monitoring_area_report')
       .select(
-        '*, area_report:report_areas(*), sub_area:sub_areas(*), finding:findings(*), recommend_unit_type:unit_types(*), recommend_action_type:action_types(*)'
+        `*,
+        area_report:report_areas(*),
+        sub_area:sub_areas(*),
+        finding:findings(*),
+        treatments:monitoring_treatments(
+          *,
+          material:materials(*),
+          unit_type:unit_types(*),
+          action_type:action_types(*)
+        )`
       )
       .order('created_at', { ascending: false });
 
@@ -95,27 +104,62 @@ export async function POST(request: Request) {
 
       const results = [];
       for (const entry of entries) {
-        const parsedDosage = entry.recommend_dosage
-          ? (typeof entry.recommend_dosage === 'string' ? parseFloat(entry.recommend_dosage) : entry.recommend_dosage)
-          : null;
-
-        const { data, error } = await (supabase
+        // Create monitoring_area_report entry
+        const { data: monitoringReport, error: monitoringError } = await (supabase
           .from('monitoring_area_report') as any)
           .insert({
             area_report_id: reportAreaId,
             sub_area_id: entry.sub_area_id,
             finding_id: entry.finding_id,
-            recommend_material_id: entry.recommend_material_id || null,
-            recommend_dosage: parsedDosage,
-            recommend_unit_type_id: entry.recommend_unit_type_id || null,
-            recommend_action_type_id: entry.recommend_action_type_id || null,
             status: 'pending',
           })
           .select()
           .single();
 
-        if (error) throw error;
-        results.push(data);
+        if (monitoringError) throw monitoringError;
+
+        // Create treatment if treatment data is provided
+        if (entry.treatments && Array.isArray(entry.treatments)) {
+          for (const treatment of entry.treatments) {
+            const parsedDosage = treatment.dosage
+              ? (typeof treatment.dosage === 'string' ? parseFloat(treatment.dosage) : treatment.dosage)
+              : null;
+
+            const { error: treatmentError } = await (supabase
+              .from('monitoring_treatments') as any)
+              .insert({
+                monitoring_report_id: monitoringReport.id,
+                material_id: treatment.material_id || null,
+                dosage: parsedDosage,
+                unit_type_id: treatment.unit_type_id || null,
+                action_type_id: treatment.action_type_id || null,
+                status: treatment.status || 'pending',
+                notes: treatment.notes || null,
+              });
+
+            if (treatmentError) throw treatmentError;
+          }
+        } else if (entry.material_id || entry.action_type_id) {
+          // Legacy format - create single treatment from entry fields
+          const parsedDosage = entry.dosage || entry.recommend_dosage
+            ? parseFloat(entry.dosage || entry.recommend_dosage)
+            : null;
+
+          const { error: treatmentError } = await (supabase
+            .from('monitoring_treatments') as any)
+            .insert({
+              monitoring_report_id: monitoringReport.id,
+              material_id: entry.material_id || entry.recommend_material_id || null,
+              dosage: parsedDosage,
+              unit_type_id: entry.unit_type_id || entry.recommend_unit_type_id || null,
+              action_type_id: entry.action_type_id || entry.recommend_action_type_id || null,
+              status: 'pending',
+            });
+
+          if (treatmentError) throw treatmentError;
+        }
+
+        results.push(monitoringReport);
       }
 
       return NextResponse.json(results, { status: 201 });
@@ -123,17 +167,19 @@ export async function POST(request: Request) {
 
     // Legacy single-entry format
     const {
-      // New form fields
-      customer_id,
-      inspector_id,
       area_id,
-      // Old/common fields
       area_report_id: providedAreaReportId,
       sub_area_id,
       finding_id,
+      treatments,
+      // Legacy fields (for backwards compatibility)
+      material_id,
       recommend_material_id,
+      dosage,
       recommend_dosage,
+      unit_type_id,
       recommend_unit_type_id,
+      action_type_id,
       recommend_action_type_id,
       status = 'pending',
     } = body;
@@ -149,29 +195,62 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'area_id or area_report_id is required' }, { status: 400 });
     }
 
-    // Parse dosage to number if it's a string
-    const parsedDosage = recommend_dosage
-      ? (typeof recommend_dosage === 'string' ? parseFloat(recommend_dosage) : recommend_dosage)
-      : null;
-
-    const { data, error } = await (supabase
+    // Create monitoring_area_report entry
+    const { data: monitoringReport, error: monitoringError } = await (supabase
       .from('monitoring_area_report') as any)
       .insert({
         area_report_id: finalAreaReportId,
         sub_area_id,
         finding_id,
-        recommend_material_id: recommend_material_id || null,
-        recommend_dosage: parsedDosage,
-        recommend_unit_type_id: recommend_unit_type_id || null,
-        recommend_action_type_id: recommend_action_type_id || null,
         status: status || 'pending',
       })
       .select()
       .single();
 
-    if (error) throw error;
+    if (monitoringError) throw monitoringError;
 
-    return NextResponse.json(data, { status: 201 });
+    // Create treatments if provided
+    if (treatments && Array.isArray(treatments)) {
+      for (const treatment of treatments) {
+        const parsedDosage = treatment.dosage
+          ? (typeof treatment.dosage === 'string' ? parseFloat(treatment.dosage) : treatment.dosage)
+          : null;
+
+        const { error: treatmentError } = await (supabase
+          .from('monitoring_treatments') as any)
+          .insert({
+            monitoring_report_id: monitoringReport.id,
+            material_id: treatment.material_id || null,
+            dosage: parsedDosage,
+            unit_type_id: treatment.unit_type_id || null,
+            action_type_id: treatment.action_type_id || null,
+            status: treatment.status || 'pending',
+            notes: treatment.notes || null,
+          });
+
+        if (treatmentError) throw treatmentError;
+      }
+    } else if (material_id || recommend_material_id || action_type_id || recommend_action_type_id) {
+      // Legacy format - create single treatment from legacy fields
+      const parsedDosage = dosage || recommend_dosage
+        ? parseFloat(dosage || recommend_dosage)
+        : null;
+
+      const { error: treatmentError } = await (supabase
+        .from('monitoring_treatments') as any)
+        .insert({
+          monitoring_report_id: monitoringReport.id,
+          material_id: material_id || recommend_material_id || null,
+          dosage: parsedDosage,
+          unit_type_id: unit_type_id || recommend_unit_type_id || null,
+          action_type_id: action_type_id || recommend_action_type_id || null,
+          status: 'pending',
+        });
+
+      if (treatmentError) throw treatmentError;
+    }
+
+    return NextResponse.json(monitoringReport, { status: 201 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

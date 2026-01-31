@@ -5,19 +5,24 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 
+interface Treatment {
+  id: string;
+  dosage?: number | null;
+  status: string;
+  notes?: string | null;
+  action_time?: string | null;
+  material?: { name: string; description?: string | null } | null;
+  action_type?: { name: string; description?: string | null } | null;
+  unit_type?: { name: string; description?: string | null } | null;
+}
+
 interface SubAreaReport {
   id: string;
-  action_time?: string;
   created_at: string;
   status: string;
-  notes?: string;
-  recommend_dosage?: number;
-  sub_area?: { id: string; name: string };
-  finding?: { name: string; description?: string };
-  action_type?: { name: string; description?: string };
-  recommend_action_type?: { name: string; description?: string };
-  recommend_material?: { name: string; description?: string };
-  recommend_unit_type?: { name: string; description?: string };
+  sub_area?: { id: string; name: string } | null;
+  finding?: { name: string; description?: string | null } | null;
+  treatments?: Treatment[];
 }
 
 interface ReportAreaData {
@@ -79,6 +84,50 @@ export function ReportDetailDialog({ reportArea, open, onOpenChange }: ReportDet
 
   const subAreas = Array.from(subAreaMap.entries());
 
+  const renderTreatments = (treatments: Treatment[] | undefined, isAction: boolean = false) => {
+    if (!treatments || treatments.length === 0) return null;
+
+    return (
+      <div className="mt-2 space-y-1">
+        <span className="text-xs text-muted-foreground">טיפולים ({treatments.length}):</span>
+        {treatments.map((treatment) => (
+          <div
+            key={treatment.id}
+            className="bg-background/50 rounded p-2 text-xs border border-border/50"
+          >
+            <div className="flex justify-between items-center">
+              <span>
+                {treatment.action_type?.description || treatment.action_type?.name || 'לא צוין'}
+              </span>
+              <Badge variant="outline" className="text-xs">
+                {statusLabel(treatment.status)}
+              </Badge>
+            </div>
+            {treatment.material && (
+              <div className="text-muted-foreground">
+                {treatment.material.description || treatment.material.name}
+                {treatment.dosage != null && (
+                  <span>
+                    {' '}
+                    - {treatment.dosage} {treatment.unit_type?.description || treatment.unit_type?.name || ''}
+                  </span>
+                )}
+              </div>
+            )}
+            {isAction && treatment.action_time && (
+              <div className="text-muted-foreground">
+                בוצע: {new Date(treatment.action_time).toLocaleDateString('he-IL')}
+              </div>
+            )}
+            {treatment.notes && (
+              <div className="text-muted-foreground">הערה: {treatment.notes}</div>
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto">
@@ -137,7 +186,7 @@ export function ReportDetailDialog({ reportArea, open, onOpenChange }: ReportDet
                     {/* Monitoring Reports */}
                     {data.monitoring.length > 0 && (
                       <div className="space-y-2">
-                        <h4 className="text-sm font-medium text-muted-foreground">דוחות ניטור</h4>
+                        <h4 className="text-sm font-medium text-muted-foreground">ממצאי ניטור</h4>
                         {data.monitoring.map((report) => (
                           <div
                             key={report.id}
@@ -149,35 +198,7 @@ export function ReportDetailDialog({ reportArea, open, onOpenChange }: ReportDet
                               </span>
                               <Badge variant="outline">{statusLabel(report.status)}</Badge>
                             </div>
-                            {report.recommend_action_type && (
-                              <div>
-                                <span className="text-muted-foreground">פעולה מומלצת: </span>
-                                {report.recommend_action_type.description ||
-                                  report.recommend_action_type.name}
-                              </div>
-                            )}
-                            {report.recommend_material && (
-                              <div>
-                                <span className="text-muted-foreground">חומר: </span>
-                                {report.recommend_material.description ||
-                                  report.recommend_material.name}
-                                {report.recommend_dosage && (
-                                  <span>
-                                    {' '}
-                                    - {report.recommend_dosage}{' '}
-                                    {report.recommend_unit_type?.description ||
-                                      report.recommend_unit_type?.name ||
-                                      ''}
-                                  </span>
-                                )}
-                              </div>
-                            )}
-                            {report.notes && (
-                              <div>
-                                <span className="text-muted-foreground">הערות: </span>
-                                {report.notes}
-                              </div>
-                            )}
+                            {renderTreatments(report.treatments)}
                           </div>
                         ))}
                       </div>
@@ -186,7 +207,7 @@ export function ReportDetailDialog({ reportArea, open, onOpenChange }: ReportDet
                     {/* Action Reports */}
                     {data.actions.length > 0 && (
                       <div className="space-y-2">
-                        <h4 className="text-sm font-medium text-muted-foreground">דוחות פעולה</h4>
+                        <h4 className="text-sm font-medium text-muted-foreground">פעולות</h4>
                         {data.actions.map((report) => (
                           <div
                             key={report.id}
@@ -194,22 +215,11 @@ export function ReportDetailDialog({ reportArea, open, onOpenChange }: ReportDet
                           >
                             <div className="flex justify-between items-center">
                               <span className="font-medium">
-                                {report.action_type?.description || report.action_type?.name || '-'}
+                                {report.finding?.description || report.finding?.name || '-'}
                               </span>
                               <Badge variant="outline">{statusLabel(report.status)}</Badge>
                             </div>
-                            {report.finding && (
-                              <div>
-                                <span className="text-muted-foreground">ממצא: </span>
-                                {report.finding.description || report.finding.name}
-                              </div>
-                            )}
-                            {report.notes && (
-                              <div>
-                                <span className="text-muted-foreground">הערות: </span>
-                                {report.notes}
-                              </div>
-                            )}
+                            {renderTreatments(report.treatments, true)}
                           </div>
                         ))}
                       </div>

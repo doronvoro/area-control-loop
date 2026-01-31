@@ -39,17 +39,13 @@ export async function GET(request: Request) {
 
     const reportAreaIds = (reportAreas as any[]).map((ra) => ra.id);
 
-    // Build the query for monitoring reports with full details
+    // Build the query for monitoring reports with full details including treatments
     let query = supabase
       .from('monitoring_area_report')
       .select(`
         id,
         sub_area_id,
         finding_id,
-        recommend_action_type_id,
-        recommend_material_id,
-        recommend_dosage,
-        recommend_unit_type_id,
         actions_area_report_id,
         status,
         sub_areas!inner (
@@ -68,20 +64,29 @@ export async function GET(request: Request) {
           name,
           description
         ),
-        action_types (
+        treatments:monitoring_treatments (
           id,
-          name,
-          description
-        ),
-        materials (
-          id,
-          name,
-          description
-        ),
-        unit_types (
-          id,
-          name,
-          description
+          material_id,
+          dosage,
+          unit_type_id,
+          action_type_id,
+          status,
+          notes,
+          material:materials (
+            id,
+            name,
+            description
+          ),
+          action_type:action_types (
+            id,
+            name,
+            description
+          ),
+          unit_type:unit_types (
+            id,
+            name,
+            description
+          )
         )
       `)
       .in('area_report_id', reportAreaIds)
@@ -102,6 +107,9 @@ export async function GET(request: Request) {
       const area = subArea?.areas;
       const effectiveCropId = subArea?.crop_id || area?.crop_id;
 
+      // Get the first treatment for backwards compatibility with forms
+      const firstTreatment = item.treatments?.[0];
+
       return {
         monitoring_report_id: item.id,
         sub_area_id: item.sub_area_id,
@@ -110,13 +118,16 @@ export async function GET(request: Request) {
         finding_id: item.finding_id,
         finding_name: item.findings?.name || '',
         finding_description: item.findings?.description || '',
-        recommend_action_type_id: item.recommend_action_type_id,
-        recommend_action_type_name: item.action_types?.description || item.action_types?.name || '',
-        recommend_material_id: item.recommend_material_id,
-        recommend_material_name: item.materials?.description || item.materials?.name || '',
-        recommend_dosage: item.recommend_dosage,
-        recommend_unit_type_id: item.recommend_unit_type_id,
-        recommend_unit_type_name: item.unit_types?.description || item.unit_types?.name || '',
+        // Include first treatment data for backwards compatibility
+        recommend_action_type_id: firstTreatment?.action_type_id || null,
+        recommend_action_type_name: firstTreatment?.action_type?.description || firstTreatment?.action_type?.name || '',
+        recommend_material_id: firstTreatment?.material_id || null,
+        recommend_material_name: firstTreatment?.material?.description || firstTreatment?.material?.name || '',
+        recommend_dosage: firstTreatment?.dosage || null,
+        recommend_unit_type_id: firstTreatment?.unit_type_id || null,
+        recommend_unit_type_name: firstTreatment?.unit_type?.description || firstTreatment?.unit_type?.name || '',
+        // Include full treatments array
+        treatments: item.treatments || [],
         status: item.status,
         already_has_action: item.actions_area_report_id !== null,
         effective_crop_id: effectiveCropId,
