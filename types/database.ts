@@ -101,6 +101,7 @@ export interface Database {
           id: string;
           name: string;
           description: string | null;
+          crop_id: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -108,6 +109,7 @@ export interface Database {
           id?: string;
           name: string;
           description?: string | null;
+          crop_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -115,6 +117,7 @@ export interface Database {
           id?: string;
           name?: string;
           description?: string | null;
+          crop_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -129,6 +132,7 @@ export interface Database {
           variety: string | null;
           rows: string | null;
           display: string | null;
+          crop_id: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -141,6 +145,7 @@ export interface Database {
           variety?: string | null;
           rows?: string | null;
           display?: string | null;
+          crop_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -153,6 +158,7 @@ export interface Database {
           variety?: string | null;
           rows?: string | null;
           display?: string | null;
+          crop_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -163,8 +169,8 @@ export interface Database {
           area_report_id: string;
           sub_area_id: string;
           finding_id: string;
-          recommend_material: string | null;
-          recommend_dosage: string | null;
+          recommend_material_id: string | null;
+          recommend_dosage: number | null;
           recommend_unit_type_id: string | null;
           recommend_action_type_id: string | null;
           actions_area_report_id: string | null;
@@ -177,8 +183,8 @@ export interface Database {
           area_report_id: string;
           sub_area_id: string;
           finding_id: string;
-          recommend_material?: string | null;
-          recommend_dosage?: string | null;
+          recommend_material_id?: string | null;
+          recommend_dosage?: number | null;
           recommend_unit_type_id?: string | null;
           recommend_action_type_id?: string | null;
           actions_area_report_id?: string | null;
@@ -191,8 +197,8 @@ export interface Database {
           area_report_id?: string;
           sub_area_id?: string;
           finding_id?: string;
-          recommend_material?: string | null;
-          recommend_dosage?: string | null;
+          recommend_material_id?: string | null;
+          recommend_dosage?: number | null;
           recommend_unit_type_id?: string | null;
           recommend_action_type_id?: string | null;
           actions_area_report_id?: string | null;
@@ -415,6 +421,104 @@ export interface Database {
           id?: string;
           name?: string;
           description?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      crops: {
+        Row: {
+          id: string;
+          name: string;
+          description: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          description?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          description?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      materials: {
+        Row: {
+          id: string;
+          name: string;
+          description: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          description?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          description?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      crop_findings: {
+        Row: {
+          id: string;
+          crop_id: string;
+          finding_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          crop_id: string;
+          finding_id: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          crop_id?: string;
+          finding_id?: string;
+          created_at?: string;
+        };
+      };
+      recommend_material: {
+        Row: {
+          id: string;
+          crop_id: string;
+          action_type_id: string;
+          material_id: string;
+          unit_type_id: string;
+          dosage: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          crop_id: string;
+          action_type_id: string;
+          material_id: string;
+          unit_type_id: string;
+          dosage: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          crop_id?: string;
+          action_type_id?: string;
+          material_id?: string;
+          unit_type_id?: string;
+          dosage?: number;
           created_at?: string;
           updated_at?: string;
         };

@@ -2,6 +2,7 @@
   "permissions": {
     "allow": [
       "Bash(npm run:*)",
+      "Bash(npm run lint 2>&1)",
       "Bash(npm install:*)",
       "Bash(npx supabase:*)",
       "Bash(git status:*)",
@@ -14,7 +15,8 @@
       "Bash(ls:*)",
       "Bash(mkdir:*)",
       "Read(.)",
-      "Edit(.)"
+      "Edit(.)",
+      "Write(.)"
     ],
     "ask": [
       "Bash(git push:*)",

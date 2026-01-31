@@ -1,0 +1,145 @@
+import { createClient } from '@/lib/supabase/server';
+import { NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
+
+/**
+ * Cascade API for monitoring form
+ *
+ * Query params:
+ * - type: 'findings' | 'action_types' | 'materials' | 'dosage'
+ * - cropId: UUID of the crop
+ * - actionTypeId: UUID of the action type (for materials, dosage)
+ * - materialId: UUID of the material (for dosage)
+ *
+ * Schema:
+ * - crop_findings: crop_id -> finding_id (available findings per crop)
+ * - recommend_material: crop_id + action_type_id + material_id -> unit_type_id + dosage
+ */
+export async function GET(request: Request) {
+  try {
+    await requireAuth();
+
+    const { searchParams } = new URL(request.url);
+    const type = searchParams.get('type');
+    const cropId = searchParams.get('cropId');
+    const actionTypeId = searchParams.get('actionTypeId');
+    const materialId = searchParams.get('materialId');
+
+    const supabase = await createClient();
+
+    switch (type) {
+      case 'findings': {
+        // Get findings for a specific crop via crop_findings junction
+        if (!cropId) {
+          return NextResponse.json(
+            { error: 'cropId is required for findings' },
+            { status: 400 }
+          );
+        }
+
+        const { data, error } = await (supabase
+          .from('crop_findings') as any)
+          .select('finding_id, findings(*)')
+          .eq('crop_id', cropId);
+
+        if (error) throw error;
+
+        const findings = data?.map((cf: any) => cf.findings).filter(Boolean) || [];
+        return NextResponse.json(findings);
+      }
+
+      case 'action_types': {
+        // Get distinct action types available for a specific crop via recommend_material
+        if (!cropId) {
+          return NextResponse.json(
+            { error: 'cropId is required for action_types' },
+            { status: 400 }
+          );
+        }
+
+        const { data, error } = await (supabase
+          .from('recommend_material') as any)
+          .select('action_type_id, action_types(*)')
+          .eq('crop_id', cropId);
+
+        if (error) throw error;
+
+        // Get unique action types
+        const actionTypesMap = new Map();
+        data?.forEach((rm: any) => {
+          if (rm.action_types && !actionTypesMap.has(rm.action_type_id)) {
+            actionTypesMap.set(rm.action_type_id, rm.action_types);
+          }
+        });
+
+        return NextResponse.json(Array.from(actionTypesMap.values()));
+      }
+
+      case 'materials': {
+        // Get materials available for a specific crop + action_type via recommend_material
+        if (!cropId || !actionTypeId) {
+          return NextResponse.json(
+            { error: 'cropId and actionTypeId are required for materials' },
+            { status: 400 }
+          );
+        }
+
+        const { data, error } = await (supabase
+          .from('recommend_material') as any)
+          .select('material_id, materials(*)')
+          .eq('crop_id', cropId)
+          .eq('action_type_id', actionTypeId);
+
+        if (error) throw error;
+
+        // Get unique materials
+        const materialsMap = new Map();
+        data?.forEach((rm: any) => {
+          if (rm.materials && !materialsMap.has(rm.material_id)) {
+            materialsMap.set(rm.material_id, rm.materials);
+          }
+        });
+
+        return NextResponse.json(Array.from(materialsMap.values()));
+      }
+
+      case 'dosage': {
+        // Get dosage and unit_type for a specific combination
+        if (!cropId || !actionTypeId || !materialId) {
+          return NextResponse.json(
+            { error: 'cropId, actionTypeId, and materialId are required for dosage' },
+            { status: 400 }
+          );
+        }
+
+        const { data, error } = await (supabase
+          .from('recommend_material') as any)
+          .select('dosage, unit_type_id, unit_types(*)')
+          .eq('crop_id', cropId)
+          .eq('action_type_id', actionTypeId)
+          .eq('material_id', materialId)
+          .maybeSingle();
+
+        if (error) throw error;
+
+        if (data) {
+          return NextResponse.json({
+            dosage: data.dosage,
+            unit_type_id: data.unit_type_id,
+            unit_type: data.unit_types,
+          });
+        }
+
+        return NextResponse.json(null);
+      }
+
+      default:
+        return NextResponse.json(
+          { error: 'Invalid type. Must be: findings, action_types, materials, or dosage' },
+          { status: 400 }
+        );
+    }
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}

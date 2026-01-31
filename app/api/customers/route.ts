@@ -89,8 +89,8 @@ export async function POST(request: Request) {
     }
 
     // Create customer record using admin client to bypass RLS
-    const { data: customerData, error: customerError } = await adminClient
-      .from('customers')
+    const { data: customerData, error: customerError } = await (adminClient
+      .from('customers') as any)
       .insert({
         user_id: authData.user.id,
         name,
@@ -106,15 +106,15 @@ export async function POST(request: Request) {
     }
 
     // Assign customer_owner role to the new user
-    const { data: roleData } = await adminClient
-      .from('roles')
+    const { data: roleData } = await (adminClient
+      .from('roles') as any)
       .select('id')
       .eq('name', 'customer_owner')
       .single();
 
     if (roleData) {
-      await adminClient
-        .from('user_roles')
+      await (adminClient
+        .from('user_roles') as any)
         .insert({
           user_id: authData.user.id,
           role_id: roleData.id,
@@ -151,8 +151,8 @@ export async function PUT(request: Request) {
     }
 
     const supabase = await createClient();
-    const { data, error } = await supabase
-      .from('customers')
+    const { data, error } = await (supabase
+      .from('customers') as any)
       .update({
         name,
         description: description || null,
@@ -196,15 +196,15 @@ export async function DELETE(request: Request) {
     const adminClient = createAdminClient();
 
     // Get customer's user_id first
-    const { data: customer } = await adminClient
-      .from('customers')
+    const { data: customer } = await (adminClient
+      .from('customers') as any)
       .select('user_id')
       .eq('id', id)
       .single();
 
     // Delete customer record (this will cascade to customer_areas, workers, etc.)
-    const { error } = await adminClient
-      .from('customers')
+    const { error } = await (adminClient
+      .from('customers') as any)
       .delete()
       .eq('id', id);
 

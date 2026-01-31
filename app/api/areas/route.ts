@@ -23,7 +23,7 @@ export async function GET(request: Request) {
 
     const { data, error } = await supabase
       .from('customer_areas')
-      .select('area_id, areas(*)')
+      .select('area_id, areas(*, crops(*))')
       .eq('customer_id', targetCustomerId);
 
     if (error) throw error;
@@ -50,7 +50,7 @@ export async function PUT(request: Request) {
     }
 
     const body = await request.json();
-    const { id, name, description } = body;
+    const { id, name, description, crop_id } = body;
 
     if (!id || !name) {
       return NextResponse.json(
@@ -61,11 +61,12 @@ export async function PUT(request: Request) {
 
     // Use admin client to bypass RLS (permissions already checked above)
     const adminClient = createAdminClient();
-    const { data, error } = await adminClient
-      .from('areas')
+    const { data, error } = await (adminClient
+      .from('areas') as any)
       .update({
         name,
         description: description || null,
+        crop_id: crop_id || null,
         updated_at: new Date().toISOString(),
       })
       .eq('id', id)
@@ -94,7 +95,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { name, description, customer_id } = body;
+    const { name, description, customer_id, crop_id } = body;
 
     if (!name) {
       return NextResponse.json(
@@ -107,11 +108,12 @@ export async function POST(request: Request) {
     const adminClient = createAdminClient();
 
     // Create area
-    const { data: areaData, error: areaError } = await adminClient
-      .from('areas')
+    const { data: areaData, error: areaError } = await (adminClient
+      .from('areas') as any)
       .insert({
         name,
         description: description || null,
+        crop_id: crop_id || null,
       })
       .select()
       .single();
@@ -120,8 +122,8 @@ export async function POST(request: Request) {
 
     // If customer_id is provided, link area to customer
     if (customer_id && areaData) {
-      const { error: linkError } = await adminClient
-        .from('customer_areas')
+      const { error: linkError } = await (adminClient
+        .from('customer_areas') as any)
         .insert({
           customer_id,
           area_id: areaData.id,
@@ -164,8 +166,8 @@ export async function DELETE(request: Request) {
 
     // Use admin client to bypass RLS (permissions already checked above)
     const adminClient = createAdminClient();
-    const { error } = await adminClient
-      .from('areas')
+    const { error } = await (adminClient
+      .from('areas') as any)
       .delete()
       .eq('id', id);
 

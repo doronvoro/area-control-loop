@@ -18,51 +18,54 @@ export async function GET(request: Request) {
     const supabase = await createClient();
     const { data, error } = await supabase
       .from('sub_areas')
-      .select('*')
+      .select('*, crops(*)')
       .eq('area_id', areaId)
       .order('level')
       .order('name');
 
     if (error) throw error;
 
-    // Build display names with area name
+    // Build display names with area name and get area's crop for inheritance
     const { data: area } = await supabase
       .from('areas')
-      .select('name')
+      .select('name, crop_id, crops(*)')
       .eq('id', areaId)
       .single();
 
     const areaName = (area as any)?.name || '';
+    const areaCropId = (area as any)?.crop_id || null;
+    const areaCrop = (area as any)?.crops || null;
 
-    // Build hierarchical paths for display
+    // Build hierarchical paths for display and add effective crop
     const subAreasWithDisplay = (data || []).map((subArea: any) => {
-      // If display is already set and includes area name, use it
-      if (subArea.display && subArea.display.includes(areaName)) {
-        return subArea;
-      }
+      // Determine effective crop (sub-area's own crop or inherited from area)
+      const effectiveCropId = subArea.crop_id || areaCropId;
+      const effectiveCrop = subArea.crops || areaCrop;
 
-      // Otherwise build from hierarchy
-      const path: string[] = [subArea.name];
-      let current = subArea;
-      
-      // Traverse up the hierarchy to build full path
-      const buildPath = (sa: any, allSubAreas: any[]): string[] => {
-        if (!sa.parent_sub_area_id) {
+      // Build display if needed
+      let display = subArea.display;
+      if (!display || !display.includes(areaName)) {
+        // Traverse up the hierarchy to build full path
+        const buildPath = (sa: any, allSubAreas: any[]): string[] => {
+          if (!sa.parent_sub_area_id) {
+            return [sa.name];
+          }
+          const parent = allSubAreas.find((s: any) => s.id === sa.parent_sub_area_id);
+          if (parent) {
+            return [...buildPath(parent, allSubAreas), sa.name];
+          }
           return [sa.name];
-        }
-        const parent = allSubAreas.find((s: any) => s.id === sa.parent_sub_area_id);
-        if (parent) {
-          return [...buildPath(parent, allSubAreas), sa.name];
-        }
-        return [sa.name];
-      };
+        };
 
-      const fullPath = buildPath(subArea, data || []);
-      const display = `${areaName} | ${fullPath.join(' | ')}`;
+        const fullPath = buildPath(subArea, data || []);
+        display = `${areaName} | ${fullPath.join(' | ')}`;
+      }
 
       return {
         ...subArea,
         display,
+        effective_crop_id: effectiveCropId,
+        effective_crop: effectiveCrop,
       };
     });
 
@@ -86,7 +89,7 @@ export async function PUT(request: Request) {
     }
 
     const body = await request.json();
-    const { id, name, variety, rows, parent_sub_area_id, level } = body;
+    const { id, name, variety, rows, parent_sub_area_id, level, crop_id } = body;
 
     if (!id || !name) {
       return NextResponse.json(
@@ -126,6 +129,10 @@ export async function PUT(request: Request) {
       updateData.level = level;
     }
 
+    if (crop_id !== undefined) {
+      updateData.crop_id = crop_id || null;
+    }
+
     const query = supabase.from('sub_areas') as any;
     const { data, error } = await query
       .update(updateData)
@@ -155,7 +162,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { area_id, name, variety, rows, parent_sub_area_id, level } = body;
+    const { area_id, name, variety, rows, parent_sub_area_id, level, crop_id } = body;
 
     if (!area_id || !name) {
       return NextResponse.json(
@@ -209,6 +216,7 @@ export async function POST(request: Request) {
       parent_sub_area_id: parent_sub_area_id || null,
       level: calculatedLevel,
       display,
+      crop_id: crop_id || null,
     };
 
     const query = supabase.from('sub_areas') as any;

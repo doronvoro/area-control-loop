@@ -41,18 +41,18 @@ export function Navbar() {
         
         // Try to get name from customer or worker table
         const [customerResult, workerResult, rolesResult] = await Promise.all([
-          supabase
-            .from('customers')
+          (supabase
+            .from('customers') as any)
             .select('name')
             .eq('user_id', user.id)
             .maybeSingle(),
-          supabase
-            .from('workers')
+          (supabase
+            .from('workers') as any)
             .select('name')
             .eq('user_id', user.id)
             .maybeSingle(),
-          supabase
-            .from('user_roles')
+          (supabase
+            .from('user_roles') as any)
             .select('roles(name, display_name)')
             .eq('user_id', user.id),
         ]);

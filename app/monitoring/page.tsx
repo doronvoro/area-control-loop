@@ -1,4 +1,3 @@
-import { redirect } from 'next/navigation';
 import { requireAuth } from '@/lib/auth';
 import { Navbar } from '@/components/layout/Navbar';
 import { MonitoringForm } from '@/components/monitoring/MonitoringForm';
@@ -8,26 +7,11 @@ export default async function MonitoringPage() {
   await requireAuth();
   const supabase = await createClient();
 
-  // Fetch lookup data
-  const { data: workerType } = await supabase
-    .from('worker_types')
-    .select('id')
-    .eq('name', 'inspector')
-    .single();
-
-  const inspectorTypeId = (workerType as { id: string } | null)?.id;
-
-  const [inspectors, areas, reportAreas, findings, actionTypes, unitTypes] = await Promise.all([
-    inspectorTypeId
-      ? supabase
-          .from('workers')
-          .select('*, worker_types(*)')
-          .eq('type_id', inspectorTypeId)
-      : { data: [] },
-    supabase.from('areas').select('*').order('name'),
-    supabase.from('report_areas').select('*').eq('type', 'monitoring').order('name'),
+  // Fetch lookup data - customers, findings, and unit types
+  // Other data (inspectors, areas, sub-areas, action types, materials) are fetched dynamically based on selections
+  const [customers, findings, unitTypes] = await Promise.all([
+    supabase.from('customers').select('*').order('name'),
     supabase.from('findings').select('*').order('description'),
-    supabase.from('action_types').select('*').order('description'),
     supabase.from('unit_types').select('*').order('description'),
   ]);
 
@@ -35,13 +19,10 @@ export default async function MonitoringPage() {
     <div className="min-h-screen bg-background">
       <Navbar />
       <main className="container mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold mb-8">טופס ניטור</h1>
+        <h1 className="text-3xl font-bold mb-8 text-center">טופס ניטור</h1>
         <MonitoringForm
-          inspectors={inspectors.data || []}
-          areas={areas.data || []}
-          reportAreas={reportAreas.data || []}
+          customers={customers.data || []}
           findings={findings.data || []}
-          actionTypes={actionTypes.data || []}
           unitTypes={unitTypes.data || []}
         />
       </main>

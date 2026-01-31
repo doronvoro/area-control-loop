@@ -1,14 +1,16 @@
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { getCurrentWorker, requireAuth } from '@/lib/auth';
+import { hasRole } from '@/lib/permissions';
 
 export async function GET() {
   try {
     await requireAuth();
     const supabase = await createClient();
     const worker = await getCurrentWorker();
+    const isAdmin = await hasRole('admin');
 
-    if (!worker) {
+    if (!worker && !isAdmin) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -32,8 +34,9 @@ export async function POST(request: Request) {
     await requireAuth();
     const supabase = await createClient();
     const worker = await getCurrentWorker();
+    const isAdmin = await hasRole('admin');
 
-    if (!worker) {
+    if (!worker && !isAdmin) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
