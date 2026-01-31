@@ -43,7 +43,7 @@ const subAreaEntrySchema = z.object({
 });
 
 const actionSchema = z.object({
-  customer_id: z.string().optional(),
+  customer_id: z.string().min(1, 'נדרש לבחור לקוח'),
   worker_id: z.string().min(1, 'נדרש לבחור עובד פעולה'),
   area_id: z.string().min(1, 'נדרש לבחור שטח'),
   entries: z.array(subAreaEntrySchema).min(1, 'נדרשת לפחות רשומה אחת'),
@@ -51,15 +51,11 @@ const actionSchema = z.object({
 
 type ActionFormData = z.infer<typeof actionSchema>;
 
-interface ActionFormProps {
-  isAdmin: boolean;
+interface AdminActionFormProps {
   customers: any[];
-  initialAreas: any[];
-  initialWorkers: any[];
   findings: any[];
   actionTypes: any[];
   unitTypes: any[];
-  currentWorkerId?: string;
 }
 
 const statusOptions = [
@@ -68,24 +64,20 @@ const statusOptions = [
   { value: 'completed', label: 'הושלם' },
 ];
 
-export function ActionForm({
-  isAdmin,
+export function AdminActionForm({
   customers,
-  initialAreas,
-  initialWorkers,
   findings,
   actionTypes,
   unitTypes,
-  currentWorkerId,
-}: ActionFormProps) {
+}: AdminActionFormProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
   // Loaded data states
-  const [actionWorkers, setActionWorkers] = useState<any[]>(initialWorkers);
-  const [areas, setAreas] = useState<any[]>(initialAreas);
+  const [actionWorkers, setActionWorkers] = useState<any[]>([]);
+  const [areas, setAreas] = useState<any[]>([]);
   const [subAreas, setSubAreas] = useState<any[]>([]);
 
   // Entry-specific cascade data (indexed by entry index)
@@ -101,7 +93,7 @@ export function ActionForm({
     resolver: zodResolver(actionSchema),
     defaultValues: {
       customer_id: '',
-      worker_id: currentWorkerId || '',
+      worker_id: '',
       area_id: '',
       entries: [
         {
@@ -130,9 +122,9 @@ export function ActionForm({
   const watchCustomerId = form.watch('customer_id');
   const watchAreaId = form.watch('area_id');
 
-  // Fetch workers and areas when customer changes (admin only)
+  // Fetch workers and areas when customer changes
   useEffect(() => {
-    if (isAdmin && watchCustomerId) {
+    if (watchCustomerId) {
       fetchActionWorkers(watchCustomerId);
       fetchAreas(watchCustomerId);
       // Reset dependent fields
@@ -141,7 +133,7 @@ export function ActionForm({
       setSubAreas([]);
       resetAllEntries();
     }
-  }, [watchCustomerId, isAdmin]);
+  }, [watchCustomerId]);
 
   // Fetch sub-areas and monitoring reports when area changes
   useEffect(() => {
@@ -435,31 +427,9 @@ export function ActionForm({
       }
 
       setSuccess(true);
-      form.reset({
-        customer_id: '',
-        worker_id: currentWorkerId || '',
-        area_id: '',
-        entries: [
-          {
-            source: 'standalone',
-            sub_area_id: '',
-            sub_area_display: '',
-            finding_id: '',
-            finding_name: '',
-            crop_id: '',
-            action_type_id: '',
-            material_id: '',
-            material: '',
-            dosage: '',
-            unit_type_id: '',
-            status: 'planned',
-          },
-        ],
-      });
-      if (isAdmin) {
-        setActionWorkers([]);
-        setAreas([]);
-      }
+      form.reset();
+      setActionWorkers([]);
+      setAreas([]);
       setSubAreas([]);
       setEntryActionTypes({});
       setEntryMaterials({});
@@ -478,7 +448,7 @@ export function ActionForm({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>טופס פעולה חדש</CardTitle>
+        <CardTitle>טופס פעולה מנהל - רשומות מרובות</CardTitle>
       </CardHeader>
       <CardContent>
         <Form {...form}>
@@ -494,33 +464,31 @@ export function ActionForm({
               </Alert>
             )}
 
-            {/* Customer Selection - Admin only */}
-            {isAdmin && (
-              <FormField
-                control={form.control}
-                name="customer_id"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>לקוח</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="בחר לקוח" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {customers.map((customer) => (
-                          <SelectItem key={customer.id} value={customer.id}>
-                            {customer.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
+            {/* Customer Selection */}
+            <FormField
+              control={form.control}
+              name="customer_id"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>לקוח</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="בחר לקוח" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {customers.map((customer) => (
+                        <SelectItem key={customer.id} value={customer.id}>
+                          {customer.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
             {/* Action Worker Selection */}
             <FormField
@@ -532,7 +500,7 @@ export function ActionForm({
                   <Select
                     onValueChange={field.onChange}
                     value={field.value}
-                    disabled={isAdmin && (!watchCustomerId || loadingWorkers)}
+                    disabled={!watchCustomerId || loadingWorkers}
                   >
                     <FormControl>
                       <SelectTrigger>
@@ -540,7 +508,7 @@ export function ActionForm({
                           placeholder={
                             loadingWorkers
                               ? 'טוען עובדים...'
-                              : isAdmin && !watchCustomerId
+                              : !watchCustomerId
                                 ? 'בחר תחילה לקוח'
                                 : 'בחר עובד פעולה'
                           }
@@ -570,7 +538,7 @@ export function ActionForm({
                   <Select
                     onValueChange={field.onChange}
                     value={field.value}
-                    disabled={isAdmin && (!watchCustomerId || loadingAreas)}
+                    disabled={!watchCustomerId || loadingAreas}
                   >
                     <FormControl>
                       <SelectTrigger>
@@ -578,7 +546,7 @@ export function ActionForm({
                           placeholder={
                             loadingAreas
                               ? 'טוען שטחים...'
-                              : isAdmin && !watchCustomerId
+                              : !watchCustomerId
                                 ? 'בחר תחילה לקוח'
                                 : 'בחר שטח'
                           }
