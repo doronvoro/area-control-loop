@@ -23,10 +23,17 @@ interface AreaWithOwner {
   id: string;
   name: string;
   description: string | null;
+  crop_id?: string | null;
   customer?: {
     id: string;
     name: string;
   } | null;
+}
+
+interface Crop {
+  id: string;
+  name: string;
+  description?: string | null;
 }
 
 interface Permissions {
@@ -54,6 +61,7 @@ interface ManagementDashboardProps {
   ownCustomer: CustomerWithAreas | null;
   ownAreas: AreaWithOwner[];
   allCustomers: { id: string; name: string }[];
+  crops?: Crop[];
 }
 
 export function ManagementDashboard({
@@ -67,6 +75,7 @@ export function ManagementDashboard({
   ownCustomer,
   ownAreas,
   allCustomers,
+  crops = [],
 }: ManagementDashboardProps) {
   // Determine default tab based on role
   const getDefaultTab = () => {
@@ -115,6 +124,7 @@ export function ManagementDashboard({
             <AreasSection
               areas={areasWithOwners}
               customers={allCustomers}
+              crops={crops}
               isAdmin={isAdmin}
               permissions={permissions}
             />
@@ -131,6 +141,7 @@ export function ManagementDashboard({
             <AreasSection
               areas={ownAreas}
               customers={[]}
+              crops={crops}
               isAdmin={false}
               customerId={ownCustomer?.id || null}
               permissions={permissions}

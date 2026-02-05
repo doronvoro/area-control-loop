@@ -8,6 +8,7 @@ export default async function ReportsPage() {
   const supabase = await createClient();
 
   // Fetch report_areas with their monitoring and action reports including treatments
+  // Monitoring treatments include linked action_treatment for comparison view
   const { data: reportAreas } = await supabase
     .from('report_areas')
     .select(
@@ -18,10 +19,16 @@ export default async function ReportsPage() {
         sub_area:sub_areas(id, name),
         finding:findings(name, description),
         treatments:monitoring_treatments(
-          id, dosage, status, notes,
-          material:materials(name, description),
-          action_type:action_types(name, description),
-          unit_type:unit_types(name, description)
+          id, dosage, status, notes, action_treatment_id,
+          material:materials(id, name, description),
+          action_type:action_types(id, name, description),
+          unit_type:unit_types(id, name, description),
+          action_treatment:action_treatments(
+            id, dosage, status, notes, action_time,
+            material:materials(id, name, description),
+            action_type:action_types(id, name, description),
+            unit_type:unit_types(id, name, description)
+          )
         )
       ),
       action_reports:actions_area_report(
@@ -30,9 +37,9 @@ export default async function ReportsPage() {
         finding:findings(name, description),
         treatments:action_treatments(
           id, dosage, status, notes, action_time,
-          material:materials(name, description),
-          action_type:action_types(name, description),
-          unit_type:unit_types(name, description)
+          material:materials(id, name, description),
+          action_type:action_types(id, name, description),
+          unit_type:unit_types(id, name, description)
         )
       )`
     )

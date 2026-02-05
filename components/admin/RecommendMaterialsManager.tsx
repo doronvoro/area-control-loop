@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Plus, Trash2, Edit, X } from 'lucide-react';
+import { Plus, Trash2, Edit, X, Filter, RotateCcw } from 'lucide-react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -69,6 +69,11 @@ export function RecommendMaterialsManager() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Filter state
+  const [filterCropId, setFilterCropId] = useState<string>('');
+  const [filterActionTypeId, setFilterActionTypeId] = useState<string>('');
+  const [filterMaterialId, setFilterMaterialId] = useState<string>('');
 
   const form = useForm<RecommendationFormData>({
     resolver: zodResolver(recommendationSchema),
@@ -224,6 +229,22 @@ export function RecommendMaterialsManager() {
     }
   };
 
+  // Filter recommendations
+  const filteredRecommendations = recommendations.filter((rec) => {
+    if (filterCropId && rec.key.crop_id !== filterCropId) return false;
+    if (filterActionTypeId && rec.key.action_type_id !== filterActionTypeId) return false;
+    if (filterMaterialId && rec.key.material_id !== filterMaterialId) return false;
+    return true;
+  });
+
+  const hasActiveFilters = filterCropId || filterActionTypeId || filterMaterialId;
+
+  const clearFilters = () => {
+    setFilterCropId('');
+    setFilterActionTypeId('');
+    setFilterMaterialId('');
+  };
+
   if (loading) {
     return <div className="text-center py-8">טוען...</div>;
   }
@@ -236,6 +257,95 @@ export function RecommendMaterialsManager() {
         </div>
       )}
 
+      {/* Filters */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4" />
+            <CardTitle className="text-lg">סינון</CardTitle>
+            {hasActiveFilters && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearFilters}
+                className="mr-auto"
+              >
+                <RotateCcw className="h-4 w-4 ml-1" />
+                נקה סינון
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <Label className="text-sm text-muted-foreground">גידול</Label>
+              <Select
+                value={filterCropId || '__all__'}
+                onValueChange={(value) => setFilterCropId(value === '__all__' ? '' : value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="כל הגידולים" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">כל הגידולים</SelectItem>
+                  {crops.map((crop) => (
+                    <SelectItem key={crop.id} value={crop.id}>
+                      {crop.description || crop.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label className="text-sm text-muted-foreground">סוג פעולה</Label>
+              <Select
+                value={filterActionTypeId || '__all__'}
+                onValueChange={(value) => setFilterActionTypeId(value === '__all__' ? '' : value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="כל סוגי הפעולות" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">כל סוגי הפעולות</SelectItem>
+                  {actionTypes.map((at) => (
+                    <SelectItem key={at.id} value={at.id}>
+                      {at.description || at.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label className="text-sm text-muted-foreground">חומר</Label>
+              <Select
+                value={filterMaterialId || '__all__'}
+                onValueChange={(value) => setFilterMaterialId(value === '__all__' ? '' : value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="כל החומרים" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">כל החומרים</SelectItem>
+                  {materials.map((material) => (
+                    <SelectItem key={material.id} value={material.id}>
+                      {material.description || material.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          {hasActiveFilters && (
+            <p className="text-sm text-muted-foreground mt-3">
+              מציג {filteredRecommendations.length} מתוך {recommendations.length} המלצות
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
       <div className="flex justify-end">
         <Button onClick={() => handleOpenDialog()}>
           <Plus className="h-4 w-4 ml-2" />
@@ -244,7 +354,7 @@ export function RecommendMaterialsManager() {
       </div>
 
       <div className="grid gap-4">
-        {recommendations.map((rec) => {
+        {filteredRecommendations.map((rec) => {
           const key = `${rec.key.crop_id}_${rec.key.action_type_id}_${rec.key.material_id}`;
           return (
             <Card key={key}>
@@ -292,10 +402,12 @@ export function RecommendMaterialsManager() {
           );
         })}
 
-        {recommendations.length === 0 && (
+        {filteredRecommendations.length === 0 && (
           <Card>
             <CardContent className="py-8 text-center text-muted-foreground">
-              אין המלצות. לחץ על "הוסף המלצה חדשה" כדי להתחיל.
+              {hasActiveFilters
+                ? 'לא נמצאו המלצות התואמות לסינון. נסה לשנות את הסינון.'
+                : 'אין המלצות. לחץ על "הוסף המלצה חדשה" כדי להתחיל.'}
             </CardContent>
           </Card>
         )}

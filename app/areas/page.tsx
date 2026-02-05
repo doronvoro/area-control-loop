@@ -29,6 +29,13 @@ export default async function AreasPage() {
   let areas;
   let customers: { id: string; name: string }[] = [];
 
+  // Fetch all crops for selection
+  const { data: allCrops } = await supabase
+    .from('crops')
+    .select('id, name, description')
+    .order('name');
+  const crops = allCrops || [];
+
   if (isAdmin) {
     // Admin - get all areas and all customers
     const { data: allAreas } = await supabase
@@ -68,6 +75,7 @@ export default async function AreasPage() {
           areas={areas || []}
           customerId={(customer as any)?.id || null}
           customers={customers}
+          crops={crops}
           isAdmin={isAdmin}
           canCreateArea={canCreateArea}
           canUpdateArea={canUpdateArea}

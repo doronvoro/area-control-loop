@@ -20,6 +20,7 @@ interface Area {
   id: string;
   name: string;
   description?: string | null;
+  crop_id?: string | null;
 }
 
 interface SubArea {
@@ -31,6 +32,7 @@ interface SubArea {
   level?: number;
   area_id: string;
   display?: string;
+  crop_id?: string | null;
   children?: SubArea[];
 }
 
@@ -39,10 +41,17 @@ interface Customer {
   name: string;
 }
 
+interface Crop {
+  id: string;
+  name: string;
+  description?: string | null;
+}
+
 interface AreasListProps {
   areas: Area[];
   customerId?: string | null;
   customers?: Customer[];
+  crops?: Crop[];
   isAdmin?: boolean;
   canCreateArea: boolean;
   canUpdateArea: boolean;
@@ -56,6 +65,7 @@ export function AreasList({
   areas,
   customerId,
   customers = [],
+  crops = [],
   isAdmin = false,
   canCreateArea,
   canUpdateArea,
@@ -208,6 +218,7 @@ export function AreasList({
           area={selectedArea}
           customerId={customerId || undefined}
           customers={customers}
+          crops={crops}
           isAdmin={isAdmin}
           open={editAreaOpen}
           onOpenChange={setEditAreaOpen}
@@ -230,6 +241,7 @@ export function AreasList({
               <SubAreaTreeView
                 areaId={treeViewArea.id}
                 subAreas={treeSubAreas}
+                crops={crops}
                 canCreate={canCreateSubArea}
                 canUpdate={canUpdateSubArea}
                 canDelete={canDeleteSubArea}

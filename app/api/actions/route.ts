@@ -117,7 +117,7 @@ export async function POST(request: Request) {
               ? (typeof treatment.dosage === 'string' ? parseFloat(treatment.dosage) : treatment.dosage)
               : null;
 
-            const { error: treatmentError } = await (supabase
+            const { data: actionTreatmentData, error: treatmentError } = await (supabase
               .from('action_treatments') as any)
               .insert({
                 action_report_id: (actionData as any).id,
@@ -128,9 +128,25 @@ export async function POST(request: Request) {
                 status: treatment.status || 'pending',
                 notes: treatment.notes || null,
                 action_time: treatment.action_time || null,
-              });
+              })
+              .select()
+              .single();
 
             if (treatmentError) throw treatmentError;
+
+            // Link monitoring treatment to action treatment if monitoring_treatment_id provided
+            // Also sync the status from action_treatment to monitoring_treatment
+            if (treatment.monitoring_treatment_id && actionTreatmentData) {
+              const { error: linkError } = await (supabase
+                .from('monitoring_treatments') as any)
+                .update({
+                  action_treatment_id: actionTreatmentData.id,
+                  status: actionTreatmentData.status, // Sync status
+                })
+                .eq('id', treatment.monitoring_treatment_id);
+
+              if (linkError) throw linkError;
+            }
           }
         } else if (entry.action_type_id || entry.material_id) {
           // Legacy format - create single treatment from entry fields
@@ -213,7 +229,7 @@ export async function POST(request: Request) {
           ? (typeof treatment.dosage === 'string' ? parseFloat(treatment.dosage) : treatment.dosage)
           : null;
 
-        const { error: treatmentError } = await (supabase
+        const { data: actionTreatmentData, error: treatmentError } = await (supabase
           .from('action_treatments') as any)
           .insert({
             action_report_id: (actionData as any).id,
@@ -224,9 +240,25 @@ export async function POST(request: Request) {
             status: treatment.status || 'pending',
             notes: treatment.notes || null,
             action_time: treatment.action_time || null,
-          });
+          })
+          .select()
+          .single();
 
         if (treatmentError) throw treatmentError;
+
+        // Link monitoring treatment to action treatment if monitoring_treatment_id provided
+        // Also sync the status from action_treatment to monitoring_treatment
+        if (treatment.monitoring_treatment_id && actionTreatmentData) {
+          const { error: linkError } = await (supabase
+            .from('monitoring_treatments') as any)
+            .update({
+              action_treatment_id: actionTreatmentData.id,
+              status: actionTreatmentData.status, // Sync status
+            })
+            .eq('id', treatment.monitoring_treatment_id);
+
+          if (linkError) throw linkError;
+        }
       }
     } else if (action_type_id || material_id || material) {
       // Legacy format - create single treatment from legacy fields

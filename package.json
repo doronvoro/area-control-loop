@@ -16,7 +16,8 @@
     "assign-roles": "tsx scripts/assign-roles.ts",
     "create-test-users": "tsx scripts/create-test-users.ts",
     "reset-seed": "tsx scripts/reset-and-seed.ts",
-    "apply-migration": "tsx scripts/apply-remote-migration.ts"
+    "apply-migration": "tsx scripts/apply-remote-migration.ts",
+    "clean-reports": "tsx scripts/clean-reports.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

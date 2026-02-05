@@ -5,15 +5,28 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 
+interface ActionTreatment {
+  id: string;
+  dosage?: number | null;
+  status: string;
+  notes?: string | null;
+  action_time?: string | null;
+  material?: { id: string; name: string; description?: string | null } | null;
+  action_type?: { id: string; name: string; description?: string | null } | null;
+  unit_type?: { id: string; name: string; description?: string | null } | null;
+}
+
 interface Treatment {
   id: string;
   dosage?: number | null;
   status: string;
   notes?: string | null;
   action_time?: string | null;
-  material?: { name: string; description?: string | null } | null;
-  action_type?: { name: string; description?: string | null } | null;
-  unit_type?: { name: string; description?: string | null } | null;
+  material?: { id?: string; name: string; description?: string | null } | null;
+  action_type?: { id?: string; name: string; description?: string | null } | null;
+  unit_type?: { id?: string; name: string; description?: string | null } | null;
+  action_treatment_id?: string | null;
+  action_treatment?: ActionTreatment | null;
 }
 
 interface SubAreaReport {
@@ -128,6 +141,110 @@ export function ReportDetailDialog({ reportArea, open, onOpenChange }: ReportDet
     );
   };
 
+  // Render monitoring treatment with linked action treatment comparison
+  const renderMonitoringTreatmentWithComparison = (treatment: Treatment) => {
+    const actionTreatment = treatment.action_treatment;
+    const hasAction = !!actionTreatment;
+
+    // Check for differences
+    const materialChanged = hasAction &&
+      treatment.material?.id !== actionTreatment?.material?.id;
+    const dosageChanged = hasAction &&
+      treatment.dosage !== actionTreatment?.dosage;
+
+    return (
+      <div
+        key={treatment.id}
+        className={`bg-background/50 rounded p-2 text-xs border ${hasAction ? 'border-green-500/30' : 'border-border/50'}`}
+      >
+        {/* Recommended (Monitoring) */}
+        <div className="mb-2">
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground text-[10px]">המלצה:</span>
+            <Badge variant="outline" className="text-xs">
+              {statusLabel(treatment.status)}
+            </Badge>
+          </div>
+          <div className="font-medium">
+            {treatment.action_type?.description || treatment.action_type?.name || 'לא צוין'}
+          </div>
+          {treatment.material && (
+            <div className="text-muted-foreground">
+              {treatment.material.description || treatment.material.name}
+              {treatment.dosage != null && (
+                <span>
+                  {' '}
+                  - {treatment.dosage} {treatment.unit_type?.description || treatment.unit_type?.name || ''}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Actual (Action) - if linked */}
+        {hasAction && actionTreatment && (
+          <>
+            <Separator className="my-2" />
+            <div>
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground text-[10px]">בוצע:</span>
+                <Badge
+                  variant={actionTreatment.status === 'completed' ? 'default' : 'outline'}
+                  className="text-xs"
+                >
+                  {statusLabel(actionTreatment.status)}
+                </Badge>
+              </div>
+              <div className="font-medium">
+                {actionTreatment.action_type?.description || actionTreatment.action_type?.name || 'לא צוין'}
+              </div>
+              {actionTreatment.material && (
+                <div className={materialChanged ? 'text-amber-600 font-medium' : 'text-muted-foreground'}>
+                  {actionTreatment.material.description || actionTreatment.material.name}
+                  {materialChanged && <span className="text-[10px]"> (שונה)</span>}
+                  {actionTreatment.dosage != null && (
+                    <span className={dosageChanged ? 'text-amber-600' : ''}>
+                      {' '}
+                      - {actionTreatment.dosage} {actionTreatment.unit_type?.description || actionTreatment.unit_type?.name || ''}
+                      {dosageChanged && <span className="text-[10px]"> (שונה)</span>}
+                    </span>
+                  )}
+                </div>
+              )}
+              {actionTreatment.action_time && (
+                <div className="text-muted-foreground">
+                  בוצע: {new Date(actionTreatment.action_time).toLocaleDateString('he-IL')}
+                </div>
+              )}
+              {actionTreatment.notes && (
+                <div className="text-muted-foreground">הערה: {actionTreatment.notes}</div>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* Not yet executed */}
+        {!hasAction && (
+          <div className="text-amber-600 text-[10px] mt-1">
+            טרם בוצע
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Render monitoring treatments with comparison view
+  const renderMonitoringTreatmentsWithComparison = (treatments: Treatment[] | undefined) => {
+    if (!treatments || treatments.length === 0) return null;
+
+    return (
+      <div className="mt-2 space-y-2">
+        <span className="text-xs text-muted-foreground">טיפולים מומלצים ({treatments.length}):</span>
+        {treatments.map((treatment) => renderMonitoringTreatmentWithComparison(treatment))}
+      </div>
+    );
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto">
@@ -198,7 +315,7 @@ export function ReportDetailDialog({ reportArea, open, onOpenChange }: ReportDet
                               </span>
                               <Badge variant="outline">{statusLabel(report.status)}</Badge>
                             </div>
-                            {renderTreatments(report.treatments)}
+                            {renderMonitoringTreatmentsWithComparison(report.treatments)}
                           </div>
                         ))}
                       </div>

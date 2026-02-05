@@ -16,12 +16,20 @@ interface SubArea {
   level?: number;
   area_id: string;
   display?: string;
+  crop_id?: string | null;
   children?: SubArea[];
+}
+
+interface Crop {
+  id: string;
+  name: string;
+  description?: string | null;
 }
 
 interface SubAreaTreeViewProps {
   areaId: string;
   subAreas: SubArea[];
+  crops?: Crop[];
   canCreate: boolean;
   canUpdate: boolean;
   canDelete: boolean;
@@ -31,6 +39,7 @@ interface SubAreaTreeViewProps {
 export function SubAreaTreeView({
   areaId,
   subAreas,
+  crops = [],
   canCreate,
   canUpdate,
   canDelete,
@@ -218,6 +227,7 @@ export function SubAreaTreeView({
             name: sa.name,
             display: sa.display,
           }))}
+          crops={crops}
           open={!!editSubArea}
           onOpenChange={(open) => !open && setEditSubArea(null)}
           onSuccess={() => {
@@ -236,6 +246,7 @@ export function SubAreaTreeView({
             name: sa.name,
             display: sa.display,
           }))}
+          crops={crops}
           open={!!createSubArea}
           onOpenChange={(open) => !open && setCreateSubArea(null)}
           onSuccess={() => {

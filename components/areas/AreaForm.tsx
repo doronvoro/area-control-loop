@@ -36,6 +36,7 @@ const areaSchema = z.object({
   name: z.string().min(1, 'שם השטח נדרש'),
   description: z.string().optional(),
   customer_id: z.string().optional(),
+  crop_id: z.string().optional(),
 });
 
 type AreaFormData = z.infer<typeof areaSchema>;
@@ -45,21 +46,29 @@ interface Customer {
   name: string;
 }
 
+interface Crop {
+  id: string;
+  name: string;
+  description?: string | null;
+}
+
 interface AreaFormProps {
   area?: {
     id: string;
     name: string;
     description?: string | null;
+    crop_id?: string | null;
   } | null;
   customerId?: string | null;
   customers?: Customer[];
+  crops?: Crop[];
   isAdmin?: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
 }
 
-export function AreaForm({ area, customerId, customers = [], isAdmin = false, open, onOpenChange, onSuccess }: AreaFormProps) {
+export function AreaForm({ area, customerId, customers = [], crops = [], isAdmin = false, open, onOpenChange, onSuccess }: AreaFormProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -72,6 +81,7 @@ export function AreaForm({ area, customerId, customers = [], isAdmin = false, op
       name: area?.name || '',
       description: area?.description || '',
       customer_id: customerId || '',
+      crop_id: area?.crop_id || '',
     },
   });
 
@@ -82,6 +92,7 @@ export function AreaForm({ area, customerId, customers = [], isAdmin = false, op
         name: area?.name || '',
         description: area?.description || '',
         customer_id: customerId || '',
+        crop_id: area?.crop_id || '',
       });
     }
   }, [open, area, customerId, form]);
@@ -110,6 +121,7 @@ export function AreaForm({ area, customerId, customers = [], isAdmin = false, op
           ...(area ? { id: area.id } : {}),
           name: data.name,
           description: data.description,
+          crop_id: data.crop_id || null,
           ...(selectedCustomerId && !area ? { customer_id: selectedCustomerId } : {}),
         }),
       });
@@ -207,6 +219,37 @@ export function AreaForm({ area, customerId, customers = [], isAdmin = false, op
                 </FormItem>
               )}
             />
+
+            {crops.length > 0 && (
+              <FormField
+                control={form.control}
+                name="crop_id"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>גידול</FormLabel>
+                    <Select
+                      onValueChange={(value) => field.onChange(value === '__none__' ? '' : value)}
+                      value={field.value || '__none__'}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="בחר גידול (אופציונלי)" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="__none__">ללא גידול</SelectItem>
+                        {crops.map((crop) => (
+                          <SelectItem key={crop.id} value={crop.id}>
+                            {crop.description || crop.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
             {error && (
               <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-md">

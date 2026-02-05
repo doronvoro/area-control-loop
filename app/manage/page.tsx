@@ -20,10 +20,17 @@ interface AreaWithOwner {
   id: string;
   name: string;
   description: string | null;
+  crop_id?: string | null;
   customer?: {
     id: string;
     name: string;
   } | null;
+}
+
+interface Crop {
+  id: string;
+  name: string;
+  description?: string | null;
 }
 
 export default async function ManagePage() {
@@ -60,6 +67,13 @@ export default async function ManagePage() {
   let ownCustomer: CustomerWithAreas | null = null;
   let ownAreas: AreaWithOwner[] = [];
 
+  // Fetch all crops for selection
+  const { data: allCrops } = await supabase
+    .from('crops')
+    .select('id, name, description')
+    .order('name');
+  const crops: Crop[] = allCrops || [];
+
   if (isAdmin) {
     // Admin: Fetch all customers with their areas
     const { data: allCustomers } = await supabase
@@ -70,7 +84,7 @@ export default async function ManagePage() {
     // Fetch all customer_areas relationships
     const { data: allCustomerAreas } = await (supabase
       .from('customer_areas') as any)
-      .select('customer_id, area_id, areas(id, name, description)');
+      .select('customer_id, area_id, areas(id, name, description, crop_id)');
 
     // Build customers with areas
     if (allCustomers) {
@@ -86,7 +100,7 @@ export default async function ManagePage() {
     // Fetch all areas with their owners
     const { data: allAreas } = await supabase
       .from('areas')
-      .select('id, name, description')
+      .select('id, name, description, crop_id')
       .order('name');
 
     if (allAreas) {
@@ -122,7 +136,7 @@ export default async function ManagePage() {
     // Fetch own areas via customer_areas
     const { data: customerAreas } = await (supabase
       .from('customer_areas') as any)
-      .select('area_id, areas(id, name, description)')
+      .select('area_id, areas(id, name, description, crop_id)')
       .eq('customer_id', customerId);
 
     if (ownCustomerData) {
@@ -152,7 +166,7 @@ export default async function ManagePage() {
     // Fetch customer's areas
     const { data: customerAreas } = await (supabase
       .from('customer_areas') as any)
-      .select('area_id, areas(id, name, description)')
+      .select('area_id, areas(id, name, description, crop_id)')
       .eq('customer_id', customerId);
 
     if (workerCustomer) {
@@ -192,6 +206,7 @@ export default async function ManagePage() {
           ownCustomer={ownCustomer}
           ownAreas={ownAreas}
           allCustomers={allCustomersList}
+          crops={crops}
         />
       </main>
     </div>

@@ -205,6 +205,7 @@ export interface Database {
           action_type_id: string | null;
           status: string;
           notes: string | null;
+          action_treatment_id: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -217,6 +218,7 @@ export interface Database {
           action_type_id?: string | null;
           status?: string;
           notes?: string | null;
+          action_treatment_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -229,6 +231,7 @@ export interface Database {
           action_type_id?: string | null;
           status?: string;
           notes?: string | null;
+          action_treatment_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };

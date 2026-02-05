@@ -37,9 +37,16 @@ const subAreaSchema = z.object({
   rows: z.string().optional(),
   parent_sub_area_id: z.string().optional(),
   level: z.number().min(1).optional(),
+  crop_id: z.string().optional(),
 });
 
 type SubAreaFormData = z.infer<typeof subAreaSchema>;
+
+interface Crop {
+  id: string;
+  name: string;
+  description?: string | null;
+}
 
 interface SubAreaFormProps {
   subArea?: {
@@ -50,9 +57,11 @@ interface SubAreaFormProps {
     parent_sub_area_id?: string | null;
     level?: number;
     area_id: string;
+    crop_id?: string | null;
   } | null;
   areaId: string;
   subAreas?: Array<{ id: string; name: string; display?: string }>;
+  crops?: Crop[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
@@ -63,6 +72,7 @@ export function SubAreaForm({
   subArea,
   areaId,
   subAreas = [],
+  crops = [],
   open,
   onOpenChange,
   onSuccess,
@@ -79,6 +89,7 @@ export function SubAreaForm({
       rows: subArea?.rows || '',
       parent_sub_area_id: subArea?.parent_sub_area_id || createSubArea?.parentId || '',
       level: subArea?.level || 1,
+      crop_id: subArea?.crop_id || '',
     },
   });
 
@@ -102,6 +113,7 @@ export function SubAreaForm({
           ...(subArea ? { id: subArea.id } : { area_id: areaId }),
           ...data,
           parent_sub_area_id: data.parent_sub_area_id || null,
+          crop_id: data.crop_id || null,
         }),
       });
 
@@ -201,6 +213,37 @@ export function SubAreaForm({
                         {parentOptions.map((sa) => (
                           <SelectItem key={sa.id} value={sa.id}>
                             {sa.display || sa.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
+            {crops.length > 0 && (
+              <FormField
+                control={form.control}
+                name="crop_id"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>גידול (דורס את גידול השטח)</FormLabel>
+                    <Select
+                      onValueChange={(value) => field.onChange(value === '__none__' ? '' : value)}
+                      value={field.value || '__none__'}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="בחר גידול (אופציונלי)" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="__none__">ללא (יורש מהשטח)</SelectItem>
+                        {crops.map((crop) => (
+                          <SelectItem key={crop.id} value={crop.id}>
+                            {crop.description || crop.name}
                           </SelectItem>
                         ))}
                       </SelectContent>

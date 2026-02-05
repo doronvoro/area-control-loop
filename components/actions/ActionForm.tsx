@@ -34,6 +34,7 @@ const treatmentSchema = z.object({
   unit_type_id: z.string().min(1, 'נדרש לבחור יחידת מידה'),
   status: z.string(),
   notes: z.string().optional(),
+  monitoring_treatment_id: z.string().optional(), // Link back to monitoring treatment
 });
 
 const subAreaEntrySchema = z.object({
@@ -128,6 +129,7 @@ export function ActionForm({
               unit_type_id: '',
               status: 'planned',
               notes: '',
+              monitoring_treatment_id: '',
             },
           ],
         },
@@ -181,6 +183,7 @@ export function ActionForm({
             unit_type_id: '',
             status: 'planned',
             notes: '',
+            monitoring_treatment_id: '',
           },
         ],
       },
@@ -257,7 +260,7 @@ export function ActionForm({
     const entries = reports
       .filter((r: any) => !r.already_has_action)
       .map((report: any) => {
-        // Convert monitoring treatments to action treatments
+        // Convert monitoring treatments to action treatments (with link to monitoring treatment)
         const treatments = (report.treatments || []).map((t: any) => ({
           action_type_id: t.action_type_id || '',
           material_id: t.material_id || '',
@@ -266,6 +269,7 @@ export function ActionForm({
           unit_type_id: t.unit_type_id || '',
           status: 'planned',
           notes: t.notes || '',
+          monitoring_treatment_id: t.id || '', // Link to source monitoring treatment
         }));
 
         // If no treatments from monitoring, use backwards-compatible fields or create empty
@@ -278,6 +282,7 @@ export function ActionForm({
             unit_type_id: report.recommend_unit_type_id || '',
             status: 'planned',
             notes: '',
+            monitoring_treatment_id: '', // No link for backwards-compatible format
           });
         }
 
@@ -291,6 +296,7 @@ export function ActionForm({
             unit_type_id: '',
             status: 'planned',
             notes: '',
+            monitoring_treatment_id: '',
           });
         }
 
@@ -397,7 +403,7 @@ export function ActionForm({
       form.setValue(`entries.${entryIndex}.finding_id`, '');
       form.setValue(`entries.${entryIndex}.finding_name`, '');
       form.setValue(`entries.${entryIndex}.treatments`, [
-        { action_type_id: '', material_id: '', material: '', dosage: '', unit_type_id: '', status: 'planned', notes: '' }
+        { action_type_id: '', material_id: '', material: '', dosage: '', unit_type_id: '', status: 'planned', notes: '', monitoring_treatment_id: '' }
       ]);
 
       // Clear cascade data
@@ -415,7 +421,7 @@ export function ActionForm({
 
     // Reset treatments
     form.setValue(`entries.${entryIndex}.treatments`, [
-      { action_type_id: '', material_id: '', material: '', dosage: '', unit_type_id: '', status: 'planned', notes: '' }
+      { action_type_id: '', material_id: '', material: '', dosage: '', unit_type_id: '', status: 'planned', notes: '', monitoring_treatment_id: '' }
     ]);
 
     // Clear cascade data
@@ -466,7 +472,7 @@ export function ActionForm({
     const currentTreatments = form.getValues(`entries.${entryIndex}.treatments`) || [];
     form.setValue(`entries.${entryIndex}.treatments`, [
       ...currentTreatments,
-      { action_type_id: '', material_id: '', material: '', dosage: '', unit_type_id: '', status: 'planned', notes: '' }
+      { action_type_id: '', material_id: '', material: '', dosage: '', unit_type_id: '', status: 'planned', notes: '', monitoring_treatment_id: '' }
     ]);
   };
 
@@ -505,7 +511,7 @@ export function ActionForm({
       finding_name: '',
       crop_id: '',
       treatments: [
-        { action_type_id: '', material_id: '', material: '', dosage: '', unit_type_id: '', status: 'planned', notes: '' }
+        { action_type_id: '', material_id: '', material: '', dosage: '', unit_type_id: '', status: 'planned', notes: '', monitoring_treatment_id: '' }
       ],
     });
   };
@@ -533,6 +539,7 @@ export function ActionForm({
               unit_type_id: t.unit_type_id,
               status: t.status,
               notes: t.notes || null,
+              monitoring_treatment_id: t.monitoring_treatment_id || null, // Link to source monitoring treatment
             })),
           })),
         }),
@@ -557,7 +564,7 @@ export function ActionForm({
             finding_name: '',
             crop_id: '',
             treatments: [
-              { action_type_id: '', material_id: '', material: '', dosage: '', unit_type_id: '', status: 'planned', notes: '' }
+              { action_type_id: '', material_id: '', material: '', dosage: '', unit_type_id: '', status: 'planned', notes: '', monitoring_treatment_id: '' }
             ],
           },
         ],

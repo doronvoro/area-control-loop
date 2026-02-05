@@ -107,8 +107,13 @@ export async function GET(request: Request) {
       const area = subArea?.areas;
       const effectiveCropId = subArea?.crop_id || area?.crop_id;
 
-      // Get the first treatment for backwards compatibility with forms
-      const firstTreatment = item.treatments?.[0];
+      // Filter out completed treatments - action workers only need to see non-completed ones
+      const nonCompletedTreatments = (item.treatments || []).filter(
+        (t: any) => t.status !== 'completed'
+      );
+
+      // Get the first non-completed treatment for backwards compatibility with forms
+      const firstTreatment = nonCompletedTreatments[0];
 
       return {
         monitoring_report_id: item.id,
@@ -126,15 +131,20 @@ export async function GET(request: Request) {
         recommend_dosage: firstTreatment?.dosage || null,
         recommend_unit_type_id: firstTreatment?.unit_type_id || null,
         recommend_unit_type_name: firstTreatment?.unit_type?.description || firstTreatment?.unit_type?.name || '',
-        // Include full treatments array
-        treatments: item.treatments || [],
+        // Include non-completed treatments array (with IDs for linking)
+        treatments: nonCompletedTreatments,
         status: item.status,
         already_has_action: item.actions_area_report_id !== null,
         effective_crop_id: effectiveCropId,
       };
     }) || [];
 
-    return NextResponse.json(formatted);
+    // Filter out monitoring reports that have no non-completed treatments
+    const filteredFormatted = formatted.filter(
+      (item: any) => item.treatments.length > 0 || !item.already_has_action
+    );
+
+    return NextResponse.json(filteredFormatted);
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
