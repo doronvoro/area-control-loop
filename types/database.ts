@@ -581,3 +581,11 @@ export interface Database {
     };
   };
 }
+
+// Convenience type aliases
+export type Customer = Database['public']['Tables']['customers']['Row'];
+export type WorkerType = Database['public']['Tables']['worker_types']['Row'];
+export type Worker = Database['public']['Tables']['workers']['Row'];
+export type Area = Database['public']['Tables']['areas']['Row'];
+export type SubArea = Database['public']['Tables']['sub_areas']['Row'];
+export type Crop = Database['public']['Tables']['crops']['Row'];

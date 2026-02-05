@@ -20,6 +20,8 @@ const menuItems = [
 ];
 
 const adminMenuItems = [
+  { href: '/admin/workers', label: 'ניהול עובדים' },
+  { href: '/admin/areas-management', label: 'ניהול שטחים' },
   { href: '/admin/recommend-materials', label: 'המלצות חומרים' },
 ];
 

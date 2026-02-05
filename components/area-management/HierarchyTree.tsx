@@ -1,0 +1,153 @@
+'use client';
+
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { HierarchyTreeNode } from './HierarchyTreeNode';
+import type { Customer, Area, SubArea, TreeNode } from './AreaManagementLayout';
+import { Layers } from 'lucide-react';
+
+interface HierarchyTreeProps {
+  customers: Customer[];
+  customerAreasMap: Record<string, Area[]>;
+  areaSubAreasMap: Record<string, SubArea[]>;
+  expanded: Set<string>;
+  selectedNodeId: string | null;
+  loadingSubAreas: Set<string>;
+  onToggleExpand: (nodeId: string) => void;
+  onSelectNode: (node: TreeNode) => void;
+  onLoadSubAreas: (areaId: string) => Promise<void>;
+}
+
+export function HierarchyTree({
+  customers,
+  customerAreasMap,
+  areaSubAreasMap,
+  expanded,
+  selectedNodeId,
+  loadingSubAreas,
+  onToggleExpand,
+  onSelectNode,
+  onLoadSubAreas,
+}: HierarchyTreeProps) {
+  const handleExpandArea = async (areaId: string) => {
+    await onLoadSubAreas(areaId);
+    onToggleExpand(`area_${areaId}`);
+  };
+
+  const renderSubAreas = (subAreas: SubArea[], depth: number, parentAreaId: string): React.ReactNode => {
+    return subAreas.map((subArea) => {
+      const nodeId = `sub_area_${subArea.id}`;
+      const hasChildren = !!(subArea.children && subArea.children.length > 0);
+      const isExpanded = expanded.has(nodeId);
+
+      return (
+        <div key={subArea.id}>
+          <HierarchyTreeNode
+            nodeType="sub_area"
+            id={nodeId}
+            name={subArea.name}
+            hasChildren={hasChildren}
+            isExpanded={isExpanded}
+            isSelected={selectedNodeId === nodeId}
+            depth={depth}
+            onToggleExpand={() => onToggleExpand(nodeId)}
+            onSelect={() =>
+              onSelectNode({
+                id: nodeId,
+                type: 'sub_area',
+                name: subArea.name,
+                data: subArea,
+              })
+            }
+          />
+          {hasChildren && isExpanded && renderSubAreas(subArea.children!, depth + 1, parentAreaId)}
+        </div>
+      );
+    });
+  };
+
+  return (
+    <Card className="h-full flex flex-col">
+      <CardHeader className="pb-3">
+        <div className="flex items-center gap-2">
+          <Layers className="h-5 w-5" />
+          <CardTitle className="text-lg">מבנה היררכי</CardTitle>
+        </div>
+      </CardHeader>
+      <CardContent className="flex-1 overflow-y-auto p-2">
+        {customers.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            <p>אין לקוחות במערכת</p>
+          </div>
+        ) : (
+          <div className="space-y-1">
+            {customers.map((customer) => {
+              const customerId = `customer_${customer.id}`;
+              const areas = customerAreasMap[customer.id] || [];
+              const hasAreas = areas.length > 0;
+              const isExpanded = expanded.has(customerId);
+
+              return (
+                <div key={customer.id}>
+                  <HierarchyTreeNode
+                    nodeType="customer"
+                    id={customerId}
+                    name={customer.name}
+                    hasChildren={hasAreas}
+                    isExpanded={isExpanded}
+                    isSelected={selectedNodeId === customerId}
+                    depth={0}
+                    onToggleExpand={() => onToggleExpand(customerId)}
+                    onSelect={() =>
+                      onSelectNode({
+                        id: customerId,
+                        type: 'customer',
+                        name: customer.name,
+                        data: customer,
+                      })
+                    }
+                  />
+                  {hasAreas && isExpanded && (
+                    <div>
+                      {areas.map((area) => {
+                        const areaId = `area_${area.id}`;
+                        const subAreas = areaSubAreasMap[area.id] || [];
+                        const hasSubAreas = subAreas.length > 0;
+                        const isAreaExpanded = expanded.has(areaId);
+                        const isLoading = loadingSubAreas.has(area.id);
+
+                        return (
+                          <div key={area.id}>
+                            <HierarchyTreeNode
+                              nodeType="area"
+                              id={areaId}
+                              name={area.name}
+                              hasChildren={true} // Always show expand icon for areas (lazy load)
+                              isExpanded={isAreaExpanded}
+                              isSelected={selectedNodeId === areaId}
+                              isLoading={isLoading}
+                              depth={1}
+                              onToggleExpand={() => handleExpandArea(area.id)}
+                              onSelect={() =>
+                                onSelectNode({
+                                  id: areaId,
+                                  type: 'area',
+                                  name: area.name,
+                                  data: area,
+                                })
+                              }
+                            />
+                            {isAreaExpanded && hasSubAreas && renderSubAreas(subAreas, 2, area.id)}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
