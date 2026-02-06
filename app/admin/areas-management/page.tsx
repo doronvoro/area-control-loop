@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 import { requireAuth } from '@/lib/auth';
 import { hasRole, hasPermission } from '@/lib/permissions';
 import { Navbar } from '@/components/layout/Navbar';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { AreaManagementLayout } from '@/components/area-management/AreaManagementLayout';
 
 interface Customer {
@@ -27,24 +27,64 @@ interface Crop {
 export default async function AreasManagementPage() {
   await requireAuth();
 
-  // Check if user is admin
-  const isAdmin = await hasRole('admin');
-  if (!isAdmin) {
+  const supabase = await createClient();
+
+  // Check permissions - allow access if user has any area management permission
+  const [canCreateArea, canUpdateArea, canCreateSubArea, canUpdateSubArea, isAdmin] =
+    await Promise.all([
+      hasPermission('create_area'),
+      hasPermission('update_area'),
+      hasPermission('create_sub_area'),
+      hasPermission('update_sub_area'),
+      hasRole('admin'),
+    ]);
+
+  const hasAnyAreaPermission =
+    canCreateArea || canUpdateArea || canCreateSubArea || canUpdateSubArea;
+  if (!hasAnyAreaPermission) {
     redirect('/dashboard');
   }
 
-  const supabase = await createClient();
-
-  // Fetch all customers
-  const { data: customers } = await supabase
-    .from('customers')
-    .select('id, name, description')
-    .order('name');
+  // Fetch customers - admins see all, customer owners see only their own
+  let customers: Customer[] = [];
+  if (isAdmin) {
+    const { data } = await supabase
+      .from('customers')
+      .select('id, name, description')
+      .order('name');
+    customers = data || [];
+  } else {
+    // Customer owner sees only their customer
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) {
+      const { data } = await supabase
+        .from('customers')
+        .select('id, name, description')
+        .eq('user_id', user.id);
+      customers = data || [];
+    }
+  }
 
   // Fetch customer_areas relationships with area data
-  const { data: customerAreas } = await (supabase
-    .from('customer_areas') as any)
-    .select('customer_id, area_id, areas(id, name, description, crop_id)');
+  // For admins: use admin client to get all
+  // For customer owners: regular client respects RLS
+  let customerAreas;
+  if (isAdmin) {
+    const adminClient = createAdminClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data } = await (adminClient.from('customer_areas') as any).select(
+      'customer_id, area_id, areas(id, name, description, crop_id)'
+    );
+    customerAreas = data;
+  } else {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data } = await (supabase.from('customer_areas') as any).select(
+      'customer_id, area_id, areas(id, name, description, crop_id)'
+    );
+    customerAreas = data;
+  }
 
   // Build customer to areas map
   const customerAreasMap: Record<string, Area[]> = {};
@@ -67,6 +107,9 @@ export default async function AreasManagementPage() {
 
   // Get permissions
   const permissions = {
+    canCreateCustomer: await hasPermission('create_customer'),
+    canUpdateCustomer: await hasPermission('update_customer'),
+    canDeleteCustomer: await hasPermission('delete_customer'),
     canCreateArea: await hasPermission('create_area'),
     canUpdateArea: await hasPermission('update_area'),
     canDeleteArea: await hasPermission('delete_area'),

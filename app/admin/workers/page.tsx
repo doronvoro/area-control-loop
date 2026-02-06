@@ -35,8 +35,7 @@ export default async function WorkersPage() {
     workers = await Promise.all(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (workersData || []).map(async (worker: any) => {
-        const { data: userData } =
-          await adminClient.auth.admin.getUserById(worker.user_id);
+        const { data: userData } = await adminClient.auth.admin.getUserById(worker.user_id);
         return {
           ...worker,
           email: userData?.user?.email || null,

@@ -57,7 +57,14 @@ interface WorkerFormProps {
   onSuccess: () => void;
 }
 
-export function WorkerForm({ worker, customers, workerTypes, open, onOpenChange, onSuccess }: WorkerFormProps) {
+export function WorkerForm({
+  worker,
+  customers,
+  workerTypes,
+  open,
+  onOpenChange,
+  onSuccess,
+}: WorkerFormProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -129,7 +136,9 @@ export function WorkerForm({ worker, customers, workerTypes, open, onOpenChange,
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || (isEditMode ? 'שגיאה בעדכון העובד' : 'שגיאה ביצירת העובד'));
+        throw new Error(
+          errorData.error || (isEditMode ? 'שגיאה בעדכון העובד' : 'שגיאה ביצירת העובד')
+        );
       }
 
       form.reset();
@@ -137,7 +146,8 @@ export function WorkerForm({ worker, customers, workerTypes, open, onOpenChange,
       onSuccess();
       onOpenChange(false);
     } catch (err: any) {
-      const errorMessage = err.message || (isEditMode ? 'שגיאה בעדכון העובד' : 'שגיאה ביצירת העובד');
+      const errorMessage =
+        err.message || (isEditMode ? 'שגיאה בעדכון העובד' : 'שגיאה ביצירת העובד');
       setError(errorMessage);
       showToast.error(errorMessage);
     } finally {
@@ -151,7 +161,9 @@ export function WorkerForm({ worker, customers, workerTypes, open, onOpenChange,
         <DialogHeader>
           <DialogTitle>{isEditMode ? 'עריכת עובד' : 'יצירת עובד חדש'}</DialogTitle>
           <DialogDescription>
-            {isEditMode ? 'עדכן את פרטי העובד' : 'הזן פרטי עובד חדש. העובד יקבל גישה למערכת עם הפרטים שתזין.'}
+            {isEditMode
+              ? 'עדכן את פרטי העובד'
+              : 'הזן פרטי עובד חדש. העובד יקבל גישה למערכת עם הפרטים שתזין.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -180,12 +192,7 @@ export function WorkerForm({ worker, customers, workerTypes, open, onOpenChange,
                     <FormItem>
                       <FormLabel>אימייל</FormLabel>
                       <FormControl>
-                        <Input
-                          {...field}
-                          type="email"
-                          placeholder="email@example.com"
-                          dir="ltr"
-                        />
+                        <Input {...field} type="email" placeholder="email@example.com" dir="ltr" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -279,7 +286,13 @@ export function WorkerForm({ worker, customers, workerTypes, open, onOpenChange,
                 ביטול
               </Button>
               <Button type="submit" disabled={loading}>
-                {loading ? (isEditMode ? 'שומר...' : 'יוצר...') : (isEditMode ? 'שמור שינויים' : 'צור עובד')}
+                {loading
+                  ? isEditMode
+                    ? 'שומר...'
+                    : 'יוצר...'
+                  : isEditMode
+                    ? 'שמור שינויים'
+                    : 'צור עובד'}
               </Button>
             </DialogFooter>
           </form>

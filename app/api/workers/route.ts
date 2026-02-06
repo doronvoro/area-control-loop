@@ -58,8 +58,7 @@ export async function GET(request: Request) {
     const customer = await getCurrentCustomer();
     const worker = await getCurrentWorker();
 
-    const targetCustomerId =
-      customerId || (customer as any)?.id || (worker as any)?.customer_id;
+    const targetCustomerId = customerId || (customer as any)?.id || (worker as any)?.customer_id;
 
     if (!targetCustomerId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -98,41 +97,26 @@ export async function POST(request: Request) {
 
     const canCreate = await hasPermission('create_worker');
     if (!canCreate) {
-      return NextResponse.json(
-        { error: 'אין הרשאה ליצור עובד' },
-        { status: 403 }
-      );
+      return NextResponse.json({ error: 'אין הרשאה ליצור עובד' }, { status: 403 });
     }
 
     const body = await request.json();
     const { name, email, password, customer_id, worker_type_id } = body;
 
     if (!name) {
-      return NextResponse.json(
-        { error: 'שם העובד נדרש' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'שם העובד נדרש' }, { status: 400 });
     }
 
     if (!email || !password) {
-      return NextResponse.json(
-        { error: 'אימייל וסיסמה נדרשים' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'אימייל וסיסמה נדרשים' }, { status: 400 });
     }
 
     if (!customer_id) {
-      return NextResponse.json(
-        { error: 'נדרש לבחור לקוח' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'נדרש לבחור לקוח' }, { status: 400 });
     }
 
     if (!worker_type_id) {
-      return NextResponse.json(
-        { error: 'נדרש לבחור סוג עובד' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'נדרש לבחור סוג עובד' }, { status: 400 });
     }
 
     const adminClient = createAdminClient();
@@ -150,10 +134,7 @@ export async function POST(request: Request) {
 
     if (authError) {
       if (authError.message.includes('already been registered')) {
-        return NextResponse.json(
-          { error: 'משתמש עם אימייל זה כבר קיים' },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: 'משתמש עם אימייל זה כבר קיים' }, { status: 400 });
       }
       throw authError;
     }
@@ -163,8 +144,7 @@ export async function POST(request: Request) {
     }
 
     // Create worker record
-    const { data: workerData, error: workerError } = await (adminClient
-      .from('workers') as any)
+    const { data: workerData, error: workerError } = await (adminClient.from('workers') as any)
       .insert({
         user_id: authData.user.id,
         customer_id,
@@ -181,19 +161,16 @@ export async function POST(request: Request) {
     }
 
     // Assign worker role to the new user
-    const { data: roleData } = await (adminClient
-      .from('roles') as any)
+    const { data: roleData } = await (adminClient.from('roles') as any)
       .select('id')
       .eq('name', 'worker')
       .single();
 
     if (roleData) {
-      await (adminClient
-        .from('user_roles') as any)
-        .insert({
-          user_id: authData.user.id,
-          role_id: roleData.id,
-        });
+      await (adminClient.from('user_roles') as any).insert({
+        user_id: authData.user.id,
+        role_id: roleData.id,
+      });
     }
 
     return NextResponse.json({ ...workerData, email }, { status: 201 });
@@ -208,32 +185,22 @@ export async function PUT(request: Request) {
 
     const canUpdate = await hasPermission('update_worker');
     if (!canUpdate) {
-      return NextResponse.json(
-        { error: 'אין הרשאה לעדכן עובד' },
-        { status: 403 }
-      );
+      return NextResponse.json({ error: 'אין הרשאה לעדכן עובד' }, { status: 403 });
     }
 
     const body = await request.json();
     const { id, name, worker_type_id } = body;
 
     if (!id || !name) {
-      return NextResponse.json(
-        { error: 'id ושם נדרשים' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'id ושם נדרשים' }, { status: 400 });
     }
 
     if (!worker_type_id) {
-      return NextResponse.json(
-        { error: 'נדרש לבחור סוג עובד' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'נדרש לבחור סוג עובד' }, { status: 400 });
     }
 
     const supabase = await createClient();
-    const { data, error } = await (supabase
-      .from('workers') as any)
+    const { data, error } = await (supabase.from('workers') as any)
       .update({
         name,
         type_id: worker_type_id,
@@ -257,36 +224,26 @@ export async function DELETE(request: Request) {
 
     const canDelete = await hasPermission('delete_worker');
     if (!canDelete) {
-      return NextResponse.json(
-        { error: 'אין הרשאה למחוק עובד' },
-        { status: 403 }
-      );
+      return NextResponse.json({ error: 'אין הרשאה למחוק עובד' }, { status: 403 });
     }
 
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 
     if (!id) {
-      return NextResponse.json(
-        { error: 'id נדרש' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'id נדרש' }, { status: 400 });
     }
 
     const adminClient = createAdminClient();
 
     // Get worker's user_id first
-    const { data: worker } = await (adminClient
-      .from('workers') as any)
+    const { data: worker } = await (adminClient.from('workers') as any)
       .select('user_id')
       .eq('id', id)
       .single();
 
     // Delete worker record
-    const { error } = await (adminClient
-      .from('workers') as any)
-      .delete()
-      .eq('id', id);
+    const { error } = await (adminClient.from('workers') as any).delete().eq('id', id);
 
     if (error) throw error;
 

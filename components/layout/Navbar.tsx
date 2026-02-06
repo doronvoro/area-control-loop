@@ -14,9 +14,7 @@ const menuItems = [
   { href: '/dashboard', label: 'דשבורד' },
   { href: '/monitoring', label: 'ניטור' },
   { href: '/actions', label: 'פעולות' },
-  { href: '/areas', label: 'אזורים' },
   { href: '/reports', label: 'דוחות' },
-  { href: '/manage', label: 'ניהול' },
 ];
 
 const adminMenuItems = [
