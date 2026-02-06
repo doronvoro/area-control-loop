@@ -125,7 +125,7 @@ BEGIN
       recommend_material_id,
       CASE
         WHEN recommend_dosage IS NULL THEN NULL
-        WHEN recommend_dosage ~ '^[0-9.]+$' THEN recommend_dosage::NUMERIC
+        WHEN recommend_dosage::TEXT ~ '^[0-9.]+$' THEN recommend_dosage::NUMERIC
         ELSE NULL
       END,
       recommend_unit_type_id,
@@ -147,7 +147,7 @@ BEGIN
     INSERT INTO action_treatments (action_report_id, dosage, unit_type_id, action_type_id, status, notes, action_time)
     SELECT
       id,
-      CASE WHEN dosage ~ '^[0-9.]+$' THEN dosage::NUMERIC ELSE NULL END,
+      CASE WHEN dosage::TEXT ~ '^[0-9.]+$' THEN dosage::NUMERIC ELSE NULL END,
       unit_type_id,
       action_type_id,
       status,

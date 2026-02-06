@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react';
 import { HierarchyTree } from './HierarchyTree';
 import { DetailPanel } from './DetailPanel';
+import { CustomerForm } from '@/components/customers/CustomerForm';
 
 export interface Customer {
   id: string;
@@ -44,6 +45,9 @@ export interface TreeNode {
 }
 
 export interface Permissions {
+  canCreateCustomer: boolean;
+  canUpdateCustomer: boolean;
+  canDeleteCustomer: boolean;
   canCreateArea: boolean;
   canUpdateArea: boolean;
   canDeleteArea: boolean;
@@ -60,16 +64,19 @@ interface AreaManagementLayoutProps {
 }
 
 export function AreaManagementLayout({
-  customers,
+  customers: initialCustomers,
   initialCustomerAreasMap,
   crops,
   permissions,
 }: AreaManagementLayoutProps) {
+  const [customers, setCustomers] = useState<Customer[]>(initialCustomers);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [selectedNode, setSelectedNode] = useState<TreeNode | null>(null);
   const [customerAreasMap, setCustomerAreasMap] = useState<Record<string, Area[]>>(initialCustomerAreasMap);
   const [areaSubAreasMap, setAreaSubAreasMap] = useState<Record<string, SubArea[]>>({});
   const [loadingSubAreas, setLoadingSubAreas] = useState<Set<string>>(new Set());
+  const [customerFormOpen, setCustomerFormOpen] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
 
   const toggleExpand = useCallback((nodeId: string) => {
     setExpanded((prev) => {
@@ -115,6 +122,17 @@ export function AreaManagementLayout({
   }, []);
 
   const handleRefreshData = useCallback(async () => {
+    // Refresh customers
+    try {
+      const response = await fetch('/api/customers');
+      if (response.ok) {
+        const data = await response.json();
+        setCustomers(data);
+      }
+    } catch (error) {
+      console.error('Error refreshing customers:', error);
+    }
+
     // Refresh customer areas
     try {
       const response = await fetch('/api/customer-areas');
@@ -152,34 +170,54 @@ export function AreaManagementLayout({
     }
   }, [areaSubAreasMap]);
 
+  const handleCreateCustomer = useCallback(() => {
+    setEditingCustomer(null);
+    setCustomerFormOpen(true);
+  }, []);
+
+  const handleCustomerFormSuccess = useCallback(() => {
+    handleRefreshData();
+  }, [handleRefreshData]);
+
   return (
-    <div className="flex flex-col lg:flex-row h-[calc(100vh-200px)] gap-4">
-      {/* Left Panel - Tree View */}
-      <div className="w-full lg:w-1/3 lg:min-w-[300px] lg:max-w-[400px] h-[40vh] lg:h-full overflow-hidden">
-        <HierarchyTree
-          customers={customers}
-          customerAreasMap={customerAreasMap}
-          areaSubAreasMap={areaSubAreasMap}
-          expanded={expanded}
-          selectedNodeId={selectedNode?.id || null}
-          loadingSubAreas={loadingSubAreas}
-          onToggleExpand={toggleExpand}
-          onSelectNode={handleSelectNode}
-          onLoadSubAreas={handleLoadSubAreas}
-        />
+    <>
+      <div className="flex flex-col lg:flex-row h-[calc(100vh-200px)] gap-4">
+        {/* Left Panel - Tree View */}
+        <div className="w-full lg:w-1/3 lg:min-w-[300px] lg:max-w-[400px] h-[40vh] lg:h-full overflow-hidden">
+          <HierarchyTree
+            customers={customers}
+            customerAreasMap={customerAreasMap}
+            areaSubAreasMap={areaSubAreasMap}
+            expanded={expanded}
+            selectedNodeId={selectedNode?.id || null}
+            loadingSubAreas={loadingSubAreas}
+            onToggleExpand={toggleExpand}
+            onSelectNode={handleSelectNode}
+            onLoadSubAreas={handleLoadSubAreas}
+            onCreateCustomer={permissions.canCreateCustomer ? handleCreateCustomer : undefined}
+          />
+        </div>
+
+        {/* Right Panel - Detail/Grid View */}
+        <div className="flex-1 h-[60vh] lg:h-full overflow-hidden">
+          <DetailPanel
+            selectedNode={selectedNode}
+            customerAreasMap={customerAreasMap}
+            areaSubAreasMap={areaSubAreasMap}
+            crops={crops}
+            permissions={permissions}
+            onRefresh={handleRefreshData}
+          />
+        </div>
       </div>
 
-      {/* Right Panel - Detail/Grid View */}
-      <div className="flex-1 h-[60vh] lg:h-full overflow-hidden">
-        <DetailPanel
-          selectedNode={selectedNode}
-          customerAreasMap={customerAreasMap}
-          areaSubAreasMap={areaSubAreasMap}
-          crops={crops}
-          permissions={permissions}
-          onRefresh={handleRefreshData}
-        />
-      </div>
-    </div>
+      {/* Customer Form Dialog */}
+      <CustomerForm
+        customer={editingCustomer}
+        open={customerFormOpen}
+        onOpenChange={setCustomerFormOpen}
+        onSuccess={handleCustomerFormSuccess}
+      />
+    </>
   );
 }

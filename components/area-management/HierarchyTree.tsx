@@ -1,9 +1,10 @@
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { HierarchyTreeNode } from './HierarchyTreeNode';
 import type { Customer, Area, SubArea, TreeNode } from './AreaManagementLayout';
-import { Layers } from 'lucide-react';
+import { Layers, Plus } from 'lucide-react';
 
 interface HierarchyTreeProps {
   customers: Customer[];
@@ -15,6 +16,7 @@ interface HierarchyTreeProps {
   onToggleExpand: (nodeId: string) => void;
   onSelectNode: (node: TreeNode) => void;
   onLoadSubAreas: (areaId: string) => Promise<void>;
+  onCreateCustomer?: () => void;
 }
 
 export function HierarchyTree({
@@ -27,6 +29,7 @@ export function HierarchyTree({
   onToggleExpand,
   onSelectNode,
   onLoadSubAreas,
+  onCreateCustomer,
 }: HierarchyTreeProps) {
   const handleExpandArea = async (areaId: string) => {
     await onLoadSubAreas(areaId);
@@ -68,9 +71,17 @@ export function HierarchyTree({
   return (
     <Card className="h-full flex flex-col">
       <CardHeader className="pb-3">
-        <div className="flex items-center gap-2">
-          <Layers className="h-5 w-5" />
-          <CardTitle className="text-lg">מבנה היררכי</CardTitle>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Layers className="h-5 w-5" />
+            <CardTitle className="text-lg">מבנה היררכי</CardTitle>
+          </div>
+          {onCreateCustomer && (
+            <Button size="sm" onClick={onCreateCustomer}>
+              <Plus className="h-4 w-4 ml-1" />
+              לקוח
+            </Button>
+          )}
         </div>
       </CardHeader>
       <CardContent className="flex-1 overflow-y-auto p-2">

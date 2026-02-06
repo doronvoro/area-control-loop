@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import {
   ChevronDown,
-  ChevronRight,
+  ChevronLeft,
   Building2,
   MapPin,
   Folder,
@@ -77,7 +77,7 @@ export function HierarchyTreeNode({
           ) : isExpanded ? (
             <ChevronDown className="h-4 w-4" />
           ) : (
-            <ChevronRight className="h-4 w-4" />
+            <ChevronLeft className="h-4 w-4" />
           )}
         </Button>
       ) : (
