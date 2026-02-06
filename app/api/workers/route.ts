@@ -18,7 +18,7 @@ export async function GET(request: Request) {
     if (all === 'true' && isAdmin) {
       let query = supabase
         .from('workers')
-        .select('*, worker_types(*), customers(*), auth_users:user_id(email)');
+        .select('*, worker_types(*), customers(*)');
 
       if (customerId) {
         query = query.eq('customer_id', customerId);

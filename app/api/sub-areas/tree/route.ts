@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 
 interface SubArea {
@@ -44,12 +44,29 @@ export async function GET(request: Request) {
     }
 
     const supabase = await createClient();
-    const { data, error } = await supabase
-      .from('sub_areas')
+    const adminClient = createAdminClient();
+
+    // Use admin client to bypass RLS
+    const { data, error } = await (adminClient.from('sub_areas') as any)
       .select('*')
       .eq('area_id', areaId)
       .order('level')
       .order('name');
+
+    // Debug: check auth status
+    const { data: { user } } = await supabase.auth.getUser();
+    console.log('[sub-areas/tree] user id:', user?.id);
+
+    // Check if user is admin via user_roles
+    const { data: adminCheck } = await supabase
+      .from('user_roles')
+      .select('roles(name)')
+      .eq('user_id', user?.id || '');
+    console.log('[sub-areas/tree] user roles:', JSON.stringify(adminCheck, null, 2));
+
+    console.log('[sub-areas/tree] areaId:', areaId);
+    console.log('[sub-areas/tree] data:', JSON.stringify(data, null, 2));
+    console.log('[sub-areas/tree] error:', error);
 
     if (error) throw error;
 

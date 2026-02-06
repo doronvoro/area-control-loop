@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { hasPermission } from '@/lib/permissions';
@@ -99,7 +99,8 @@ export async function PUT(request: Request) {
     }
 
     const supabase = await createClient();
-    
+    const adminClient = createAdminClient();
+
     // Get current sub-area to check area_id
     const { data: currentSubArea } = await supabase
       .from('sub_areas')
@@ -133,8 +134,8 @@ export async function PUT(request: Request) {
       updateData.crop_id = crop_id || null;
     }
 
-    const query = supabase.from('sub_areas') as any;
-    const { data, error } = await query
+    // Use admin client to bypass RLS
+    const { data, error } = await (adminClient.from('sub_areas') as any)
       .update(updateData)
       .eq('id', id)
       .select()
@@ -172,7 +173,8 @@ export async function POST(request: Request) {
     }
 
     const supabase = await createClient();
-    
+    const adminClient = createAdminClient();
+
     // Calculate level if not provided
     let calculatedLevel = level || 1;
     if (parent_sub_area_id) {
@@ -195,7 +197,7 @@ export async function POST(request: Request) {
 
     const areaName = (area as any)?.name || '';
     let display = `${areaName} | ${name}`;
-    
+
     if (parent_sub_area_id) {
       const { data: parent } = await supabase
         .from('sub_areas')
@@ -219,8 +221,8 @@ export async function POST(request: Request) {
       crop_id: crop_id || null,
     };
 
-    const query = supabase.from('sub_areas') as any;
-    const { data, error } = await query
+    // Use admin client to bypass RLS
+    const { data, error } = await (adminClient.from('sub_areas') as any)
       .insert(insertData)
       .select()
       .single();
@@ -256,9 +258,9 @@ export async function DELETE(request: Request) {
       );
     }
 
-    const supabase = await createClient();
-    const query = supabase.from('sub_areas') as any;
-    const { error } = await query.delete().eq('id', id);
+    const adminClient = createAdminClient();
+    // Use admin client to bypass RLS
+    const { error } = await (adminClient.from('sub_areas') as any).delete().eq('id', id);
 
     if (error) throw error;
 

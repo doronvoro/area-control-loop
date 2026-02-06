@@ -34,53 +34,16 @@ export function Navbar() {
 
   useEffect(() => {
     const loadUserInfo = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        // Get user name from metadata or from customer/worker table
-        const nameFromMetadata = user.user_metadata?.name || user.email?.split('@')[0] || '';
-        
-        // Try to get name from customer or worker table
-        const [customerResult, workerResult, rolesResult] = await Promise.all([
-          (supabase
-            .from('customers') as any)
-            .select('name')
-            .eq('user_id', user.id)
-            .maybeSingle(),
-          (supabase
-            .from('workers') as any)
-            .select('name')
-            .eq('user_id', user.id)
-            .maybeSingle(),
-          (supabase
-            .from('user_roles') as any)
-            .select('roles(name, display_name)')
-            .eq('user_id', user.id),
-        ]);
-
-        // Determine the best name to display
-        let displayName = nameFromMetadata;
-        if (customerResult.data?.name) {
-          displayName = customerResult.data.name;
-        } else if (workerResult.data?.name) {
-          displayName = workerResult.data.name;
+      try {
+        const response = await fetch('/api/user/me');
+        if (response.ok) {
+          const data = await response.json();
+          setUserName(data.name || '');
+          setUserRole(data.role || '');
+          setIsAdmin(data.isAdmin || false);
         }
-        setUserName(displayName);
-
-        // Get role information
-        const roles = rolesResult.data || [];
-        const roleNames = roles
-          .map((ur: any) => ur.roles?.display_name || ur.roles?.name)
-          .filter(Boolean);
-        
-        if (roleNames.length > 0) {
-          setUserRole(roleNames.join(', '));
-        } else {
-          setUserRole('ללא תפקיד');
-        }
-
-        // Check if admin
-        const hasAdminRole = roles.some((ur: any) => ur.roles?.name === 'admin');
-        setIsAdmin(hasAdminRole || false);
+      } catch {
+        // Silently handle errors
       }
     };
     loadUserInfo();
