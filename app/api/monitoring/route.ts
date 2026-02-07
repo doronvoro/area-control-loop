@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { getCurrentWorker, requireAuth } from '@/lib/auth';
 import { hasRole } from '@/lib/permissions';
@@ -51,6 +51,9 @@ export async function POST(request: Request) {
 
     const body = await request.json();
 
+    // Use admin client for all writes since we've already verified authorization
+    const adminClient = createAdminClient();
+
     // Helper function to get or create report_area
     const getOrCreateReportArea = async (areaId: string): Promise<string> => {
       // Try to find an existing monitoring report_area for this area
@@ -65,14 +68,13 @@ export async function POST(request: Request) {
         return existingReportArea.id;
       }
 
-      // Create a new report_area for this area
       const { data: areaData } = await (supabase
         .from('areas') as any)
         .select('name')
         .eq('id', areaId)
         .single();
 
-      const { data: newReportArea, error: createError } = await (supabase
+      const { data: newReportArea, error: createError } = await (adminClient
         .from('report_areas') as any)
         .insert({
           area_id: areaId,
@@ -105,7 +107,7 @@ export async function POST(request: Request) {
       const results = [];
       for (const entry of entries) {
         // Create monitoring_area_report entry
-        const { data: monitoringReport, error: monitoringError } = await (supabase
+        const { data: monitoringReport, error: monitoringError } = await (adminClient
           .from('monitoring_area_report') as any)
           .insert({
             area_report_id: reportAreaId,
@@ -125,7 +127,7 @@ export async function POST(request: Request) {
               ? (typeof treatment.dosage === 'string' ? parseFloat(treatment.dosage) : treatment.dosage)
               : null;
 
-            const { error: treatmentError } = await (supabase
+            const { error: treatmentError } = await (adminClient
               .from('monitoring_treatments') as any)
               .insert({
                 monitoring_report_id: monitoringReport.id,
@@ -145,7 +147,7 @@ export async function POST(request: Request) {
             ? parseFloat(entry.dosage || entry.recommend_dosage)
             : null;
 
-          const { error: treatmentError } = await (supabase
+          const { error: treatmentError } = await (adminClient
             .from('monitoring_treatments') as any)
             .insert({
               monitoring_report_id: monitoringReport.id,
@@ -196,7 +198,7 @@ export async function POST(request: Request) {
     }
 
     // Create monitoring_area_report entry
-    const { data: monitoringReport, error: monitoringError } = await (supabase
+    const { data: monitoringReport, error: monitoringError } = await (adminClient
       .from('monitoring_area_report') as any)
       .insert({
         area_report_id: finalAreaReportId,
@@ -216,7 +218,7 @@ export async function POST(request: Request) {
           ? (typeof treatment.dosage === 'string' ? parseFloat(treatment.dosage) : treatment.dosage)
           : null;
 
-        const { error: treatmentError } = await (supabase
+        const { error: treatmentError } = await (adminClient
           .from('monitoring_treatments') as any)
           .insert({
             monitoring_report_id: monitoringReport.id,
@@ -236,7 +238,7 @@ export async function POST(request: Request) {
         ? parseFloat(dosage || recommend_dosage)
         : null;
 
-      const { error: treatmentError } = await (supabase
+      const { error: treatmentError } = await (adminClient
         .from('monitoring_treatments') as any)
         .insert({
           monitoring_report_id: monitoringReport.id,

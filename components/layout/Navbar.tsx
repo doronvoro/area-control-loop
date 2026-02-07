@@ -21,6 +21,7 @@ const adminMenuItems = [
   { href: '/admin/workers', label: 'ניהול עובדים' },
   { href: '/admin/areas-management', label: 'ניהול שטחים' },
   { href: '/admin/recommend-materials', label: 'המלצות חומרים' },
+  { href: '/admin/roles', label: 'תפקידים והרשאות' },
 ];
 
 export function Navbar() {
@@ -28,9 +29,14 @@ export function Navbar() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [userName, setUserName] = useState<string>('');
   const [userRole, setUserRole] = useState<string>('');
+  const [mounted, setMounted] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
   const dir = getDirection();
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     const loadUserInfo = async () => {
@@ -62,47 +68,54 @@ export function Navbar() {
       <div className="container mx-auto px-4">
         <div className="flex h-16 items-center justify-between">
           <div className="flex items-center gap-4">
-            <Sheet open={open} onOpenChange={setOpen}>
-              <SheetTrigger asChild>
-                <Button variant="ghost" size="icon" className="md:hidden">
-                  <Menu className="h-6 w-6" />
-                  <span className="sr-only">תפריט</span>
-                </Button>
-              </SheetTrigger>
-              <SheetContent side="right" dir={dir}>
-                <nav className="flex flex-col gap-4 mt-8">
-                  {userName && (
-                    <div className="flex flex-col items-end px-3 py-2 border-b border-border mb-2">
-                      <span className="text-base font-medium text-foreground">{userName}</span>
-                      {userRole && (
-                        <span className="text-sm text-muted-foreground">{userRole}</span>
-                      )}
-                    </div>
-                  )}
-                  {allMenuItems.map((item) => (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      onClick={() => setOpen(false)}
-                      className={`text-lg ${
-                        pathname === item.href
-                          ? 'font-bold text-primary'
-                          : 'text-muted-foreground'
-                      }`}
-                    >
-                      {item.label}
-                    </Link>
-                  ))}
-                  <Button
-                    variant="outline"
-                    onClick={handleLogout}
-                    className="mt-4"
-                  >
-                    התנתק
+            {mounted ? (
+              <Sheet open={open} onOpenChange={setOpen}>
+                <SheetTrigger asChild>
+                  <Button variant="ghost" size="icon" className="md:hidden">
+                    <Menu className="h-6 w-6" />
+                    <span className="sr-only">תפריט</span>
                   </Button>
-                </nav>
-              </SheetContent>
-            </Sheet>
+                </SheetTrigger>
+                <SheetContent side="right" dir={dir}>
+                  <nav className="flex flex-col gap-4 mt-8">
+                    {userName && (
+                      <div className="flex flex-col items-end px-3 py-2 border-b border-border mb-2">
+                        <span className="text-base font-medium text-foreground">{userName}</span>
+                        {userRole && (
+                          <span className="text-sm text-muted-foreground">{userRole}</span>
+                        )}
+                      </div>
+                    )}
+                    {allMenuItems.map((item) => (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={() => setOpen(false)}
+                        className={`text-lg ${
+                          pathname === item.href
+                            ? 'font-bold text-primary'
+                            : 'text-muted-foreground'
+                        }`}
+                      >
+                        {item.label}
+                      </Link>
+                    ))}
+                    <Button
+                      variant="outline"
+                      onClick={handleLogout}
+                      className="mt-4"
+                    >
+                      התנתק
+                    </Button>
+                  </nav>
+                </SheetContent>
+              </Sheet>
+            ) : (
+              <Button variant="ghost" size="icon" className="md:hidden">
+                <Menu className="h-6 w-6" />
+                <span className="sr-only">תפריט</span>
+              </Button>
+            )}
 
             <Logo size="md" />
           </div>

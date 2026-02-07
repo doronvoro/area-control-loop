@@ -578,6 +578,104 @@ export interface Database {
           updated_at?: string;
         };
       };
+      roles: {
+        Row: {
+          id: string;
+          name: string;
+          display_name: string;
+          description: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          display_name: string;
+          description?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          display_name?: string;
+          description?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      permissions: {
+        Row: {
+          id: string;
+          name: string;
+          display_name: string;
+          description: string | null;
+          resource: string;
+          action: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          display_name: string;
+          description?: string | null;
+          resource: string;
+          action: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          display_name?: string;
+          description?: string | null;
+          resource?: string;
+          action?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      role_permissions: {
+        Row: {
+          id: string;
+          role_id: string;
+          permission_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          role_id: string;
+          permission_id: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          role_id?: string;
+          permission_id?: string;
+          created_at?: string;
+        };
+      };
+      user_roles: {
+        Row: {
+          id: string;
+          user_id: string;
+          role_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          role_id: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          role_id?: string;
+          created_at?: string;
+        };
+      };
     };
   };
 }
@@ -589,3 +687,7 @@ export type Worker = Database['public']['Tables']['workers']['Row'];
 export type Area = Database['public']['Tables']['areas']['Row'];
 export type SubArea = Database['public']['Tables']['sub_areas']['Row'];
 export type Crop = Database['public']['Tables']['crops']['Row'];
+export type Role = Database['public']['Tables']['roles']['Row'];
+export type Permission = Database['public']['Tables']['permissions']['Row'];
+export type RolePermission = Database['public']['Tables']['role_permissions']['Row'];
+export type UserRole = Database['public']['Tables']['user_roles']['Row'];
