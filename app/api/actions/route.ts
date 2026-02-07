@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { getCurrentWorker, requireAuth } from '@/lib/auth';
 import { hasRole } from '@/lib/permissions';
+import { AreaTypeId } from '@/types/database';
 
 export async function GET() {
   try {
@@ -60,11 +61,11 @@ export async function POST(request: Request) {
       }
 
       // Get or create report_area for actions
-      const { data: existingReportAreas } = await supabase
-        .from('report_areas')
+      const { data: existingReportAreas } = await (supabase
+        .from('report_areas') as any)
         .select('id')
         .eq('area_id', area_id)
-        .eq('type', 'action') as { data: { id: string }[] | null };
+        .eq('area_type_id', AreaTypeId.ACTION) as { data: { id: string }[] | null };
 
       let reportAreaId: string;
 
@@ -82,7 +83,7 @@ export async function POST(request: Request) {
         const { data: newReportArea, error: createError } = await query
           .insert({
             area_id,
-            type: 'action',
+            area_type_id: AreaTypeId.ACTION,
             name: `דוח פעולה - ${areaData?.name || 'שטח'}`,
             description: 'דוח פעולה שנוצר ע"י מנהל',
           })
@@ -103,7 +104,6 @@ export async function POST(request: Request) {
             area_report_id: reportAreaId,
             sub_area_id: entry.sub_area_id,
             finding_id: entry.finding_id,
-            status: entry.status || 'planned',
           } as any)
           .select()
           .single();
@@ -176,7 +176,6 @@ export async function POST(request: Request) {
           const { error: monitoringError } = await query
             .update({
               actions_area_report_id: (actionData as any).id,
-              status: 'reviewed',
             })
             .eq('id', entry.monitoring_report_id);
 
@@ -202,10 +201,8 @@ export async function POST(request: Request) {
       unit_type_id,
       action_type_id,
       action_time,
-      status = 'planned',
       notes,
       monitoring_report_id,
-      update_monitoring_status,
     } = body;
 
     // Create action report
@@ -215,7 +212,6 @@ export async function POST(request: Request) {
         area_report_id,
         sub_area_id,
         finding_id,
-        status: status || 'planned',
       } as any)
       .select()
       .single();
@@ -284,17 +280,11 @@ export async function POST(request: Request) {
 
     // If linked to monitoring report, update it
     if (monitoring_report_id && actionData) {
-      const updateData: any = {
-        actions_area_report_id: (actionData as any).id,
-      };
-
-      if (update_monitoring_status) {
-        updateData.status = update_monitoring_status;
-      }
-
       const query = supabase.from('monitoring_area_report') as any;
       const { error: monitoringError } = await query
-        .update(updateData)
+        .update({
+          actions_area_report_id: (actionData as any).id,
+        })
         .eq('id', monitoring_report_id);
 
       if (monitoringError) throw monitoringError;

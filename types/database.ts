@@ -4,6 +4,12 @@
  * For now, we define basic types manually
  */
 
+// Enum for area types - matches DB values, use directly as area_type_id
+export enum AreaTypeId {
+  MONITORING = 'monitoring',
+  ACTION = 'action',
+}
+
 export type Json =
   | string
   | number
@@ -34,6 +40,29 @@ export interface Database {
         };
         Update: {
           id?: string;
+          name?: string;
+          display_name?: string;
+          description?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      area_types: {
+        Row: {
+          name: string; // PK - use AreaTypeId enum
+          display_name: string;
+          description: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          name: string; // PK - use AreaTypeId enum
+          display_name: string;
+          description?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
           name?: string;
           display_name?: string;
           description?: string | null;
@@ -170,7 +199,6 @@ export interface Database {
           sub_area_id: string;
           finding_id: string;
           actions_area_report_id: string | null;
-          status: string;
           created_at: string;
           updated_at: string;
         };
@@ -180,7 +208,6 @@ export interface Database {
           sub_area_id: string;
           finding_id: string;
           actions_area_report_id?: string | null;
-          status?: string;
           created_at?: string;
           updated_at?: string;
         };
@@ -190,7 +217,6 @@ export interface Database {
           sub_area_id?: string;
           finding_id?: string;
           actions_area_report_id?: string | null;
-          status?: string;
           created_at?: string;
           updated_at?: string;
         };
@@ -242,7 +268,6 @@ export interface Database {
           area_report_id: string;
           sub_area_id: string;
           finding_id: string;
-          status: string;
           created_at: string;
           updated_at: string;
         };
@@ -251,7 +276,6 @@ export interface Database {
           area_report_id: string;
           sub_area_id: string;
           finding_id: string;
-          status?: string;
           created_at?: string;
           updated_at?: string;
         };
@@ -260,7 +284,6 @@ export interface Database {
           area_report_id?: string;
           sub_area_id?: string;
           finding_id?: string;
-          status?: string;
           created_at?: string;
           updated_at?: string;
         };
@@ -310,9 +333,10 @@ export interface Database {
         Row: {
           id: string;
           area_id: string;
-          type: string;
+          area_type_id: string;
           name: string;
           description: string | null;
+          status: string;
           report_number: number;
           created_at: string;
           updated_at: string;
@@ -320,9 +344,10 @@ export interface Database {
         Insert: {
           id?: string;
           area_id: string;
-          type: string;
+          area_type_id: string;
           name: string;
           description?: string | null;
+          status?: string;
           report_number?: number;
           created_at?: string;
           updated_at?: string;
@@ -330,9 +355,10 @@ export interface Database {
         Update: {
           id?: string;
           area_id?: string;
-          type?: string;
+          area_type_id?: string;
           name?: string;
           description?: string | null;
+          status?: string;
           report_number?: number;
           created_at?: string;
           updated_at?: string;
@@ -683,6 +709,7 @@ export interface Database {
 // Convenience type aliases
 export type Customer = Database['public']['Tables']['customers']['Row'];
 export type WorkerType = Database['public']['Tables']['worker_types']['Row'];
+export type AreaType = Database['public']['Tables']['area_types']['Row'];
 export type Worker = Database['public']['Tables']['workers']['Row'];
 export type Area = Database['public']['Tables']['areas']['Row'];
 export type SubArea = Database['public']['Tables']['sub_areas']['Row'];

@@ -8,10 +8,10 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
     const areaId = searchParams.get('areaId');
-    const type = searchParams.get('type');
+    const typeName = searchParams.get('type'); // accepts type name for backward compat
 
     const supabase = await createClient();
-    let query = supabase.from('report_areas').select('*');
+    let query = supabase.from('report_areas').select('*, area_type:area_types(*)');
 
     if (id) {
       // Fetch single report area by ID
@@ -24,8 +24,9 @@ export async function GET(request: Request) {
       query = query.eq('area_id', areaId);
     }
 
-    if (type) {
-      query = query.eq('type', type);
+    if (typeName) {
+      // Use typeName directly as area_type_id (name is the PK)
+      query = query.eq('area_type_id', typeName);
     }
 
     const { data, error } = await query.order('name');
@@ -52,11 +53,11 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { area_id, type, name, description } = body;
+    const { area_id, area_type_id, name, description } = body;
 
-    if (!area_id || !type || !name) {
+    if (!area_id || !area_type_id || !name) {
       return NextResponse.json(
-        { error: 'area_id, type ו-name נדרשים' },
+        { error: 'area_id, area_type_id ו-name נדרשים' },
         { status: 400 }
       );
     }
@@ -66,11 +67,11 @@ export async function POST(request: Request) {
       .from('report_areas') as any)
       .insert({
         area_id,
-        type,
+        area_type_id,
         name,
         description: description || null,
       })
-      .select()
+      .select('*, area_type:area_types(*)')
       .single();
 
     if (error) throw error;

@@ -3,6 +3,41 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { Database } from '@/types/database';
 
+// Enable debug logging for Supabase queries
+const DEBUG_SUPABASE = process.env.DEBUG_SUPABASE === 'true';
+
+// Custom fetch that logs all Supabase requests
+const debugFetch: typeof fetch = async (input, init) => {
+  if (DEBUG_SUPABASE) {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    const method = init?.method || 'GET';
+    const body = init?.body;
+
+    // Parse the URL to extract query info
+    const urlObj = new URL(url);
+    const table = urlObj.pathname.split('/rest/v1/')[1]?.split('?')[0];
+    const params = Object.fromEntries(urlObj.searchParams.entries());
+
+    console.log('\n🔍 SUPABASE QUERY:');
+    console.log(`   Method: ${method}`);
+    console.log(`   Table: ${table}`);
+    if (Object.keys(params).length > 0) {
+      console.log(`   Params:`, JSON.stringify(params, null, 2));
+    }
+    if (body) {
+      try {
+        const bodyData = JSON.parse(body as string);
+        console.log(`   Body:`, JSON.stringify(bodyData, null, 2));
+      } catch {
+        console.log(`   Body: ${body}`);
+      }
+    }
+    console.log('');
+  }
+
+  return fetch(input, init);
+};
+
 export async function createClient() {
   const cookieStore = await cookies();
 
@@ -35,6 +70,9 @@ export async function createClient() {
           }
         },
       },
+      global: {
+        fetch: DEBUG_SUPABASE ? debugFetch : fetch,
+      },
     }
   );
 }
@@ -58,6 +96,9 @@ export function createAdminClient() {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
+    },
+    global: {
+      fetch: DEBUG_SUPABASE ? debugFetch : fetch,
     },
   });
 }

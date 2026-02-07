@@ -2,6 +2,7 @@ import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { getCurrentWorker, requireAuth } from '@/lib/auth';
 import { hasRole } from '@/lib/permissions';
+import { AreaTypeId } from '@/types/database';
 
 export async function GET() {
   try {
@@ -61,7 +62,7 @@ export async function POST(request: Request) {
         .from('report_areas') as any)
         .select('id')
         .eq('area_id', areaId)
-        .eq('type', 'monitoring')
+        .eq('area_type_id', AreaTypeId.MONITORING)
         .maybeSingle();
 
       if (existingReportArea) {
@@ -78,7 +79,7 @@ export async function POST(request: Request) {
         .from('report_areas') as any)
         .insert({
           area_id: areaId,
-          type: 'monitoring',
+          area_type_id: AreaTypeId.MONITORING,
           name: `דוח ניטור - ${areaData?.name || 'אזור'}`,
           description: `דוח ניטור`,
         })
@@ -113,7 +114,6 @@ export async function POST(request: Request) {
             area_report_id: reportAreaId,
             sub_area_id: entry.sub_area_id,
             finding_id: entry.finding_id,
-            status: 'pending',
           })
           .select()
           .single();
@@ -183,7 +183,6 @@ export async function POST(request: Request) {
       recommend_unit_type_id,
       action_type_id,
       recommend_action_type_id,
-      status = 'pending',
     } = body;
 
     // Determine area_report_id - either provided directly or we need to find/create one
@@ -204,7 +203,6 @@ export async function POST(request: Request) {
         area_report_id: finalAreaReportId,
         sub_area_id,
         finding_id,
-        status: status || 'pending',
       })
       .select()
       .single();
