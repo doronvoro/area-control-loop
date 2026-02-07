@@ -121,6 +121,22 @@ export function AreaManagementLayout({
     setSelectedNode(node);
   }, []);
 
+  const handleDrillDown = useCallback(async (node: TreeNode) => {
+    // Set the selected node
+    setSelectedNode(node);
+
+    // Expand the node in the tree
+    setExpanded((prev) => new Set(prev).add(node.id));
+
+    // If it's an area, load its sub-areas
+    if (node.type === 'area') {
+      const areaId = node.id.replace('area_', '');
+      if (!areaSubAreasMap[areaId]) {
+        await handleLoadSubAreas(areaId);
+      }
+    }
+  }, [areaSubAreasMap, handleLoadSubAreas]);
+
   const handleRefreshData = useCallback(async () => {
     // Refresh customers
     try {
@@ -207,6 +223,7 @@ export function AreaManagementLayout({
             crops={crops}
             permissions={permissions}
             onRefresh={handleRefreshData}
+            onDrillDown={handleDrillDown}
           />
         </div>
       </div>

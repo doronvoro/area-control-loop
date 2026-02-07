@@ -18,6 +18,7 @@ interface DetailPanelProps {
   crops: Crop[];
   permissions: Permissions;
   onRefresh: () => void;
+  onDrillDown?: (node: TreeNode) => void;
 }
 
 export function DetailPanel({
@@ -27,6 +28,7 @@ export function DetailPanel({
   crops,
   permissions,
   onRefresh,
+  onDrillDown,
 }: DetailPanelProps) {
   const [editAreaOpen, setEditAreaOpen] = useState(false);
   const [editSubAreaOpen, setEditSubAreaOpen] = useState(false);
@@ -179,6 +181,12 @@ export function DetailPanel({
           onDelete={handleDeleteArea}
           onCreate={permissions.canCreateArea ? () => handleCreateArea(realId) : undefined}
           createLabel="הוסף שטח"
+          onItemClick={onDrillDown ? (area: Area) => onDrillDown({
+            id: `area_${area.id}`,
+            type: 'area',
+            name: area.name,
+            data: area,
+          }) : undefined}
         />
         {editAreaOpen && editingArea && (
           <AreaForm
@@ -278,6 +286,12 @@ export function DetailPanel({
           onDelete={handleDeleteSubArea}
           onCreate={permissions.canCreateSubArea ? () => handleCreateSubArea(realId) : undefined}
           createLabel="הוסף תת-שטח"
+          onItemClick={onDrillDown ? (subArea: SubArea) => onDrillDown({
+            id: `sub_area_${subArea.id}`,
+            type: 'sub_area',
+            name: subArea.name,
+            data: subArea,
+          }) : undefined}
         />
         {editSubAreaOpen && editingSubArea && (
           <SubAreaForm
@@ -383,6 +397,12 @@ export function DetailPanel({
           onDelete={handleDeleteSubArea}
           onCreate={permissions.canCreateSubArea ? () => handleCreateSubArea(subArea.area_id, subArea.id) : undefined}
           createLabel="הוסף תת-שטח"
+          onItemClick={onDrillDown ? (child: SubArea) => onDrillDown({
+            id: `sub_area_${child.id}`,
+            type: 'sub_area',
+            name: child.name,
+            data: child,
+          }) : undefined}
         />
         {editSubAreaOpen && editingSubArea && (
           <SubAreaForm

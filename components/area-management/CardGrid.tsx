@@ -14,6 +14,7 @@ interface CardGridProps {
   onDelete: (item: any) => void;
   onCreate?: () => void;
   createLabel?: string;
+  onItemClick?: (item: any) => void;
 }
 
 export function CardGrid({
@@ -25,6 +26,7 @@ export function CardGrid({
   onDelete,
   onCreate,
   createLabel = 'הוסף חדש',
+  onItemClick,
 }: CardGridProps) {
   const canEdit = itemType === 'area' ? permissions.canUpdateArea : permissions.canUpdateSubArea;
   const canDelete = itemType === 'area' ? permissions.canDeleteArea : permissions.canDeleteSubArea;
@@ -67,9 +69,12 @@ export function CardGrid({
               <Card key={item.id} className="group hover:shadow-md transition-shadow">
                 <CardHeader className="pb-2">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
+                    <div
+                      className={`flex items-center gap-2 ${onItemClick ? 'cursor-pointer hover:text-primary' : ''}`}
+                      onClick={onItemClick ? () => onItemClick(item) : undefined}
+                    >
                       {getIcon()}
-                      <CardTitle className="text-base">{item.name}</CardTitle>
+                      <CardTitle className="text-base hover:underline">{item.name}</CardTitle>
                     </div>
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       {canEdit && (
