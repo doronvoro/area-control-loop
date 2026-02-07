@@ -15,7 +15,7 @@ export async function GET(request: Request) {
       );
     }
 
-    const supabase = await createClient();
+    const supabase = createAdminClient();
     const { data, error } = await supabase
       .from('sub_areas')
       .select('*, crops(*)')

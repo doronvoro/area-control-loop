@@ -20,16 +20,10 @@ export async function GET() {
           sub_area:sub_areas(id, name),
           finding:findings(name, description),
           treatments:monitoring_treatments(
-            id, dosage, status, notes, action_treatment_id,
+            id, dosage, status, notes,
             material:materials(id, name, description),
             action_type:action_types(id, name, description),
-            unit_type:unit_types(id, name, description),
-            action_treatment:action_treatments(
-              id, dosage, status, notes, action_time,
-              material:materials(id, name, description),
-              action_type:action_types(id, name, description),
-              unit_type:unit_types(id, name, description)
-            )
+            unit_type:unit_types(id, name, description)
           )
         ),
         action_reports:actions_area_report(
