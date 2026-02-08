@@ -10,6 +10,37 @@ export enum AreaTypeId {
   ACTION = 'action',
 }
 
+// Severity levels for monitoring and action reports
+export enum ReportSeverity {
+  LOW = 'low',
+  MEDIUM = 'medium',
+  HIGH = 'high',
+  CRITICAL = 'critical',
+}
+
+// Hebrew labels for severity levels (for UI display)
+export const SEVERITY_LABELS: Record<ReportSeverity, string> = {
+  [ReportSeverity.LOW]: 'נמוכה',
+  [ReportSeverity.MEDIUM]: 'בינונית',
+  [ReportSeverity.HIGH]: 'גבוהה',
+  [ReportSeverity.CRITICAL]: 'קריטית',
+};
+
+// Severity options for dropdowns/selects
+export const SEVERITY_OPTIONS = [
+  { value: ReportSeverity.LOW, label: SEVERITY_LABELS[ReportSeverity.LOW] },
+  { value: ReportSeverity.MEDIUM, label: SEVERITY_LABELS[ReportSeverity.MEDIUM] },
+  { value: ReportSeverity.HIGH, label: SEVERITY_LABELS[ReportSeverity.HIGH] },
+  { value: ReportSeverity.CRITICAL, label: SEVERITY_LABELS[ReportSeverity.CRITICAL] },
+];
+
+// Size unit types for areas and sub-areas
+export const SIZE_UNIT_TYPES = [
+  { name: 'dunam', description: 'דונם' },
+] as const;
+
+export type SizeUnitTypeName = (typeof SIZE_UNIT_TYPES)[number]['name'];
+
 export type Json =
   | string
   | number
@@ -131,6 +162,8 @@ export interface Database {
           name: string;
           description: string | null;
           crop_id: string | null;
+          size: number | null;
+          size_unit_type: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -139,6 +172,8 @@ export interface Database {
           name: string;
           description?: string | null;
           crop_id?: string | null;
+          size?: number | null;
+          size_unit_type?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -147,6 +182,8 @@ export interface Database {
           name?: string;
           description?: string | null;
           crop_id?: string | null;
+          size?: number | null;
+          size_unit_type?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -162,6 +199,8 @@ export interface Database {
           rows: string | null;
           display: string | null;
           crop_id: string | null;
+          size: number | null;
+          size_unit_type: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -175,6 +214,8 @@ export interface Database {
           rows?: string | null;
           display?: string | null;
           crop_id?: string | null;
+          size?: number | null;
+          size_unit_type?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -188,6 +229,8 @@ export interface Database {
           rows?: string | null;
           display?: string | null;
           crop_id?: string | null;
+          size?: number | null;
+          size_unit_type?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -199,6 +242,7 @@ export interface Database {
           sub_area_id: string;
           finding_id: string;
           actions_area_report_id: string | null;
+          severity: ReportSeverity | null;
           created_at: string;
           updated_at: string;
         };
@@ -208,6 +252,7 @@ export interface Database {
           sub_area_id: string;
           finding_id: string;
           actions_area_report_id?: string | null;
+          severity?: ReportSeverity | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -217,6 +262,7 @@ export interface Database {
           sub_area_id?: string;
           finding_id?: string;
           actions_area_report_id?: string | null;
+          severity?: ReportSeverity | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -268,6 +314,7 @@ export interface Database {
           area_report_id: string;
           sub_area_id: string;
           finding_id: string;
+          severity: ReportSeverity | null;
           created_at: string;
           updated_at: string;
         };
@@ -276,6 +323,7 @@ export interface Database {
           area_report_id: string;
           sub_area_id: string;
           finding_id: string;
+          severity?: ReportSeverity | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -284,6 +332,7 @@ export interface Database {
           area_report_id?: string;
           sub_area_id?: string;
           finding_id?: string;
+          severity?: ReportSeverity | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -576,6 +625,7 @@ export interface Database {
         Row: {
           id: string;
           crop_id: string;
+          finding_id: string | null;
           action_type_id: string;
           material_id: string;
           unit_type_id: string;
@@ -586,6 +636,7 @@ export interface Database {
         Insert: {
           id?: string;
           crop_id: string;
+          finding_id?: string | null;
           action_type_id: string;
           material_id: string;
           unit_type_id: string;
@@ -596,6 +647,7 @@ export interface Database {
         Update: {
           id?: string;
           crop_id?: string;
+          finding_id?: string | null;
           action_type_id?: string;
           material_id?: string;
           unit_type_id?: string;
