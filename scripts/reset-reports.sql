@@ -8,17 +8,17 @@ TRUNCATE TABLE actions_area_report CASCADE;
 TRUNCATE TABLE monitoring_area_report CASCADE;
 TRUNCATE TABLE report_areas CASCADE;
 
--- Step 2: Verify area_types table structure (should have name as PK, no id column)
+-- Step 2: Verify report_area_types table structure (should have name as PK, no id column)
 DO $$
 BEGIN
-  -- Check if area_types has correct structure
+  -- Check if report_area_types has correct structure
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
-    WHERE table_name = 'area_types' AND column_name = 'id'
+    WHERE table_name = 'report_area_types' AND column_name = 'id'
   ) THEN
-    RAISE NOTICE 'WARNING: area_types has an id column - schema may be incorrect';
+    RAISE NOTICE 'WARNING: report_area_types has an id column - schema may be incorrect';
   ELSE
-    RAISE NOTICE 'OK: area_types uses name as PK (no id column)';
+    RAISE NOTICE 'OK: report_area_types uses name as PK (no id column)';
   END IF;
 
   -- Check if report_areas.area_type_id exists
@@ -62,8 +62,8 @@ BEGIN
   END IF;
 END $$;
 
--- Step 3: Show area_types data
-SELECT * FROM area_types;
+-- Step 3: Show report_area_types data
+SELECT * FROM report_area_types;
 
 -- Step 4: Show report_areas structure
 SELECT column_name, data_type, is_nullable, column_default

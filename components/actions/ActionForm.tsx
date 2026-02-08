@@ -25,6 +25,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Plus, Trash2 } from 'lucide-react';
+import { ReportSeverity, SEVERITY_OPTIONS } from '@/types/database';
 
 const treatmentSchema = z.object({
   action_type_id: z.string().min(1, 'נדרש לבחור סוג פעולה'),
@@ -44,6 +45,7 @@ const subAreaEntrySchema = z.object({
   sub_area_display: z.string().optional(),
   finding_id: z.string().min(1, 'נדרש לבחור ממצא'),
   finding_name: z.string().optional(),
+  severity: z.nativeEnum(ReportSeverity).optional(),
   crop_id: z.string().optional(),
   treatments: z.array(treatmentSchema).min(1, 'נדרש לפחות טיפול אחד'),
 });
@@ -119,6 +121,7 @@ export function ActionForm({
           sub_area_display: '',
           finding_id: '',
           finding_name: '',
+          severity: undefined,
           crop_id: '',
           treatments: [
             {
@@ -173,6 +176,7 @@ export function ActionForm({
         sub_area_display: '',
         finding_id: '',
         finding_name: '',
+        severity: undefined,
         crop_id: '',
         treatments: [
           {
@@ -307,6 +311,7 @@ export function ActionForm({
           sub_area_display: report.sub_area_display || report.sub_area_name,
           finding_id: report.finding_id,
           finding_name: report.finding_name,
+          severity: report.severity || undefined,
           crop_id: report.effective_crop_id || '',
           treatments,
         };
@@ -509,6 +514,7 @@ export function ActionForm({
       sub_area_display: '',
       finding_id: '',
       finding_name: '',
+      severity: undefined,
       crop_id: '',
       treatments: [
         { action_type_id: '', material_id: '', material: '', dosage: '', unit_type_id: '', status: 'planned', notes: '', monitoring_treatment_id: '' }
@@ -562,6 +568,7 @@ export function ActionForm({
             sub_area_display: '',
             finding_id: '',
             finding_name: '',
+            severity: undefined,
             crop_id: '',
             treatments: [
               { action_type_id: '', material_id: '', material: '', dosage: '', unit_type_id: '', status: 'planned', notes: '', monitoring_treatment_id: '' }
@@ -851,6 +858,35 @@ export function ActionForm({
                             )}
                           />
                         )}
+
+                        {/* Severity select */}
+                        <FormField
+                          control={form.control}
+                          name={`entries.${entryIndex}.severity`}
+                          render={({ field: severityField }) => (
+                            <FormItem>
+                              <FormLabel>חומרה</FormLabel>
+                              <Select
+                                onValueChange={severityField.onChange}
+                                value={severityField.value}
+                              >
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="בחר רמת חומרה" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  {SEVERITY_OPTIONS.map((option) => (
+                                    <SelectItem key={option.value} value={option.value}>
+                                      {option.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
                       </div>
 
                       {/* Treatments Section */}

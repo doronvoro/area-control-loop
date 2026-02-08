@@ -5,7 +5,7 @@ export async function GET() {
   try {
     const supabase = await createClient();
     const { data, error } = await supabase
-      .from('area_types')
+      .from('report_area_types')
       .select('*')
       .order('name');
 

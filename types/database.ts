@@ -78,7 +78,7 @@ export interface Database {
           updated_at?: string;
         };
       };
-      area_types: {
+      report_area_types: {
         Row: {
           name: string; // PK - use AreaTypeId enum
           display_name: string;
@@ -761,7 +761,7 @@ export interface Database {
 // Convenience type aliases
 export type Customer = Database['public']['Tables']['customers']['Row'];
 export type WorkerType = Database['public']['Tables']['worker_types']['Row'];
-export type AreaType = Database['public']['Tables']['area_types']['Row'];
+export type ReportAreaType = Database['public']['Tables']['report_area_types']['Row'];
 export type Worker = Database['public']['Tables']['workers']['Row'];
 export type Area = Database['public']['Tables']['areas']['Row'];
 export type SubArea = Database['public']['Tables']['sub_areas']['Row'];

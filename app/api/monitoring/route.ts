@@ -2,7 +2,156 @@ import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { getCurrentWorker, requireAuth } from '@/lib/auth';
 import { hasRole } from '@/lib/permissions';
-import { AreaTypeId } from '@/types/database';
+import { AreaTypeId, ReportSeverity } from '@/types/database';
+import { SupabaseClient } from '@supabase/supabase-js';
+
+// Request body types
+interface TreatmentInput {
+  material_id?: string | null;
+  dosage?: string | number | null;
+  unit_type_id?: string | null;
+  action_type_id?: string | null;
+  status?: string;
+  notes?: string | null;
+}
+
+interface MonitoringEntryInput {
+  sub_area_id: string;
+  finding_id: string;
+  severity?: ReportSeverity | null;
+  treatments?: TreatmentInput[];
+  // Legacy fields
+  material_id?: string | null;
+  recommend_material_id?: string | null;
+  dosage?: string | number | null;
+  recommend_dosage?: string | number | null;
+  unit_type_id?: string | null;
+  recommend_unit_type_id?: string | null;
+  action_type_id?: string | null;
+  recommend_action_type_id?: string | null;
+}
+
+interface BatchRequestBody {
+  area_id: string;
+  entries: MonitoringEntryInput[];
+}
+
+interface SingleRequestBody extends MonitoringEntryInput {
+  area_id?: string;
+  area_report_id?: string;
+}
+
+type RequestBody = BatchRequestBody | SingleRequestBody;
+
+// Helper functions
+function parseDosage(value: string | number | null | undefined): number | null {
+  if (value == null) return null;
+  return typeof value === 'string' ? parseFloat(value) : value;
+}
+
+async function getOrCreateReportArea(
+  supabase: SupabaseClient,
+  adminClient: SupabaseClient,
+  areaId: string
+): Promise<string> {
+  // Try to find an existing monitoring report_area for this area
+  const { data: existingReportArea } = await supabase
+    .from('report_areas')
+    .select('id')
+    .eq('area_id', areaId)
+    .eq('area_type_id', AreaTypeId.MONITORING)
+    .maybeSingle();
+
+  if (existingReportArea) {
+    return existingReportArea.id;
+  }
+
+  // Get area name for the new report_area
+  const { data: areaData } = await supabase.from('areas').select('name').eq('id', areaId).single();
+
+  const { data: newReportArea, error: createError } = await adminClient
+    .from('report_areas')
+    .insert({
+      area_id: areaId,
+      area_type_id: AreaTypeId.MONITORING,
+      name: `דוח ניטור - ${areaData?.name || 'אזור'}`,
+      description: 'דוח ניטור',
+    })
+    .select('id')
+    .single();
+
+  if (createError) throw createError;
+  return newReportArea.id;
+}
+
+async function createTreatment(
+  adminClient: SupabaseClient,
+  monitoringReportId: string,
+  treatment: TreatmentInput
+): Promise<void> {
+  const { error } = await adminClient.from('monitoring_treatments').insert({
+    monitoring_report_id: monitoringReportId,
+    material_id: treatment.material_id || null,
+    dosage: parseDosage(treatment.dosage),
+    unit_type_id: treatment.unit_type_id || null,
+    action_type_id: treatment.action_type_id || null,
+    status: treatment.status || 'pending',
+    notes: treatment.notes || null,
+  });
+
+  if (error) throw error;
+}
+
+async function createTreatmentsFromEntry(
+  adminClient: SupabaseClient,
+  monitoringReportId: string,
+  entry: MonitoringEntryInput
+): Promise<void> {
+  if (entry.treatments && Array.isArray(entry.treatments)) {
+    for (const treatment of entry.treatments) {
+      await createTreatment(adminClient, monitoringReportId, treatment);
+    }
+    return;
+  }
+
+  // Legacy format - create single treatment from entry fields
+  const materialId = entry.material_id || entry.recommend_material_id;
+  const actionTypeId = entry.action_type_id || entry.recommend_action_type_id;
+
+  if (materialId || actionTypeId) {
+    await createTreatment(adminClient, monitoringReportId, {
+      material_id: materialId,
+      dosage: entry.dosage || entry.recommend_dosage,
+      unit_type_id: entry.unit_type_id || entry.recommend_unit_type_id,
+      action_type_id: actionTypeId,
+      status: 'pending',
+    });
+  }
+}
+
+async function createMonitoringReport(
+  adminClient: SupabaseClient,
+  reportAreaId: string,
+  entry: MonitoringEntryInput
+) {
+  const { data, error } = await adminClient
+    .from('monitoring_area_report')
+    .insert({
+      area_report_id: reportAreaId,
+      sub_area_id: entry.sub_area_id,
+      finding_id: entry.finding_id,
+      severity: entry.severity || null,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+function isBatchRequest(body: RequestBody): body is BatchRequestBody {
+  return 'entries' in body && Array.isArray(body.entries);
+}
 
 export async function GET() {
   try {
@@ -34,8 +183,9 @@ export async function GET() {
     if (error) throw error;
 
     return NextResponse.json(data);
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -50,48 +200,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const body = await request.json();
-
-    // Use admin client for all writes since we've already verified authorization
+    const body: RequestBody = await request.json();
     const adminClient = createAdminClient();
 
-    // Helper function to get or create report_area
-    const getOrCreateReportArea = async (areaId: string): Promise<string> => {
-      // Try to find an existing monitoring report_area for this area
-      const { data: existingReportArea } = await (supabase
-        .from('report_areas') as any)
-        .select('id')
-        .eq('area_id', areaId)
-        .eq('area_type_id', AreaTypeId.MONITORING)
-        .maybeSingle();
-
-      if (existingReportArea) {
-        return existingReportArea.id;
-      }
-
-      const { data: areaData } = await (supabase
-        .from('areas') as any)
-        .select('name')
-        .eq('id', areaId)
-        .single();
-
-      const { data: newReportArea, error: createError } = await (adminClient
-        .from('report_areas') as any)
-        .insert({
-          area_id: areaId,
-          area_type_id: AreaTypeId.MONITORING,
-          name: `דוח ניטור - ${areaData?.name || 'אזור'}`,
-          description: `דוח ניטור`,
-        })
-        .select()
-        .single();
-
-      if (createError) throw createError;
-      return newReportArea.id;
-    };
-
-    // Check if batch request (new format with entries array)
-    if (body.entries && Array.isArray(body.entries)) {
+    // Handle batch request
+    if (isBatchRequest(body)) {
       const { area_id, entries } = body;
 
       if (!area_id) {
@@ -102,156 +215,45 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'At least one entry is required' }, { status: 400 });
       }
 
-      // Get or create report_area for this area
-      const reportAreaId = await getOrCreateReportArea(area_id);
+      const reportAreaId = await getOrCreateReportArea(supabase, adminClient, area_id);
 
       const results = [];
       for (const entry of entries) {
-        // Create monitoring_area_report entry
-        const { data: monitoringReport, error: monitoringError } = await (adminClient
-          .from('monitoring_area_report') as any)
-          .insert({
-            area_report_id: reportAreaId,
-            sub_area_id: entry.sub_area_id,
-            finding_id: entry.finding_id,
-          })
-          .select()
-          .single();
-
-        if (monitoringError) throw monitoringError;
-
-        // Create treatment if treatment data is provided
-        if (entry.treatments && Array.isArray(entry.treatments)) {
-          for (const treatment of entry.treatments) {
-            const parsedDosage = treatment.dosage
-              ? (typeof treatment.dosage === 'string' ? parseFloat(treatment.dosage) : treatment.dosage)
-              : null;
-
-            const { error: treatmentError } = await (adminClient
-              .from('monitoring_treatments') as any)
-              .insert({
-                monitoring_report_id: monitoringReport.id,
-                material_id: treatment.material_id || null,
-                dosage: parsedDosage,
-                unit_type_id: treatment.unit_type_id || null,
-                action_type_id: treatment.action_type_id || null,
-                status: treatment.status || 'pending',
-                notes: treatment.notes || null,
-              });
-
-            if (treatmentError) throw treatmentError;
-          }
-        } else if (entry.material_id || entry.action_type_id) {
-          // Legacy format - create single treatment from entry fields
-          const parsedDosage = entry.dosage || entry.recommend_dosage
-            ? parseFloat(entry.dosage || entry.recommend_dosage)
-            : null;
-
-          const { error: treatmentError } = await (adminClient
-            .from('monitoring_treatments') as any)
-            .insert({
-              monitoring_report_id: monitoringReport.id,
-              material_id: entry.material_id || entry.recommend_material_id || null,
-              dosage: parsedDosage,
-              unit_type_id: entry.unit_type_id || entry.recommend_unit_type_id || null,
-              action_type_id: entry.action_type_id || entry.recommend_action_type_id || null,
-              status: 'pending',
-            });
-
-          if (treatmentError) throw treatmentError;
-        }
-
+        const monitoringReport = await createMonitoringReport(adminClient, reportAreaId, entry);
+        await createTreatmentsFromEntry(adminClient, monitoringReport.id, entry);
         results.push(monitoringReport);
       }
 
       return NextResponse.json(results, { status: 201 });
     }
 
-    // Legacy single-entry format
+    // Handle single entry request
     const {
       area_id,
       area_report_id: providedAreaReportId,
-      sub_area_id,
-      finding_id,
-      treatments,
-      // Legacy fields (for backwards compatibility)
-      material_id,
-      recommend_material_id,
-      dosage,
-      recommend_dosage,
-      unit_type_id,
-      recommend_unit_type_id,
-      action_type_id,
-      recommend_action_type_id,
-    } = body;
+      ...entryData
+    } = body as SingleRequestBody;
 
-    // Determine area_report_id - either provided directly or we need to find/create one
     let finalAreaReportId = providedAreaReportId;
 
     if (!finalAreaReportId && area_id) {
-      finalAreaReportId = await getOrCreateReportArea(area_id);
+      finalAreaReportId = await getOrCreateReportArea(supabase, adminClient, area_id);
     }
 
     if (!finalAreaReportId) {
       return NextResponse.json({ error: 'area_id or area_report_id is required' }, { status: 400 });
     }
 
-    // Create monitoring_area_report entry
-    const { data: monitoringReport, error: monitoringError } = await (adminClient
-      .from('monitoring_area_report') as any)
-      .insert({
-        area_report_id: finalAreaReportId,
-        sub_area_id,
-        finding_id,
-      })
-      .select()
-      .single();
-
-    if (monitoringError) throw monitoringError;
-
-    // Create treatments if provided
-    if (treatments && Array.isArray(treatments)) {
-      for (const treatment of treatments) {
-        const parsedDosage = treatment.dosage
-          ? (typeof treatment.dosage === 'string' ? parseFloat(treatment.dosage) : treatment.dosage)
-          : null;
-
-        const { error: treatmentError } = await (adminClient
-          .from('monitoring_treatments') as any)
-          .insert({
-            monitoring_report_id: monitoringReport.id,
-            material_id: treatment.material_id || null,
-            dosage: parsedDosage,
-            unit_type_id: treatment.unit_type_id || null,
-            action_type_id: treatment.action_type_id || null,
-            status: treatment.status || 'pending',
-            notes: treatment.notes || null,
-          });
-
-        if (treatmentError) throw treatmentError;
-      }
-    } else if (material_id || recommend_material_id || action_type_id || recommend_action_type_id) {
-      // Legacy format - create single treatment from legacy fields
-      const parsedDosage = dosage || recommend_dosage
-        ? parseFloat(dosage || recommend_dosage)
-        : null;
-
-      const { error: treatmentError } = await (adminClient
-        .from('monitoring_treatments') as any)
-        .insert({
-          monitoring_report_id: monitoringReport.id,
-          material_id: material_id || recommend_material_id || null,
-          dosage: parsedDosage,
-          unit_type_id: unit_type_id || recommend_unit_type_id || null,
-          action_type_id: action_type_id || recommend_action_type_id || null,
-          status: 'pending',
-        });
-
-      if (treatmentError) throw treatmentError;
-    }
+    const monitoringReport = await createMonitoringReport(
+      adminClient,
+      finalAreaReportId,
+      entryData
+    );
+    await createTreatmentsFromEntry(adminClient, monitoringReport.id, entryData);
 
     return NextResponse.json(monitoringReport, { status: 201 });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

@@ -104,6 +104,7 @@ export async function POST(request: Request) {
             area_report_id: reportAreaId,
             sub_area_id: entry.sub_area_id,
             finding_id: entry.finding_id,
+            severity: entry.severity || null,
           } as any)
           .select()
           .single();
@@ -193,6 +194,7 @@ export async function POST(request: Request) {
       area_report_id,
       sub_area_id,
       finding_id,
+      severity,
       treatments,
       // Legacy fields
       material_id,
@@ -212,6 +214,7 @@ export async function POST(request: Request) {
         area_report_id,
         sub_area_id,
         finding_id,
+        severity: severity || null,
       } as any)
       .select()
       .single();

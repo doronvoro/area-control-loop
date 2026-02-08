@@ -36,23 +36,23 @@ async function resetReports() {
 
   console.log('\n📋 Verifying schema...\n');
 
-  // Check area_types
+  // Check report_area_types
   const { data: areaTypes, error: areaTypesError } = await supabase
-    .from('area_types')
+    .from('report_area_types')
     .select('*');
 
   if (areaTypesError) {
-    console.log('❌ Error querying area_types:', areaTypesError.message);
+    console.log('❌ Error querying report_area_types:', areaTypesError.message);
   } else {
-    console.log('area_types data:');
+    console.log('report_area_types data:');
     console.table(areaTypes);
 
     if (areaTypes && areaTypes.length > 0) {
       const columns = Object.keys(areaTypes[0]);
       if (columns.includes('id')) {
-        console.log('⚠️  WARNING: area_types has id column (should use name as PK)');
+        console.log('⚠️  WARNING: report_area_types has id column (should use name as PK)');
       } else {
-        console.log('✅ area_types uses name as PK');
+        console.log('✅ report_area_types uses name as PK');
       }
     }
   }

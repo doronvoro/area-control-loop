@@ -25,6 +25,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, Plus, Trash2 } from 'lucide-react';
+import { ReportSeverity, SEVERITY_OPTIONS } from '@/types/database';
 
 const treatmentSchema = z.object({
   action_type_id: z.string().optional(),
@@ -37,6 +38,7 @@ const treatmentSchema = z.object({
 const subAreaEntrySchema = z.object({
   sub_area_id: z.string().min(1, 'נדרש לבחור תת-שטח'),
   finding_id: z.string().min(1, 'נדרש לבחור ממצא'),
+  severity: z.nativeEnum(ReportSeverity).optional(),
   treatments: z.array(treatmentSchema),
 });
 
@@ -98,6 +100,7 @@ export function MonitoringForm({
       entries: [{
         sub_area_id: '',
         finding_id: '',
+        severity: undefined,
         treatments: [],
       }],
     },
@@ -121,6 +124,7 @@ export function MonitoringForm({
       form.setValue('entries', [{
         sub_area_id: '',
         finding_id: '',
+        severity: undefined,
         treatments: [],
       }]);
       setSubAreas([]);
@@ -139,6 +143,7 @@ export function MonitoringForm({
       form.setValue('entries', [{
         sub_area_id: '',
         finding_id: '',
+        severity: undefined,
         treatments: [],
       }]);
       resetAllEntryState();
@@ -368,6 +373,7 @@ export function MonitoringForm({
     append({
       sub_area_id: '',
       finding_id: '',
+      severity: undefined,
       treatments: [],
     });
   };
@@ -667,6 +673,35 @@ export function MonitoringForm({
                                   {findings.map((finding) => (
                                     <SelectItem key={finding.id} value={finding.id}>
                                       {finding.description || finding.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        {/* Severity select */}
+                        <FormField
+                          control={form.control}
+                          name={`entries.${index}.severity`}
+                          render={({ field: severityField }) => (
+                            <FormItem>
+                              <FormLabel className="font-medium">חומרה</FormLabel>
+                              <Select
+                                onValueChange={severityField.onChange}
+                                value={severityField.value}
+                              >
+                                <FormControl>
+                                  <SelectTrigger className="h-11">
+                                    <SelectValue placeholder="בחר רמת חומרה" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  {SEVERITY_OPTIONS.map((option) => (
+                                    <SelectItem key={option.value} value={option.value}>
+                                      {option.label}
                                     </SelectItem>
                                   ))}
                                 </SelectContent>

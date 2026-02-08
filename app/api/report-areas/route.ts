@@ -11,7 +11,7 @@ export async function GET(request: Request) {
     const typeName = searchParams.get('type'); // accepts type name for backward compat
 
     const supabase = await createClient();
-    let query = supabase.from('report_areas').select('*, area_type:area_types(*)');
+    let query = supabase.from('report_areas').select('*, area_type:report_area_types(*)');
 
     if (id) {
       // Fetch single report area by ID
@@ -71,7 +71,7 @@ export async function POST(request: Request) {
         name,
         description: description || null,
       })
-      .select('*, area_type:area_types(*)')
+      .select('*, area_type:report_area_types(*)')
       .single();
 
     if (error) throw error;
