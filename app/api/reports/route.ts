@@ -13,7 +13,8 @@ export async function GET() {
       .select(
         `id, name, description, status, created_at, report_number,
         area_type:report_area_types(name, display_name),
-        area:areas(id, name)`
+        area:areas(id, name),
+        worker:workers(id, name)`
       )
       .order('created_at', { ascending: false })
       .limit(50);

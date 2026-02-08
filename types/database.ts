@@ -387,6 +387,7 @@ export interface Database {
           description: string | null;
           status: string;
           report_number: number;
+          worker_id: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -398,6 +399,7 @@ export interface Database {
           description?: string | null;
           status?: string;
           report_number?: number;
+          worker_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -409,6 +411,7 @@ export interface Database {
           description?: string | null;
           status?: string;
           report_number?: number;
+          worker_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };

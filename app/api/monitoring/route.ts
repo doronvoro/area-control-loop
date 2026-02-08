@@ -33,12 +33,15 @@ interface MonitoringEntryInput {
 
 interface BatchRequestBody {
   area_id: string;
+  worker_id?: string;
+  inspector_id?: string; // Alias for worker_id from monitoring form
   entries: MonitoringEntryInput[];
 }
 
 interface SingleRequestBody extends MonitoringEntryInput {
   area_id?: string;
   area_report_id?: string;
+  worker_id?: string;
 }
 
 type RequestBody = BatchRequestBody | SingleRequestBody;
@@ -52,7 +55,8 @@ function parseDosage(value: string | number | null | undefined): number | null {
 async function getOrCreateReportArea(
   supabase: SupabaseClient,
   adminClient: SupabaseClient,
-  areaId: string
+  areaId: string,
+  workerId?: string
 ): Promise<string> {
   // Try to find an existing monitoring report_area for this area
   const { data: existingReportArea } = await supabase
@@ -76,6 +80,7 @@ async function getOrCreateReportArea(
       area_type_id: AreaTypeId.MONITORING,
       name: `דוח ניטור - ${areaData?.name || 'אזור'}`,
       description: 'דוח ניטור',
+      worker_id: workerId || null,
     })
     .select('id')
     .single();
@@ -205,7 +210,9 @@ export async function POST(request: Request) {
 
     // Handle batch request
     if (isBatchRequest(body)) {
-      const { area_id, entries } = body;
+      const { area_id, worker_id, inspector_id, entries } = body;
+      // Use worker_id if provided, otherwise use inspector_id (from monitoring form)
+      const effectiveWorkerId = worker_id || inspector_id;
 
       if (!area_id) {
         return NextResponse.json({ error: 'area_id is required' }, { status: 400 });
@@ -215,7 +222,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'At least one entry is required' }, { status: 400 });
       }
 
-      const reportAreaId = await getOrCreateReportArea(supabase, adminClient, area_id);
+      const reportAreaId = await getOrCreateReportArea(supabase, adminClient, area_id, effectiveWorkerId);
 
       const results = [];
       for (const entry of entries) {
@@ -231,13 +238,14 @@ export async function POST(request: Request) {
     const {
       area_id,
       area_report_id: providedAreaReportId,
+      worker_id,
       ...entryData
     } = body as SingleRequestBody;
 
     let finalAreaReportId = providedAreaReportId;
 
     if (!finalAreaReportId && area_id) {
-      finalAreaReportId = await getOrCreateReportArea(supabase, adminClient, area_id);
+      finalAreaReportId = await getOrCreateReportArea(supabase, adminClient, area_id, worker_id);
     }
 
     if (!finalAreaReportId) {

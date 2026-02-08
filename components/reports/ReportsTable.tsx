@@ -20,6 +20,7 @@ interface ReportAreaData {
   created_at: string;
   report_number?: number;
   area?: { id: string; name: string };
+  worker?: { id: string; name: string };
 }
 
 interface ReportsTableProps {
@@ -44,8 +45,8 @@ export function ReportsTable({ reportAreas }: ReportsTableProps) {
             <TableRow>
               <TableHead>מס׳ דוח</TableHead>
               <TableHead>תאריך</TableHead>
-              <TableHead>שם הדוח</TableHead>
               <TableHead>שטח</TableHead>
+              <TableHead>עובד</TableHead>
               <TableHead>סוג</TableHead>
               <TableHead>סטטוס</TableHead>
             </TableRow>
@@ -55,10 +56,14 @@ export function ReportsTable({ reportAreas }: ReportsTableProps) {
               <TableRow key={reportArea.id}>
                 <TableCell className="font-medium">{reportArea.report_number || '-'}</TableCell>
                 <TableCell>
-                  {new Date(reportArea.created_at).toLocaleDateString('he-IL')}
+                  {new Date(reportArea.created_at).toLocaleDateString('he-IL')}{' '}
+                  {new Date(reportArea.created_at).toLocaleTimeString('he-IL', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
                 </TableCell>
-                <TableCell>{reportArea.name}</TableCell>
                 <TableCell>{reportArea.area?.name || '-'}</TableCell>
+                <TableCell>{reportArea.worker?.name || '-'}</TableCell>
                 <TableCell>
                   <Badge variant="secondary">
                     {reportArea.area_type?.display_name ||

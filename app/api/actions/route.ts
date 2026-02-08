@@ -54,7 +54,7 @@ export async function POST(request: Request) {
 
     // Handle batch creation (admin form with entries array)
     if (body.entries && Array.isArray(body.entries)) {
-      const { area_id, entries } = body;
+      const { area_id, worker_id, entries } = body;
 
       if (!area_id) {
         return NextResponse.json({ error: 'area_id is required' }, { status: 400 });
@@ -86,6 +86,7 @@ export async function POST(request: Request) {
             area_type_id: AreaTypeId.ACTION,
             name: `דוח פעולה - ${areaData?.name || 'שטח'}`,
             description: 'דוח פעולה שנוצר ע"י מנהל',
+            worker_id: worker_id || null,
           })
           .select()
           .single();
