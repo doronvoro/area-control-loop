@@ -200,10 +200,10 @@ export function MonitoringForm({
     }
   };
 
-  const fetchActionTypesForEntry = async (cropId: string, index: number) => {
+  const fetchActionTypesForEntry = async (cropId: string, findingId: string, index: number) => {
     setEntryLoadingActionTypes(prev => ({ ...prev, [index]: true }));
     try {
-      const res = await fetch(`/api/cascade?type=action_types&cropId=${cropId}`);
+      const res = await fetch(`/api/cascade?type=action_types&cropId=${cropId}&findingId=${findingId}`);
       if (res.ok) {
         const data = await res.json();
         setEntryActionTypes(prev => ({ ...prev, [index]: data }));
@@ -215,11 +215,11 @@ export function MonitoringForm({
     }
   };
 
-  const fetchMaterialsForTreatment = async (cropId: string, actionTypeId: string, entryIndex: number, treatmentIndex: number) => {
+  const fetchMaterialsForTreatment = async (cropId: string, findingId: string, actionTypeId: string, entryIndex: number, treatmentIndex: number) => {
     const key = `${entryIndex}-${treatmentIndex}`;
     setTreatmentLoadingMaterials(prev => ({ ...prev, [key]: true }));
     try {
-      const res = await fetch(`/api/cascade?type=materials&cropId=${cropId}&actionTypeId=${actionTypeId}`);
+      const res = await fetch(`/api/cascade?type=materials&cropId=${cropId}&findingId=${findingId}&actionTypeId=${actionTypeId}`);
       if (res.ok) {
         const data = await res.json();
         setTreatmentMaterials(prev => ({ ...prev, [key]: data }));
@@ -231,10 +231,10 @@ export function MonitoringForm({
     }
   };
 
-  const fetchDosageForTreatment = async (cropId: string, actionTypeId: string, materialId: string, entryIndex: number, treatmentIndex: number) => {
+  const fetchDosageForTreatment = async (cropId: string, findingId: string, actionTypeId: string, materialId: string, entryIndex: number, treatmentIndex: number) => {
     const key = `${entryIndex}-${treatmentIndex}`;
     try {
-      const res = await fetch(`/api/cascade?type=dosage&cropId=${cropId}&actionTypeId=${actionTypeId}&materialId=${materialId}`);
+      const res = await fetch(`/api/cascade?type=dosage&cropId=${cropId}&findingId=${findingId}&actionTypeId=${actionTypeId}&materialId=${materialId}`);
       if (res.ok) {
         const data = await res.json();
         if (data) {
@@ -276,7 +276,7 @@ export function MonitoringForm({
     cleanupTreatmentStateForEntry(index);
 
     if (findingId && cropId) {
-      fetchActionTypesForEntry(cropId, index);
+      fetchActionTypesForEntry(cropId, findingId, index);
     } else {
       setEntryActionTypes(prev => ({ ...prev, [index]: [] }));
     }
@@ -302,6 +302,7 @@ export function MonitoringForm({
   const handleTreatmentActionTypeChange = (actionTypeId: string, entryIndex: number, treatmentIndex: number) => {
     form.setValue(`entries.${entryIndex}.treatments.${treatmentIndex}.action_type_id`, actionTypeId);
     const cropId = entryCropIds[entryIndex];
+    const findingId = form.getValues(`entries.${entryIndex}.finding_id`);
     const key = `${entryIndex}-${treatmentIndex}`;
 
     // Reset dependent fields for this treatment
@@ -311,8 +312,8 @@ export function MonitoringForm({
     setTreatmentRecommendedDosage(prev => ({ ...prev, [key]: '' }));
     setTreatmentRecommendedUnitTypeId(prev => ({ ...prev, [key]: '' }));
 
-    if (cropId && actionTypeId) {
-      fetchMaterialsForTreatment(cropId, actionTypeId, entryIndex, treatmentIndex);
+    if (cropId && findingId && actionTypeId) {
+      fetchMaterialsForTreatment(cropId, findingId, actionTypeId, entryIndex, treatmentIndex);
     } else {
       setTreatmentMaterials(prev => ({ ...prev, [key]: [] }));
     }
@@ -321,10 +322,11 @@ export function MonitoringForm({
   const handleTreatmentMaterialChange = (materialId: string, entryIndex: number, treatmentIndex: number) => {
     form.setValue(`entries.${entryIndex}.treatments.${treatmentIndex}.material_id`, materialId);
     const cropId = entryCropIds[entryIndex];
+    const findingId = form.getValues(`entries.${entryIndex}.finding_id`);
     const actionTypeId = form.getValues(`entries.${entryIndex}.treatments.${treatmentIndex}.action_type_id`);
 
-    if (cropId && actionTypeId && materialId) {
-      fetchDosageForTreatment(cropId, actionTypeId, materialId, entryIndex, treatmentIndex);
+    if (cropId && findingId && actionTypeId && materialId) {
+      fetchDosageForTreatment(cropId, findingId, actionTypeId, materialId, entryIndex, treatmentIndex);
     }
   };
 

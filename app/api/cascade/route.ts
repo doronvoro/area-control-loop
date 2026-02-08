@@ -8,12 +8,14 @@ import { requireAuth } from '@/lib/auth';
  * Query params:
  * - type: 'findings' | 'action_types' | 'materials' | 'dosage'
  * - cropId: UUID of the crop
+ * - findingId: UUID of the finding (optional - for finding-specific recommendations)
  * - actionTypeId: UUID of the action type (for materials, dosage)
  * - materialId: UUID of the material (for dosage)
  *
  * Schema:
  * - crop_findings: crop_id -> finding_id (available findings per crop)
- * - recommend_material: crop_id + action_type_id + material_id -> unit_type_id + dosage
+ * - recommend_material: crop_id + finding_id + action_type_id + material_id -> unit_type_id + dosage
+ *   (finding_id is optional - NULL means crop-level default)
  */
 export async function GET(request: Request) {
   try {
@@ -22,6 +24,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const type = searchParams.get('type');
     const cropId = searchParams.get('cropId');
+    const findingId = searchParams.get('findingId');
     const actionTypeId = searchParams.get('actionTypeId');
     const materialId = searchParams.get('materialId');
 
@@ -49,7 +52,7 @@ export async function GET(request: Request) {
       }
 
       case 'action_types': {
-        // Get distinct action types available for a specific crop via recommend_material
+        // Get distinct action types available for a specific crop (and optionally finding) via recommend_material
         if (!cropId) {
           return NextResponse.json(
             { error: 'cropId is required for action_types' },
@@ -57,10 +60,31 @@ export async function GET(request: Request) {
           );
         }
 
-        const { data, error } = await (supabase
+        // First try finding-specific recommendations
+        let query = (supabase
           .from('recommend_material') as any)
           .select('action_type_id, action_types(*)')
           .eq('crop_id', cropId);
+
+        if (findingId) {
+          query = query.eq('finding_id', findingId);
+        } else {
+          query = query.is('finding_id', null);
+        }
+
+        let { data, error } = await query;
+
+        // If no finding-specific results and findingId was provided, fall back to crop-level
+        if (findingId && (!data || data.length === 0)) {
+          const fallbackResult = await (supabase
+            .from('recommend_material') as any)
+            .select('action_type_id, action_types(*)')
+            .eq('crop_id', cropId)
+            .is('finding_id', null);
+
+          data = fallbackResult.data;
+          error = fallbackResult.error;
+        }
 
         if (error) throw error;
 
@@ -76,7 +100,7 @@ export async function GET(request: Request) {
       }
 
       case 'materials': {
-        // Get materials available for a specific crop + action_type via recommend_material
+        // Get materials available for a specific crop + action_type (and optionally finding) via recommend_material
         if (!cropId || !actionTypeId) {
           return NextResponse.json(
             { error: 'cropId and actionTypeId are required for materials' },
@@ -84,11 +108,32 @@ export async function GET(request: Request) {
           );
         }
 
-        const { data, error } = await (supabase
+        let query = (supabase
           .from('recommend_material') as any)
           .select('material_id, materials(*)')
           .eq('crop_id', cropId)
           .eq('action_type_id', actionTypeId);
+
+        if (findingId) {
+          query = query.eq('finding_id', findingId);
+        } else {
+          query = query.is('finding_id', null);
+        }
+
+        let { data, error } = await query;
+
+        // Fallback to crop-level if no finding-specific results
+        if (findingId && (!data || data.length === 0)) {
+          const fallbackResult = await (supabase
+            .from('recommend_material') as any)
+            .select('material_id, materials(*)')
+            .eq('crop_id', cropId)
+            .eq('action_type_id', actionTypeId)
+            .is('finding_id', null);
+
+          data = fallbackResult.data;
+          error = fallbackResult.error;
+        }
 
         if (error) throw error;
 
@@ -112,13 +157,35 @@ export async function GET(request: Request) {
           );
         }
 
-        const { data, error } = await (supabase
+        let query = (supabase
           .from('recommend_material') as any)
           .select('dosage, unit_type_id, unit_types(*)')
           .eq('crop_id', cropId)
           .eq('action_type_id', actionTypeId)
-          .eq('material_id', materialId)
-          .maybeSingle();
+          .eq('material_id', materialId);
+
+        if (findingId) {
+          query = query.eq('finding_id', findingId);
+        } else {
+          query = query.is('finding_id', null);
+        }
+
+        let { data, error } = await query.maybeSingle();
+
+        // Fallback to crop-level if no finding-specific result
+        if (findingId && !data) {
+          const fallbackResult = await (supabase
+            .from('recommend_material') as any)
+            .select('dosage, unit_type_id, unit_types(*)')
+            .eq('crop_id', cropId)
+            .eq('action_type_id', actionTypeId)
+            .eq('material_id', materialId)
+            .is('finding_id', null)
+            .maybeSingle();
+
+          data = fallbackResult.data;
+          error = fallbackResult.error;
+        }
 
         if (error) throw error;
 

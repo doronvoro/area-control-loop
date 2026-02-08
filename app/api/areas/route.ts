@@ -50,7 +50,7 @@ export async function PUT(request: Request) {
     }
 
     const body = await request.json();
-    const { id, name, description, crop_id } = body;
+    const { id, name, description, crop_id, size, size_unit_type } = body;
 
     if (!id || !name) {
       return NextResponse.json(
@@ -67,6 +67,8 @@ export async function PUT(request: Request) {
         name,
         description: description || null,
         crop_id: crop_id || null,
+        size: size ?? null,
+        size_unit_type: size_unit_type || null,
         updated_at: new Date().toISOString(),
       })
       .eq('id', id)
@@ -95,7 +97,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { name, description, customer_id, crop_id } = body;
+    const { name, description, customer_id, crop_id, size, size_unit_type } = body;
 
     if (!name) {
       return NextResponse.json(
@@ -114,6 +116,8 @@ export async function POST(request: Request) {
         name,
         description: description || null,
         crop_id: crop_id || null,
+        size: size ?? null,
+        size_unit_type: size_unit_type || null,
       })
       .select()
       .single();

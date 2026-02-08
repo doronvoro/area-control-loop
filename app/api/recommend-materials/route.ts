@@ -4,32 +4,40 @@ import { requireAuth } from '@/lib/auth';
 import { hasPermission } from '@/lib/permissions';
 
 // GET - Fetch recommendations
-// Query params: cropId, actionTypeId, materialId
+// Query params: cropId, findingId, actionTypeId, materialId
 export async function GET(request: Request) {
   try {
     await requireAuth();
     const { searchParams } = new URL(request.url);
     const cropId = searchParams.get('cropId');
+    const findingId = searchParams.get('findingId');
     const actionTypeId = searchParams.get('actionTypeId');
     const materialId = searchParams.get('materialId');
 
     const supabase = await createClient();
     let query = supabase
       .from('recommend_material')
-      .select('*, crops(*), action_types(*), materials(*), unit_types(*)');
+      .select('*, crops(*), findings(*), action_types(*), materials(*), unit_types(*)');
 
     if (cropId) query = query.eq('crop_id', cropId);
+    if (findingId) {
+      if (findingId === 'null') {
+        query = query.is('finding_id', null);
+      } else {
+        query = query.eq('finding_id', findingId);
+      }
+    }
     if (actionTypeId) query = query.eq('action_type_id', actionTypeId);
     if (materialId) query = query.eq('material_id', materialId);
 
-    const { data, error } = await query.order('crop_id').order('action_type_id').order('material_id');
+    const { data, error } = await query.order('crop_id').order('finding_id').order('action_type_id').order('material_id');
 
     if (error) throw error;
 
-    // Group by key (crop_id, action_type_id, material_id)
+    // Group by key (crop_id, finding_id, action_type_id, material_id)
     const grouped: Record<string, any[]> = {};
     (data || []).forEach((item: any) => {
-      const key = `${item.crop_id}_${item.action_type_id}_${item.material_id}`;
+      const key = `${item.crop_id}_${item.finding_id || 'null'}_${item.action_type_id}_${item.material_id}`;
       if (!grouped[key]) {
         grouped[key] = [];
       }
@@ -39,6 +47,7 @@ export async function GET(request: Request) {
         unit_type: item.unit_types,
         dosage: item.dosage,
         crop: item.crops,
+        finding: item.findings,
         action_type: item.action_types,
         material: item.materials,
       });
@@ -46,20 +55,23 @@ export async function GET(request: Request) {
 
     // Format response - need to get the actual data from the first item
     const result = Object.entries(grouped).map(([key, values]) => {
-      const [cropId, actionTypeId, materialId] = key.split('_');
+      const [cropId, findingId, actionTypeId, materialId] = key.split('_');
       // Get the full item data from the original data array
       const firstItem = (data || []).find(
         (item: any) =>
           item.crop_id === cropId &&
+          (item.finding_id || 'null') === findingId &&
           item.action_type_id === actionTypeId &&
           item.material_id === materialId
       ) as any;
       return {
         key: {
           crop_id: cropId,
+          finding_id: findingId === 'null' ? null : findingId,
           action_type_id: actionTypeId,
           material_id: materialId,
           crop: firstItem?.crops || null,
+          finding: firstItem?.findings || null,
           action_type: firstItem?.action_types || null,
           material: firstItem?.materials || null,
         },
@@ -82,7 +94,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     await requireAuth();
-    
+
     const canManage = await hasPermission('create_area'); // Using create_area as proxy for admin
     if (!canManage) {
       return NextResponse.json(
@@ -92,7 +104,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { crop_id, action_type_id, material_id, dosages } = body;
+    const { crop_id, finding_id, action_type_id, material_id, dosages } = body;
 
     if (!crop_id || !action_type_id || !material_id || !dosages || !Array.isArray(dosages)) {
       return NextResponse.json(
@@ -104,6 +116,7 @@ export async function POST(request: Request) {
     const supabase = await createClient();
     const recommendations = dosages.map((d: any) => ({
       crop_id,
+      finding_id: finding_id || null,
       action_type_id,
       material_id,
       unit_type_id: d.unit_type_id,
@@ -127,7 +140,7 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     await requireAuth();
-    
+
     const canManage = await hasPermission('update_area');
     if (!canManage) {
       return NextResponse.json(
@@ -170,7 +183,7 @@ export async function PUT(request: Request) {
 export async function DELETE(request: Request) {
   try {
     await requireAuth();
-    
+
     const canManage = await hasPermission('delete_area');
     if (!canManage) {
       return NextResponse.json(
@@ -181,7 +194,7 @@ export async function DELETE(request: Request) {
 
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
-    const key = searchParams.get('key'); // Delete all for a key: crop_id_action_type_id_material_id
+    const key = searchParams.get('key'); // Delete all for a key: crop_id_finding_id_action_type_id_material_id
 
     if (!id && !key) {
       return NextResponse.json(
@@ -197,12 +210,21 @@ export async function DELETE(request: Request) {
       const { error } = await query.delete().eq('id', id);
       if (error) throw error;
     } else if (key) {
-      const [crop_id, action_type_id, material_id] = key.split('_');
-      const { error } = await query
+      const [crop_id, finding_id, action_type_id, material_id] = key.split('_');
+      let deleteQuery = query
         .delete()
         .eq('crop_id', crop_id)
         .eq('action_type_id', action_type_id)
         .eq('material_id', material_id);
+
+      // Handle finding_id (can be 'null' string for NULL values)
+      if (finding_id === 'null') {
+        deleteQuery = deleteQuery.is('finding_id', null);
+      } else {
+        deleteQuery = deleteQuery.eq('finding_id', finding_id);
+      }
+
+      const { error } = await deleteQuery;
       if (error) throw error;
     }
 

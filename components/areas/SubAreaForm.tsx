@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -30,6 +30,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { showToast } from '@/lib/toast';
+import { SIZE_UNIT_TYPES } from '@/types/database';
 
 const subAreaSchema = z.object({
   name: z.string().min(1, 'שם התת-שטח נדרש'),
@@ -38,6 +39,8 @@ const subAreaSchema = z.object({
   parent_sub_area_id: z.string().optional(),
   level: z.number().min(1).optional(),
   crop_id: z.string().optional(),
+  size: z.string().optional(),
+  size_unit_type: z.string().optional(),
 });
 
 type SubAreaFormData = z.infer<typeof subAreaSchema>;
@@ -58,6 +61,8 @@ interface SubAreaFormProps {
     level?: number;
     area_id: string;
     crop_id?: string | null;
+    size?: number | null;
+    size_unit_type?: string | null;
   } | null;
   areaId: string;
   subAreas?: Array<{ id: string; name: string; display?: string }>;
@@ -90,6 +95,8 @@ export function SubAreaForm({
       parent_sub_area_id: subArea?.parent_sub_area_id || createSubArea?.parentId || '',
       level: subArea?.level || 1,
       crop_id: subArea?.crop_id || '',
+      size: subArea?.size?.toString() || '',
+      size_unit_type: subArea?.size_unit_type || 'dunam',
     },
   });
 
@@ -114,6 +121,8 @@ export function SubAreaForm({
           ...data,
           parent_sub_area_id: data.parent_sub_area_id || null,
           crop_id: data.crop_id || null,
+          size: data.size ? parseFloat(data.size) : null,
+          size_unit_type: data.size_unit_type || null,
         }),
       });
 
@@ -183,6 +192,55 @@ export function SubAreaForm({
                     <FormControl>
                       <Input {...field} placeholder="שורות (אופציונלי)" />
                     </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="size"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>גודל</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        type="number"
+                        step="0.01"
+                        placeholder="גודל התת-שטח (אופציונלי)"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="size_unit_type"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>יחידת מידה</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value || 'dunam'}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="בחר יחידה" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {SIZE_UNIT_TYPES.map((unitType) => (
+                          <SelectItem key={unitType.name} value={unitType.name}>
+                            {unitType.description}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}

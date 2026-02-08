@@ -35,6 +35,7 @@ const dosageSchema = z.object({
 
 const recommendationSchema = z.object({
   crop_id: z.string().min(1, 'גידול נדרש'),
+  finding_id: z.string().optional(),
   action_type_id: z.string().min(1, 'סוג פעולה נדרש'),
   material_id: z.string().min(1, 'חומר נדרש'),
   dosages: z.array(dosageSchema).min(1, 'נדרש לפחות מינון אחד'),
@@ -45,9 +46,11 @@ type RecommendationFormData = z.infer<typeof recommendationSchema>;
 interface Recommendation {
   key: {
     crop_id: string;
+    finding_id: string | null;
     action_type_id: string;
     material_id: string;
     crop?: { id: string; name: string; description?: string };
+    finding?: { id: string; name: string; description?: string };
     action_type?: { id: string; name: string; description?: string };
     material?: { id: string; name: string; description?: string };
   };
@@ -62,6 +65,8 @@ interface Recommendation {
 export function RecommendMaterialsManager() {
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [crops, setCrops] = useState<any[]>([]);
+  const [findings, setFindings] = useState<any[]>([]);
+  const [cropFindings, setCropFindings] = useState<any[]>([]);
   const [actionTypes, setActionTypes] = useState<any[]>([]);
   const [materials, setMaterials] = useState<any[]>([]);
   const [unitTypes, setUnitTypes] = useState<any[]>([]);
@@ -72,6 +77,7 @@ export function RecommendMaterialsManager() {
 
   // Filter state
   const [filterCropId, setFilterCropId] = useState<string>('');
+  const [filterFindingId, setFilterFindingId] = useState<string>('');
   const [filterActionTypeId, setFilterActionTypeId] = useState<string>('');
   const [filterMaterialId, setFilterMaterialId] = useState<string>('');
 
@@ -79,6 +85,7 @@ export function RecommendMaterialsManager() {
     resolver: zodResolver(recommendationSchema),
     defaultValues: {
       crop_id: '',
+      finding_id: '',
       action_type_id: '',
       material_id: '',
       dosages: [{ unit_type_id: '', dosage: '' }],
@@ -97,9 +104,10 @@ export function RecommendMaterialsManager() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [recRes, cropsRes, actionTypesRes, materialsRes, unitTypesRes] = await Promise.all([
+      const [recRes, cropsRes, findingsRes, actionTypesRes, materialsRes, unitTypesRes] = await Promise.all([
         fetch('/api/recommend-materials'),
         fetch('/api/crops'),
+        fetch('/api/findings'),
         fetch('/api/action-types'),
         fetch('/api/materials'),
         fetch('/api/unit-types'),
@@ -113,6 +121,11 @@ export function RecommendMaterialsManager() {
       if (cropsRes.ok) {
         const cropsData = await cropsRes.json();
         setCrops(cropsData);
+      }
+
+      if (findingsRes.ok) {
+        const findingsData = await findingsRes.json();
+        setFindings(findingsData);
       }
 
       if (actionTypesRes.ok) {
@@ -136,15 +149,43 @@ export function RecommendMaterialsManager() {
     }
   };
 
-  const handleOpenDialog = (key?: string) => {
+  const fetchCropFindings = async (cropId: string) => {
+    if (!cropId) {
+      setCropFindings([]);
+      return;
+    }
+    try {
+      const res = await fetch(`/api/cascade?type=findings&cropId=${cropId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setCropFindings(data);
+      }
+    } catch (err) {
+      console.error('Error fetching crop findings:', err);
+      setCropFindings([]);
+    }
+  };
+
+  const handleCropChange = async (cropId: string) => {
+    form.setValue('crop_id', cropId);
+    form.setValue('finding_id', '');
+    await fetchCropFindings(cropId);
+  };
+
+  const handleOpenDialog = async (key?: string) => {
     if (key) {
       const rec = recommendations.find(
-        (r) => `${r.key.crop_id}_${r.key.action_type_id}_${r.key.material_id}` === key
+        (r) => `${r.key.crop_id}_${r.key.finding_id || 'null'}_${r.key.action_type_id}_${r.key.material_id}` === key
       );
       if (rec) {
         setEditingKey(key);
+        // Fetch crop findings for editing
+        if (rec.key.crop_id) {
+          await fetchCropFindings(rec.key.crop_id);
+        }
         form.reset({
           crop_id: rec.key.crop_id,
+          finding_id: rec.key.finding_id || '',
           action_type_id: rec.key.action_type_id,
           material_id: rec.key.material_id,
           dosages: rec.values.map((v) => ({
@@ -155,8 +196,10 @@ export function RecommendMaterialsManager() {
       }
     } else {
       setEditingKey(null);
+      setCropFindings([]);
       form.reset({
         crop_id: '',
+        finding_id: '',
         action_type_id: '',
         material_id: '',
         dosages: [{ unit_type_id: '', dosage: '' }],
@@ -168,6 +211,7 @@ export function RecommendMaterialsManager() {
   const handleCloseDialog = () => {
     setDialogOpen(false);
     setEditingKey(null);
+    setCropFindings([]);
     form.reset();
   };
 
@@ -181,7 +225,6 @@ export function RecommendMaterialsManager() {
 
       if (editingKey) {
         // Delete old and create new
-        const keyParts = editingKey.split('_');
         await fetch(`/api/recommend-materials?key=${editingKey}`, {
           method: 'DELETE',
         });
@@ -192,6 +235,7 @@ export function RecommendMaterialsManager() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           crop_id: data.crop_id,
+          finding_id: data.finding_id || null,
           action_type_id: data.action_type_id,
           material_id: data.material_id,
           dosages,
@@ -232,15 +276,20 @@ export function RecommendMaterialsManager() {
   // Filter recommendations
   const filteredRecommendations = recommendations.filter((rec) => {
     if (filterCropId && rec.key.crop_id !== filterCropId) return false;
+    if (filterFindingId) {
+      if (filterFindingId === '__null__' && rec.key.finding_id !== null) return false;
+      if (filterFindingId !== '__null__' && rec.key.finding_id !== filterFindingId) return false;
+    }
     if (filterActionTypeId && rec.key.action_type_id !== filterActionTypeId) return false;
     if (filterMaterialId && rec.key.material_id !== filterMaterialId) return false;
     return true;
   });
 
-  const hasActiveFilters = filterCropId || filterActionTypeId || filterMaterialId;
+  const hasActiveFilters = filterCropId || filterFindingId || filterActionTypeId || filterMaterialId;
 
   const clearFilters = () => {
     setFilterCropId('');
+    setFilterFindingId('');
     setFilterActionTypeId('');
     setFilterMaterialId('');
   };
@@ -277,7 +326,7 @@ export function RecommendMaterialsManager() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
               <Label className="text-sm text-muted-foreground">גידול</Label>
               <Select
@@ -292,6 +341,27 @@ export function RecommendMaterialsManager() {
                   {crops.map((crop) => (
                     <SelectItem key={crop.id} value={crop.id}>
                       {crop.description || crop.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label className="text-sm text-muted-foreground">ממצא</Label>
+              <Select
+                value={filterFindingId || '__all__'}
+                onValueChange={(value) => setFilterFindingId(value === '__all__' ? '' : value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="כל הממצאים" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">כל הממצאים</SelectItem>
+                  <SelectItem value="__null__">ברירת מחדל (ללא ממצא)</SelectItem>
+                  {findings.map((finding) => (
+                    <SelectItem key={finding.id} value={finding.id}>
+                      {finding.description || finding.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -355,14 +425,17 @@ export function RecommendMaterialsManager() {
 
       <div className="grid gap-4">
         {filteredRecommendations.map((rec) => {
-          const key = `${rec.key.crop_id}_${rec.key.action_type_id}_${rec.key.material_id}`;
+          const key = `${rec.key.crop_id}_${rec.key.finding_id || 'null'}_${rec.key.action_type_id}_${rec.key.material_id}`;
           return (
             <Card key={key}>
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle>
+                  <CardTitle className="text-base">
                     {rec.key.crop?.name || 'גידול לא ידוע'} |{' '}
-                    {rec.key.action_type?.description || rec.key.action_type?.name || 'סוג פעולה לא ידוע'} |{' '}
+                    <span className={rec.key.finding ? '' : 'text-muted-foreground'}>
+                      {rec.key.finding?.description || rec.key.finding?.name || 'ברירת מחדל'}
+                    </span>{' '}
+                    | {rec.key.action_type?.description || rec.key.action_type?.name || 'סוג פעולה לא ידוע'} |{' '}
                     {rec.key.material?.name || 'חומר לא ידוע'}
                   </CardTitle>
                   <div className="flex gap-2">
@@ -420,17 +493,17 @@ export function RecommendMaterialsManager() {
               {editingKey ? 'עריכת המלצה' : 'המלצה חדשה'}
             </DialogTitle>
             <DialogDescription>
-              בחר גידול, סוג פעולה וחומר, והוסף מינונים מומלצים
+              בחר גידול, ממצא (אופציונלי), סוג פעולה וחומר, והוסף מינונים מומלצים
             </DialogDescription>
           </DialogHeader>
 
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>גידול</Label>
                 <Select
                   value={form.watch('crop_id')}
-                  onValueChange={(value) => form.setValue('crop_id', value)}
+                  onValueChange={handleCropChange}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="בחר גידול" />
@@ -450,6 +523,32 @@ export function RecommendMaterialsManager() {
                 )}
               </div>
 
+              <div>
+                <Label>ממצא (אופציונלי)</Label>
+                <Select
+                  value={form.watch('finding_id') || '__null__'}
+                  onValueChange={(value) => form.setValue('finding_id', value === '__null__' ? '' : value)}
+                  disabled={!form.watch('crop_id')}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="ברירת מחדל לכל הגידול" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__null__">ברירת מחדל לכל הגידול</SelectItem>
+                    {cropFindings.map((finding) => (
+                      <SelectItem key={finding.id} value={finding.id}>
+                        {finding.description || finding.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1">
+                  השאר ריק להמלצת ברירת מחדל לגידול
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>סוג פעולה</Label>
                 <Select

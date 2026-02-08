@@ -31,12 +31,15 @@ import {
 } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { SIZE_UNIT_TYPES } from '@/types/database';
 
 const areaSchema = z.object({
   name: z.string().min(1, 'שם השטח נדרש'),
   description: z.string().optional(),
   customer_id: z.string().optional(),
   crop_id: z.string().optional(),
+  size: z.string().optional(),
+  size_unit_type: z.string().optional(),
 });
 
 type AreaFormData = z.infer<typeof areaSchema>;
@@ -58,6 +61,8 @@ interface AreaFormProps {
     name: string;
     description?: string | null;
     crop_id?: string | null;
+    size?: number | null;
+    size_unit_type?: string | null;
   } | null;
   customerId?: string | null;
   customers?: Customer[];
@@ -82,6 +87,8 @@ export function AreaForm({ area, customerId, customers = [], crops = [], isAdmin
       description: area?.description || '',
       customer_id: customerId || '',
       crop_id: area?.crop_id || '',
+      size: area?.size?.toString() || '',
+      size_unit_type: area?.size_unit_type || 'dunam',
     },
   });
 
@@ -93,6 +100,8 @@ export function AreaForm({ area, customerId, customers = [], crops = [], isAdmin
         description: area?.description || '',
         customer_id: customerId || '',
         crop_id: area?.crop_id || '',
+        size: area?.size?.toString() || '',
+        size_unit_type: area?.size_unit_type || 'dunam',
       });
     }
   }, [open, area, customerId, form]);
@@ -122,6 +131,8 @@ export function AreaForm({ area, customerId, customers = [], crops = [], isAdmin
           name: data.name,
           description: data.description,
           crop_id: data.crop_id || null,
+          size: data.size ? parseFloat(data.size) : null,
+          size_unit_type: data.size_unit_type || null,
           ...(selectedCustomerId && !area ? { customer_id: selectedCustomerId } : {}),
         }),
       });
@@ -142,13 +153,6 @@ export function AreaForm({ area, customerId, customers = [], crops = [], isAdmin
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleDelete = async () => {
-    if (!area) return;
-    
-    // Delete will be handled by parent component with confirmation dialog
-    // This function is kept for consistency but won't be called directly
   };
 
   return (
@@ -250,6 +254,55 @@ export function AreaForm({ area, customerId, customers = [], crops = [], isAdmin
                 )}
               />
             )}
+
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="size"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>גודל</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        type="number"
+                        step="0.01"
+                        placeholder="גודל השטח (אופציונלי)"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="size_unit_type"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>יחידת מידה</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value || 'dunam'}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="בחר יחידה" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {SIZE_UNIT_TYPES.map((unitType) => (
+                          <SelectItem key={unitType.name} value={unitType.name}>
+                            {unitType.description}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
 
             {error && (
               <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-md">

@@ -89,7 +89,7 @@ export async function PUT(request: Request) {
     }
 
     const body = await request.json();
-    const { id, name, variety, rows, parent_sub_area_id, level, crop_id } = body;
+    const { id, name, variety, rows, parent_sub_area_id, level, crop_id, size, size_unit_type } = body;
 
     if (!id || !name) {
       return NextResponse.json(
@@ -134,6 +134,14 @@ export async function PUT(request: Request) {
       updateData.crop_id = crop_id || null;
     }
 
+    if (size !== undefined) {
+      updateData.size = size ?? null;
+    }
+
+    if (size_unit_type !== undefined) {
+      updateData.size_unit_type = size_unit_type || null;
+    }
+
     // Use admin client to bypass RLS
     const { data, error } = await (adminClient.from('sub_areas') as any)
       .update(updateData)
@@ -163,7 +171,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { area_id, name, variety, rows, parent_sub_area_id, level, crop_id } = body;
+    const { area_id, name, variety, rows, parent_sub_area_id, level, crop_id, size, size_unit_type } = body;
 
     if (!area_id || !name) {
       return NextResponse.json(
@@ -219,6 +227,8 @@ export async function POST(request: Request) {
       level: calculatedLevel,
       display,
       crop_id: crop_id || null,
+      size: size ?? null,
+      size_unit_type: size_unit_type || null,
     };
 
     // Use admin client to bypass RLS
