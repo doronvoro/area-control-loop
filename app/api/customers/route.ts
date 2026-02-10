@@ -1,30 +1,36 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth';
+import { requireAuth, getCurrentCustomer } from '@/lib/auth';
 import { hasPermission, hasRole } from '@/lib/permissions';
 
 export async function GET(request: Request) {
   try {
     await requireAuth();
 
-    // Only admins can list all customers
     const isAdmin = await hasRole('admin');
-    if (!isAdmin) {
-      return NextResponse.json(
-        { error: 'אין הרשאה לצפות בלקוחות' },
-        { status: 403 }
-      );
+
+    // Admins can list all customers
+    if (isAdmin) {
+      const supabase = await createClient();
+      const { data, error } = await supabase
+        .from('customers')
+        .select('*')
+        .order('name');
+
+      if (error) throw error;
+      return NextResponse.json(data);
     }
 
-    const supabase = await createClient();
-    const { data, error } = await supabase
-      .from('customers')
-      .select('*')
-      .order('name');
+    // Customer owners can see their own customer
+    const customer = await getCurrentCustomer();
+    if (customer) {
+      return NextResponse.json([customer]);
+    }
 
-    if (error) throw error;
-
-    return NextResponse.json(data);
+    return NextResponse.json(
+      { error: 'אין הרשאה לצפות בלקוחות' },
+      { status: 403 }
+    );
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

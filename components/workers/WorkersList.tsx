@@ -108,22 +108,26 @@ export function WorkersList({
   return (
     <>
       <div className="mb-6 flex items-center justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-2">
-          <label className="text-sm font-medium">סנן לפי לקוח:</label>
-          <Select value={filterCustomerId} onValueChange={setFilterCustomerId}>
-            <SelectTrigger className="w-[200px]">
-              <SelectValue placeholder="כל הלקוחות" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">כל הלקוחות</SelectItem>
-              {customers.map((customer) => (
-                <SelectItem key={customer.id} value={customer.id}>
-                  {customer.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        {customers.length > 1 ? (
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium">סנן לפי לקוח:</label>
+            <Select value={filterCustomerId} onValueChange={setFilterCustomerId}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="כל הלקוחות" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">כל הלקוחות</SelectItem>
+                {customers.map((customer) => (
+                  <SelectItem key={customer.id} value={customer.id}>
+                    {customer.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : (
+          <div />
+        )}
 
         {canCreate && (
           <Button onClick={handleCreateWorker}>

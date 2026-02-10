@@ -17,9 +17,12 @@ const menuItems = [
   { href: '/reports', label: 'דוחות' },
 ];
 
-const adminMenuItems = [
+const customerOwnerMenuItems = [
   { href: '/admin/workers', label: 'ניהול עובדים' },
   { href: '/admin/areas-management', label: 'ניהול שטחים' },
+];
+
+const adminOnlyMenuItems = [
   { href: '/admin/crops', label: 'ניהול גידולים' },
   { href: '/admin/recommend-materials', label: 'המלצות חומרים' },
   { href: '/admin/roles', label: 'תפקידים והרשאות' },
@@ -28,6 +31,7 @@ const adminMenuItems = [
 export function Navbar() {
   const [open, setOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isCustomerOwner, setIsCustomerOwner] = useState(false);
   const [userName, setUserName] = useState<string>('');
   const [userRole, setUserRole] = useState<string>('');
   const [mounted, setMounted] = useState(false);
@@ -48,6 +52,7 @@ export function Navbar() {
           setUserName(data.name || '');
           setUserRole(data.role || '');
           setIsAdmin(data.isAdmin || false);
+          setIsCustomerOwner(data.isCustomerOwner || false);
         }
       } catch {
         // Silently handle errors
@@ -62,7 +67,12 @@ export function Navbar() {
     router.refresh();
   };
 
-  const allMenuItems = isAdmin ? [...menuItems, ...adminMenuItems] : menuItems;
+  const managementItems = isAdmin
+    ? [...customerOwnerMenuItems, ...adminOnlyMenuItems]
+    : isCustomerOwner
+      ? customerOwnerMenuItems
+      : [];
+  const allMenuItems = [...menuItems, ...managementItems];
 
   return (
     <nav dir={dir} className="border-b bg-background">

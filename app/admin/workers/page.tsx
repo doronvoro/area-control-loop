@@ -7,9 +7,12 @@ import { WorkersPageContent } from '@/components/workers/WorkersPageContent';
 export default async function WorkersPage() {
   await requireAuth();
 
-  // Only admins can access this page
-  const isAdmin = await hasRole('admin');
-  if (!isAdmin) {
+  // Admins and customer owners can access this page
+  const [isAdmin, isCustomerOwner] = await Promise.all([
+    hasRole('admin'),
+    hasRole('customer_owner'),
+  ]);
+  if (!isAdmin && !isCustomerOwner) {
     redirect('/dashboard');
   }
 

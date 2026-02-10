@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -42,12 +41,17 @@ interface Crop {
   updated_at: string;
 }
 
+type SortField = 'name' | 'description';
+type SortDirection = 'asc' | 'desc';
+
 export function CropsManager() {
   const [crops, setCrops] = useState<Crop[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingCrop, setEditingCrop] = useState<Crop | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [sortField, setSortField] = useState<SortField>('name');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
   const form = useForm<CropFormData>({
     resolver: zodResolver(cropSchema),
@@ -60,6 +64,36 @@ export function CropsManager() {
   useEffect(() => {
     fetchCrops();
   }, []);
+
+  const sortedCrops = useMemo(() => {
+    return [...crops].sort((a, b) => {
+      const aValue = (a[sortField] || '').toLowerCase();
+      const bValue = (b[sortField] || '').toLowerCase();
+
+      if (sortDirection === 'asc') {
+        return aValue.localeCompare(bValue, 'he');
+      }
+      return bValue.localeCompare(aValue, 'he');
+    });
+  }, [crops, sortField, sortDirection]);
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const getSortIcon = (field: SortField) => {
+    if (sortField !== field) {
+      return <ArrowUpDown className="h-4 w-4 mr-2" />;
+    }
+    return sortDirection === 'asc'
+      ? <ArrowUp className="h-4 w-4 mr-2" />
+      : <ArrowDown className="h-4 w-4 mr-2" />;
+  };
 
   const fetchCrops = async () => {
     setLoading(true);
@@ -164,45 +198,68 @@ export function CropsManager() {
         </Button>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {crops.map((crop) => (
-          <Card key={crop.id}>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-lg">{crop.description || crop.name}</CardTitle>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleOpenDialog(crop)}
-                  >
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleDelete(crop.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            {crop.description && (
-              <CardContent>
-                <p className="text-sm text-muted-foreground">{crop.name}</p>
-              </CardContent>
+      <div className="rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-[100px]">פעולות</TableHead>
+              <TableHead>
+                <Button
+                  variant="ghost"
+                  onClick={() => handleSort('name')}
+                  className="h-8 p-0 font-semibold hover:bg-transparent"
+                >
+                  {getSortIcon('name')}
+                  שם (אנגלית)
+                </Button>
+              </TableHead>
+              <TableHead>
+                <Button
+                  variant="ghost"
+                  onClick={() => handleSort('description')}
+                  className="h-8 p-0 font-semibold hover:bg-transparent"
+                >
+                  {getSortIcon('description')}
+                  תיאור (עברית)
+                </Button>
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {sortedCrops.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={3} className="text-center py-8 text-muted-foreground">
+                  אין גידולים. לחץ על &quot;הוסף גידול חדש&quot; כדי להתחיל.
+                </TableCell>
+              </TableRow>
+            ) : (
+              sortedCrops.map((crop) => (
+                <TableRow key={crop.id}>
+                  <TableCell>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleOpenDialog(crop)}
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDelete(crop.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                  <TableCell className="font-medium">{crop.name}</TableCell>
+                  <TableCell>{crop.description || '-'}</TableCell>
+                </TableRow>
+              ))
             )}
-          </Card>
-        ))}
-
-        {crops.length === 0 && (
-          <Card className="col-span-full">
-            <CardContent className="py-8 text-center text-muted-foreground">
-              אין גידולים. לחץ על &quot;הוסף גידול חדש&quot; כדי להתחיל.
-            </CardContent>
-          </Card>
-        )}
+          </TableBody>
+        </Table>
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

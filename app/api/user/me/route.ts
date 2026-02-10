@@ -49,14 +49,16 @@ export async function GET() {
 
     const userRole = roleNames.length > 0 ? roleNames.join(', ') : 'ללא תפקיד';
 
-    // Check if admin
+    // Check roles
     const isAdmin = roles.some((ur: any) => ur.roles?.name === 'admin');
+    const isCustomerOwner = roles.some((ur: any) => ur.roles?.name === 'customer_owner');
 
     return NextResponse.json({
       name: displayName,
       email: user.email,
       role: userRole,
       isAdmin,
+      isCustomerOwner,
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
