@@ -20,11 +20,11 @@ const menuItems = [
 const customerOwnerMenuItems = [
   { href: '/admin/workers', label: 'ניהול עובדים' },
   { href: '/admin/areas-management', label: 'ניהול שטחים' },
+  { href: '/admin/crops', label: 'ניהול גידולים' },
+  { href: '/admin/recommend-materials', label: 'המלצות חומרים' },
 ];
 
 const adminOnlyMenuItems = [
-  { href: '/admin/crops', label: 'ניהול גידולים' },
-  { href: '/admin/recommend-materials', label: 'המלצות חומרים' },
   { href: '/admin/roles', label: 'תפקידים והרשאות' },
 ];
 

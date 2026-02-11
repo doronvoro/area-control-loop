@@ -7,9 +7,12 @@ import { RecommendMaterialsManager } from '@/components/admin/RecommendMaterials
 export default async function RecommendMaterialsPage() {
   await requireAuth();
   
-  // Check if user is admin
-  const isAdmin = await hasRole('admin');
-  if (!isAdmin) {
+  // Admins and customer owners can access this page
+  const [isAdmin, isCustomerOwner] = await Promise.all([
+    hasRole('admin'),
+    hasRole('customer_owner'),
+  ]);
+  if (!isAdmin && !isCustomerOwner) {
     redirect('/dashboard');
   }
 

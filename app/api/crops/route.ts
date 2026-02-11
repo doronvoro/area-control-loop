@@ -22,8 +22,11 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     await requireAuth();
-    const isAdmin = await hasRole('admin');
-    if (!isAdmin) {
+    const [isAdmin, isCustomerOwner] = await Promise.all([
+      hasRole('admin'),
+      hasRole('customer_owner'),
+    ]);
+    if (!isAdmin && !isCustomerOwner) {
       return NextResponse.json({ error: 'אין הרשאה' }, { status: 403 });
     }
 
@@ -56,8 +59,11 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     await requireAuth();
-    const isAdmin = await hasRole('admin');
-    if (!isAdmin) {
+    const [isAdmin, isCustomerOwner] = await Promise.all([
+      hasRole('admin'),
+      hasRole('customer_owner'),
+    ]);
+    if (!isAdmin && !isCustomerOwner) {
       return NextResponse.json({ error: 'אין הרשאה' }, { status: 403 });
     }
 
@@ -90,8 +96,11 @@ export async function PUT(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     await requireAuth();
-    const isAdmin = await hasRole('admin');
-    if (!isAdmin) {
+    const [isAdmin, isCustomerOwner] = await Promise.all([
+      hasRole('admin'),
+      hasRole('customer_owner'),
+    ]);
+    if (!isAdmin && !isCustomerOwner) {
       return NextResponse.json({ error: 'אין הרשאה' }, { status: 403 });
     }
 
