@@ -81,6 +81,9 @@ export function WorkerForm({
     },
   });
 
+  // Auto-select customer when there's only one
+  const singleCustomer = customers.length === 1 ? customers[0] : null;
+
   // Reset form when dialog opens/closes or worker changes
   useEffect(() => {
     if (open) {
@@ -88,12 +91,12 @@ export function WorkerForm({
         name: worker?.name || '',
         email: '',
         password: '',
-        customer_id: worker?.customer_id || '',
+        customer_id: worker?.customer_id || singleCustomer?.id || '',
         worker_type_id: worker?.type_id || '',
       });
       setError(null);
     }
-  }, [open, worker, form]);
+  }, [open, worker, form, singleCustomer?.id]);
 
   const onSubmit = async (data: WorkerFormData) => {
     // Validate email and password for new workers
@@ -218,30 +221,32 @@ export function WorkerForm({
                   )}
                 />
 
-                <FormField
-                  control={form.control}
-                  name="customer_id"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>לקוח</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="בחר לקוח" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {customers.map((customer) => (
-                            <SelectItem key={customer.id} value={customer.id}>
-                              {customer.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                {customers.length > 1 && (
+                  <FormField
+                    control={form.control}
+                    name="customer_id"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>לקוח</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="בחר לקוח" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {customers.map((customer) => (
+                              <SelectItem key={customer.id} value={customer.id}>
+                                {customer.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
               </>
             )}
 
