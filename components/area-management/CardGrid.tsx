@@ -15,6 +15,7 @@ interface CardGridProps {
   onCreate?: () => void;
   createLabel?: string;
   onItemClick?: (item: any) => void;
+  headerActions?: React.ReactNode;
 }
 
 export function CardGrid({
@@ -27,6 +28,7 @@ export function CardGrid({
   onCreate,
   createLabel = 'הוסף חדש',
   onItemClick,
+  headerActions,
 }: CardGridProps) {
   const canEdit = itemType === 'area' ? permissions.canUpdateArea : permissions.canUpdateSubArea;
   const canDelete = itemType === 'area' ? permissions.canDeleteArea : permissions.canDeleteSubArea;
@@ -43,7 +45,10 @@ export function CardGrid({
     <Card className="h-full flex flex-col">
       <CardHeader className="flex-shrink-0">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-xl">{title}</CardTitle>
+          <div className="flex items-center gap-2">
+            <CardTitle className="text-xl">{title}</CardTitle>
+            {headerActions}
+          </div>
           {onCreate && (
             <Button onClick={onCreate}>
               <Plus className="h-4 w-4 ml-2" />

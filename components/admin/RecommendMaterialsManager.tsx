@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Plus, Trash2, Edit, X, Filter, RotateCcw } from 'lucide-react';
+import { Plus, Trash2, Edit, X, Filter, RotateCcw, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -80,6 +80,26 @@ export function RecommendMaterialsManager() {
   const [filterFindingId, setFilterFindingId] = useState<string>('');
   const [filterActionTypeId, setFilterActionTypeId] = useState<string>('');
   const [filterMaterialId, setFilterMaterialId] = useState<string>('');
+
+  // Sort state
+  type SortField = 'crop' | 'finding' | 'action_type' | 'material';
+  type SortDirection = 'asc' | 'desc';
+  const [sortField, setSortField] = useState<SortField | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      if (sortDirection === 'asc') {
+        setSortDirection('desc');
+      } else {
+        setSortField(null);
+        setSortDirection('asc');
+      }
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
 
   const form = useForm<RecommendationFormData>({
     resolver: zodResolver(recommendationSchema),
@@ -423,66 +443,65 @@ export function RecommendMaterialsManager() {
         </Button>
       </div>
 
-      <div className="grid gap-4">
+      <div className="border rounded-lg overflow-hidden">
+        <div className="grid grid-cols-[1fr_1fr_1fr_1fr_1fr_auto] gap-4 p-3 bg-muted/50 border-b font-medium text-sm">
+          <div>גידול</div>
+          <div>ממצא</div>
+          <div>סוג פעולה</div>
+          <div>חומר</div>
+          <div>מינון</div>
+          <div>פעולות</div>
+        </div>
+
         {filteredRecommendations.map((rec) => {
           const key = `${rec.key.crop_id}_${rec.key.finding_id || 'null'}_${rec.key.action_type_id}_${rec.key.material_id}`;
           return (
-            <Card key={key}>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base">
-                    {rec.key.crop?.name || 'גידול לא ידוע'} |{' '}
-                    <span className={rec.key.finding ? '' : 'text-muted-foreground'}>
-                      {rec.key.finding?.description || rec.key.finding?.name || 'ברירת מחדל'}
-                    </span>{' '}
-                    | {rec.key.action_type?.description || rec.key.action_type?.name || 'סוג פעולה לא ידוע'} |{' '}
-                    {rec.key.material?.name || 'חומר לא ידוע'}
-                  </CardTitle>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleOpenDialog(key)}
-                    >
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleDelete(key)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+            <div
+              key={key}
+              className="grid grid-cols-[1fr_1fr_1fr_1fr_1fr_auto] gap-4 p-3 border-b last:border-b-0 items-center text-sm hover:bg-muted/30 transition-colors"
+            >
+              <div className="font-medium">{rec.key.crop?.name || 'גידול לא ידוע'}</div>
+              <div className={rec.key.finding ? '' : 'text-muted-foreground'}>
+                {rec.key.finding?.description || rec.key.finding?.name || 'ברירת מחדל'}
+              </div>
+              <div>{rec.key.action_type?.description || rec.key.action_type?.name || 'סוג פעולה לא ידוע'}</div>
+              <div>{rec.key.material?.name || 'חומר לא ידוע'}</div>
+              <div className="space-y-1">
+                {rec.values.map((value) => (
+                  <div key={value.id} className="text-sm">
+                    {value.unit_type?.description || value.unit_type?.name || 'יחידה לא ידוע'}:{' '}
+                    <strong>{value.dosage}</strong>
                   </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {rec.values.map((value) => (
-                    <div
-                      key={value.id}
-                      className="flex items-center justify-between p-2 border rounded-md"
-                    >
-                      <span>
-                        {value.unit_type?.description || value.unit_type?.name || 'יחידה לא ידוע'}:{' '}
-                        <strong>{value.dosage}</strong>
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+                ))}
+              </div>
+              <div className="flex gap-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => handleOpenDialog(key)}
+                >
+                  <Edit className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => handleDelete(key)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
           );
         })}
 
         {filteredRecommendations.length === 0 && (
-          <Card>
-            <CardContent className="py-8 text-center text-muted-foreground">
-              {hasActiveFilters
-                ? 'לא נמצאו המלצות התואמות לסינון. נסה לשנות את הסינון.'
-                : 'אין המלצות. לחץ על "הוסף המלצה חדשה" כדי להתחיל.'}
-            </CardContent>
-          </Card>
+          <div className="py-8 text-center text-muted-foreground">
+            {hasActiveFilters
+              ? 'לא נמצאו המלצות התואמות לסינון. נסה לשנות את הסינון.'
+              : 'אין המלצות. לחץ על "הוסף המלצה חדשה" כדי להתחיל.'}
+          </div>
         )}
       </div>
 

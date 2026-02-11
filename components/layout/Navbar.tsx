@@ -21,6 +21,7 @@ const customerOwnerMenuItems = [
   { href: '/admin/workers', label: 'ניהול עובדים' },
   { href: '/admin/areas-management', label: 'ניהול שטחים' },
   { href: '/admin/crops', label: 'ניהול גידולים' },
+  { href: '/admin/findings', label: 'ניהול ממצאים' },
   { href: '/admin/recommend-materials', label: 'המלצות חומרים' },
 ];
 

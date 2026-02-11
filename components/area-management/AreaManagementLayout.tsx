@@ -4,6 +4,8 @@ import { useState, useCallback } from 'react';
 import { HierarchyTree } from './HierarchyTree';
 import { DetailPanel } from './DetailPanel';
 import { CustomerForm } from '@/components/customers/CustomerForm';
+import { ConfirmationDialog } from '@/components/ui/confirmation-dialog';
+import { showToast } from '@/lib/toast';
 
 export interface Customer {
   id: string;
@@ -191,6 +193,34 @@ export function AreaManagementLayout({
     setCustomerFormOpen(true);
   }, []);
 
+  const handleEditCustomer = useCallback((customer: Customer) => {
+    setEditingCustomer(customer);
+    setCustomerFormOpen(true);
+  }, []);
+
+  const handleDeleteCustomer = useCallback(async (customer: Customer) => {
+    if (!confirm(`האם אתה בטוח שברצונך למחוק את הלקוח "${customer.name}"? פעולה זו תמחק גם את כל השטחים, העובדים והדוחות הקשורים.`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/customers?id=${customer.id}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        alert(errorData.error || 'שגיאה במחיקת הלקוח');
+        return;
+      }
+
+      setSelectedNode(null);
+      handleRefreshData();
+    } catch {
+      alert('שגיאה במחיקת הלקוח');
+    }
+  }, [handleRefreshData]);
+
   const handleCustomerFormSuccess = useCallback(() => {
     handleRefreshData();
   }, [handleRefreshData]);
@@ -224,6 +254,8 @@ export function AreaManagementLayout({
             permissions={permissions}
             onRefresh={handleRefreshData}
             onDrillDown={handleDrillDown}
+            onEditCustomer={permissions.canUpdateCustomer ? handleEditCustomer : undefined}
+            onDeleteCustomer={permissions.canDeleteCustomer ? handleDeleteCustomer : undefined}
           />
         </div>
       </div>

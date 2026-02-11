@@ -2,13 +2,14 @@
 
 import { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { CardGrid } from './CardGrid';
 import { ItemDetailView } from './ItemDetailView';
 import { AreaForm } from '@/components/areas/AreaForm';
 import { SubAreaForm } from '@/components/areas/SubAreaForm';
 import { ConfirmationDialog } from '@/components/ui/confirmation-dialog';
 import { showToast } from '@/lib/toast';
-import { Layers } from 'lucide-react';
+import { Layers, Pencil, Trash2 } from 'lucide-react';
 import type { TreeNode, Area, SubArea, Crop, Permissions, Customer } from './AreaManagementLayout';
 
 interface DetailPanelProps {
@@ -19,6 +20,8 @@ interface DetailPanelProps {
   permissions: Permissions;
   onRefresh: () => void;
   onDrillDown?: (node: TreeNode) => void;
+  onEditCustomer?: (customer: Customer) => void;
+  onDeleteCustomer?: (customer: Customer) => void;
 }
 
 export function DetailPanel({
@@ -29,6 +32,8 @@ export function DetailPanel({
   permissions,
   onRefresh,
   onDrillDown,
+  onEditCustomer,
+  onDeleteCustomer,
 }: DetailPanelProps) {
   const [editAreaOpen, setEditAreaOpen] = useState(false);
   const [editSubAreaOpen, setEditSubAreaOpen] = useState(false);
@@ -153,6 +158,8 @@ export function DetailPanel({
             type="customer"
             data={customer}
             permissions={permissions}
+            onEdit={permissions.canUpdateCustomer && onEditCustomer ? () => onEditCustomer(customer) : undefined}
+            onDelete={permissions.canDeleteCustomer && onDeleteCustomer ? () => onDeleteCustomer(customer) : undefined}
             onCreateChild={permissions.canCreateArea ? () => handleCreateArea(realId) : undefined}
             createChildLabel="הוסף שטח"
           />
@@ -187,6 +194,22 @@ export function DetailPanel({
             name: area.name,
             data: area,
           }) : undefined}
+          headerActions={
+            (permissions.canUpdateCustomer && onEditCustomer) || (permissions.canDeleteCustomer && onDeleteCustomer) ? (
+              <div className="flex gap-1">
+                {permissions.canUpdateCustomer && onEditCustomer && (
+                  <Button variant="ghost" size="sm" onClick={() => onEditCustomer(customer)} title="ערוך לקוח">
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                )}
+                {permissions.canDeleteCustomer && onDeleteCustomer && (
+                  <Button variant="ghost" size="sm" onClick={() => onDeleteCustomer(customer)} title="מחק לקוח">
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                )}
+              </div>
+            ) : undefined
+          }
         />
         {editAreaOpen && editingArea && (
           <AreaForm
