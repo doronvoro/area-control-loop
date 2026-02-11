@@ -13,8 +13,8 @@ export async function GET(
     const supabase = await createClient();
 
     // Fetch the main report area data
-    const { data: reportArea, error: reportError } = await supabase
-      .from('report_areas')
+    const { data: reportArea, error: reportError } = await (supabase
+      .from('report_areas') as any)
       .select(
         `id, name, description, status, created_at, report_number, area_type_id,
         area_type:report_area_types(name, display_name),
