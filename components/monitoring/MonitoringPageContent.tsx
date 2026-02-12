@@ -5,9 +5,7 @@ import { MonitoringForm } from './MonitoringForm';
 import { Loader2 } from 'lucide-react';
 
 export function MonitoringPageContent() {
-  const [customers, setCustomers] = useState<any[]>([]);
-  const [findings, setFindings] = useState<any[]>([]);
-  const [unitTypes, setUnitTypes] = useState<any[]>([]);
+  const [formData, setFormData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -17,36 +15,15 @@ export function MonitoringPageContent() {
         setLoading(true);
         setError(null);
 
-        const [customersRes, findingsRes, unitTypesRes] = await Promise.all([
-          fetch('/api/customers'),
-          fetch('/api/findings'),
-          fetch('/api/unit-types'),
-        ]);
+        const res = await fetch('/api/monitoring/form-data');
 
-        if (!customersRes.ok) {
-          const errorData = await customersRes.json();
-          throw new Error(errorData.error || 'שגיאה בטעינת הלקוחות');
+        if (!res.ok) {
+          const errorData = await res.json();
+          throw new Error(errorData.error || 'שגיאה בטעינת הנתונים');
         }
 
-        if (!findingsRes.ok) {
-          const errorData = await findingsRes.json();
-          throw new Error(errorData.error || 'שגיאה בטעינת הממצאים');
-        }
-
-        if (!unitTypesRes.ok) {
-          const errorData = await unitTypesRes.json();
-          throw new Error(errorData.error || 'שגיאה בטעינת סוגי היחידות');
-        }
-
-        const [customersData, findingsData, unitTypesData] = await Promise.all([
-          customersRes.json(),
-          findingsRes.json(),
-          unitTypesRes.json(),
-        ]);
-
-        setCustomers(customersData);
-        setFindings(findingsData);
-        setUnitTypes(unitTypesData);
+        const data = await res.json();
+        setFormData(data);
       } catch (err: any) {
         setError(err.message || 'שגיאה בטעינת הנתונים');
       } finally {
@@ -76,9 +53,13 @@ export function MonitoringPageContent() {
 
   return (
     <MonitoringForm
-      customers={customers}
-      findings={findings}
-      unitTypes={unitTypes}
+      isAdmin={formData.isAdmin}
+      customers={formData.customers}
+      initialInspectors={formData.initialInspectors}
+      initialAreas={formData.initialAreas}
+      findings={formData.findings}
+      unitTypes={formData.unitTypes}
+      customerIdForData={formData.customerIdForData}
     />
   );
 }

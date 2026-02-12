@@ -52,24 +52,12 @@ function parseDosage(value: string | number | null | undefined): number | null {
   return typeof value === 'string' ? parseFloat(value) : value;
 }
 
-async function getOrCreateReportArea(
+async function createReportArea(
   supabase: SupabaseClient,
   adminClient: SupabaseClient,
   areaId: string,
   workerId?: string
 ): Promise<string> {
-  // Try to find an existing monitoring report_area for this area
-  const { data: existingReportArea } = await supabase
-    .from('report_areas')
-    .select('id')
-    .eq('area_id', areaId)
-    .eq('area_type_id', AreaTypeId.MONITORING)
-    .maybeSingle();
-
-  if (existingReportArea) {
-    return existingReportArea.id;
-  }
-
   // Get area name for the new report_area
   const { data: areaData } = await supabase.from('areas').select('name').eq('id', areaId).single();
 
@@ -224,7 +212,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'At least one entry is required' }, { status: 400 });
       }
 
-      const reportAreaId = await getOrCreateReportArea(supabase, adminClient, area_id, effectiveWorkerId);
+      const reportAreaId = await createReportArea(supabase, adminClient, area_id, effectiveWorkerId);
 
       const results = [];
       for (const entry of entries) {
@@ -247,7 +235,7 @@ export async function POST(request: Request) {
     let finalAreaReportId = providedAreaReportId;
 
     if (!finalAreaReportId && area_id) {
-      finalAreaReportId = await getOrCreateReportArea(supabase, adminClient, area_id, worker_id);
+      finalAreaReportId = await createReportArea(supabase, adminClient, area_id, worker_id);
     }
 
     if (!finalAreaReportId) {

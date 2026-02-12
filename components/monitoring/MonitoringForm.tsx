@@ -45,31 +45,39 @@ const subAreaEntrySchema = z.object({
 const monitoringSchema = z.object({
   customer_id: z.string().min(1, 'נדרש לבחור לקוח'),
   inspector_id: z.string().min(1, 'נדרש לבחור פקח'),
-  area_id: z.string().min(1, 'נדרש לבחור אזור'),
+  area_id: z.string().min(1, 'נדרש לבחור שטח'),
   entries: z.array(subAreaEntrySchema).min(1, 'נדרשת לפחות רשומה אחת'),
 });
 
 type MonitoringFormData = z.infer<typeof monitoringSchema>;
 
 interface MonitoringFormProps {
+  isAdmin: boolean;
   customers: any[];
+  initialInspectors: any[];
+  initialAreas: any[];
   findings: any[];
   unitTypes: any[];
+  customerIdForData: string | null;
 }
 
 export function MonitoringForm({
+  isAdmin,
   customers,
+  initialInspectors,
+  initialAreas,
   findings,
   unitTypes,
+  customerIdForData,
 }: MonitoringFormProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const router = useRouter();
 
-  // Dynamic data states
-  const [inspectors, setInspectors] = useState<any[]>([]);
-  const [areas, setAreas] = useState<any[]>([]);
+  // Dynamic data states - pre-loaded for non-admin users
+  const [inspectors, setInspectors] = useState<any[]>(initialInspectors);
+  const [areas, setAreas] = useState<any[]>(initialAreas);
   const [subAreas, setSubAreas] = useState<any[]>([]);
 
   // Per-entry indexed state for cascade data
@@ -94,7 +102,7 @@ export function MonitoringForm({
   const form = useForm<MonitoringFormData>({
     resolver: zodResolver(monitoringSchema),
     defaultValues: {
-      customer_id: '',
+      customer_id: !isAdmin && customerIdForData ? customerIdForData : '',
       inspector_id: '',
       area_id: '',
       entries: [{
@@ -114,9 +122,9 @@ export function MonitoringForm({
   const watchedCustomerId = form.watch('customer_id');
   const watchedAreaId = form.watch('area_id');
 
-  // Fetch inspectors and areas when customer changes
+  // Fetch inspectors and areas when customer changes (admin only)
   useEffect(() => {
-    if (watchedCustomerId) {
+    if (isAdmin && watchedCustomerId) {
       fetchInspectorsAndAreas(watchedCustomerId);
       // Reset dependent fields
       form.setValue('inspector_id', '');
@@ -129,7 +137,7 @@ export function MonitoringForm({
       }]);
       setSubAreas([]);
       resetAllEntryState();
-    } else {
+    } else if (isAdmin) {
       setInspectors([]);
       setAreas([]);
     }
@@ -441,8 +449,15 @@ export function MonitoringForm({
 
       setSuccess(true);
       form.reset();
-      setInspectors([]);
-      setAreas([]);
+      if (!isAdmin && customerIdForData) {
+        // Restore customer_id and pre-loaded data for non-admin users
+        form.setValue('customer_id', customerIdForData);
+        setInspectors(initialInspectors);
+        setAreas(initialAreas);
+      } else {
+        setInspectors([]);
+        setAreas([]);
+      }
       setSubAreas([]);
       resetAllEntryState();
 
@@ -463,7 +478,7 @@ export function MonitoringForm({
     <Card className="max-w-4xl mx-auto">
       <CardHeader className="border-b bg-muted/50">
         <CardTitle className="text-2xl">טופס ניטור חדש</CardTitle>
-        <CardDescription>מלא את פרטי הניטור עבור האזור הנבחר</CardDescription>
+        <CardDescription>מלא את פרטי הניטור עבור השטח הנבחר</CardDescription>
       </CardHeader>
       <CardContent className="pt-6">
         <Form {...form}>
@@ -483,30 +498,33 @@ export function MonitoringForm({
             <div className="space-y-4 p-4 rounded-lg border bg-card">
               <h3 className="font-semibold text-lg border-b pb-2">פרטי לקוח ופקח</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="customer_id"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="font-medium">לקוח *</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger className="h-11">
-                            <SelectValue placeholder="בחר לקוח" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {customers.map((customer) => (
-                            <SelectItem key={customer.id} value={customer.id}>
-                              {customer.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                {/* Customer Selection - Admin only */}
+                {isAdmin && (
+                  <FormField
+                    control={form.control}
+                    name="customer_id"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="font-medium">לקוח *</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger className="h-11">
+                              <SelectValue placeholder="בחר לקוח" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {customers.map((customer) => (
+                              <SelectItem key={customer.id} value={customer.id}>
+                                {customer.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
 
                 <FormField
                   control={form.control}
@@ -546,14 +564,14 @@ export function MonitoringForm({
 
             {/* Section 2: Area Selection */}
             <div className="space-y-4 p-4 rounded-lg border bg-card">
-              <h3 className="font-semibold text-lg border-b pb-2">אזור</h3>
+              <h3 className="font-semibold text-lg border-b pb-2">שטח</h3>
               <FormField
                 control={form.control}
                 name="area_id"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel className="font-medium">
-                      אזור *
+                      שטח *
                       {loadingAreas && <LoadingSpinner />}
                     </FormLabel>
                     <Select
@@ -564,7 +582,7 @@ export function MonitoringForm({
                       <FormControl>
                         <SelectTrigger className="h-11">
                           <SelectValue placeholder={
-                            !watchedCustomerId ? 'בחר לקוח תחילה' : 'בחר אזור'
+                            !watchedCustomerId ? 'בחר לקוח תחילה' : 'בחר שטח'
                           } />
                         </SelectTrigger>
                       </FormControl>
