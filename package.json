@@ -17,7 +17,9 @@
     "create-test-users": "tsx scripts/create-test-users.ts",
     "reset-seed": "tsx scripts/reset-and-seed.ts",
     "apply-migration": "tsx scripts/apply-remote-migration.ts",
-    "clean-reports": "tsx scripts/clean-reports.ts"
+    "clean-reports": "tsx scripts/clean-reports.ts",
+    "seed-customer-areas": "tsx scripts/seed-customer-areas.ts",
+    "seed-recommend-materials": "tsx scripts/seed-recommend-materials.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
-import { requireAuth, getCurrentWorker } from '@/lib/auth';
+import { requireAuth, getCurrentWorker, getCurrentCustomer } from '@/lib/auth';
 import { hasRole } from '@/lib/permissions';
 
 export async function GET() {
@@ -10,6 +10,10 @@ export async function GET() {
     const supabase = await createClient();
     const isAdmin = await hasRole('admin');
     const currentWorker = (await getCurrentWorker()) as { id: string; customer_id: string } | null;
+    const currentCustomer = (await getCurrentCustomer()) as { id: string } | null;
+
+    // Determine customer_id from worker or customer owner
+    const customerIdForData = currentWorker?.customer_id || currentCustomer?.id || null;
 
     // Fetch common lookup data
     const [customersResult, findingsResult, actionTypesResult, unitTypesResult] = await Promise.all([
@@ -23,17 +27,26 @@ export async function GET() {
     let initialAreas: any[] = [];
     let initialWorkers: any[] = [];
 
-    if (!isAdmin && currentWorker?.customer_id) {
+    if (!isAdmin && customerIdForData) {
+      // Look up the action_worker type ID
+      const { data: actionWorkerType } = await supabase
+        .from('worker_types')
+        .select('id')
+        .eq('name', 'action_worker')
+        .single();
+
       const [areasRes, workersRes] = await Promise.all([
         supabase
           .from('customer_areas')
           .select('areas(*)')
-          .eq('customer_id', currentWorker.customer_id),
-        supabase
-          .from('workers')
-          .select('*, worker_types!inner(*)')
-          .eq('customer_id', currentWorker.customer_id)
-          .eq('worker_types.name', 'action_worker'),
+          .eq('customer_id', customerIdForData),
+        actionWorkerType
+          ? supabase
+              .from('workers')
+              .select('*, worker_types(*)')
+              .eq('customer_id', customerIdForData)
+              .eq('type_id', (actionWorkerType as any).id)
+          : Promise.resolve({ data: [] }),
       ]);
 
       initialAreas = (areasRes.data || []).map((ca: any) => ca.areas).filter(Boolean);

@@ -30,6 +30,14 @@ interface Treatment {
   action_type: { id: string; name: string } | null;
 }
 
+interface RecommendedTreatment {
+  id: string;
+  dosage: number;
+  action_type: { id: string; name: string } | null;
+  material: { id: string; name: string } | null;
+  unit_type: { id: string; name: string } | null;
+}
+
 interface ReportEntry {
   id: string;
   severity: ReportSeverity | null;
@@ -37,6 +45,7 @@ interface ReportEntry {
   sub_area: { id: string; name: string; display: string | null } | null;
   finding: { id: string; name: string; description: string | null } | null;
   treatments: Treatment[];
+  recommendedTreatments?: RecommendedTreatment[];
 }
 
 interface ReportDetail {
@@ -258,6 +267,35 @@ export function ReportDetailSheet({
                                   <div className="text-muted-foreground">
                                     זמן ביצוע:{' '}
                                     {new Date(treatment.action_time).toLocaleString('he-IL')}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Recommended Treatments from recommend_material */}
+                        {isMonitoring && entry.recommendedTreatments && entry.recommendedTreatments.length > 0 && (
+                          <div className="mt-3 space-y-2">
+                            <span className="text-xs font-medium text-muted-foreground">
+                              טיפולים מומלצים:
+                            </span>
+                            {entry.recommendedTreatments.map((rec) => (
+                              <div
+                                key={rec.id}
+                                className="bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-900 rounded-md p-2 text-xs space-y-1"
+                              >
+                                {rec.action_type && (
+                                  <div className="font-medium">
+                                    {rec.action_type.name}
+                                  </div>
+                                )}
+                                {rec.material && (
+                                  <div className="text-muted-foreground">
+                                    חומר: {rec.material.name}
+                                    {rec.dosage != null && rec.unit_type && (
+                                      <> - {rec.dosage} {rec.unit_type.name}</>
+                                    )}
                                   </div>
                                 )}
                               </div>
