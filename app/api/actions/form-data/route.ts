@@ -27,7 +27,7 @@ export async function GET() {
     let initialAreas: any[] = [];
     let initialWorkers: any[] = [];
 
-    if (!isAdmin && customerIdForData) {
+    if (customerIdForData) {
       // Look up the action_worker type ID
       const { data: actionWorkerType } = await supabase
         .from('worker_types')
@@ -51,6 +51,21 @@ export async function GET() {
 
       initialAreas = (areasRes.data || []).map((ca: any) => ca.areas).filter(Boolean);
       initialWorkers = workersRes.data || [];
+    } else if (isAdmin) {
+      // Admin without a customer context: fetch all action workers
+      const { data: actionWorkerType } = await supabase
+        .from('worker_types')
+        .select('id')
+        .eq('name', 'action_worker')
+        .single();
+
+      if (actionWorkerType) {
+        const { data: allWorkers } = await supabase
+          .from('workers')
+          .select('*, worker_types(*)')
+          .eq('type_id', (actionWorkerType as any).id);
+        initialWorkers = allWorkers || [];
+      }
     }
 
     return NextResponse.json({
