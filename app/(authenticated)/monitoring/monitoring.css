@@ -7,9 +7,9 @@
 /* --- Page Background --- */
 .monitoring-page {
   background:
-    radial-gradient(ellipse at 20% 0%, oklch(0.95 0.04 155 / 30%) 0%, transparent 50%),
+    radial-gradient(ellipse at 20% 0%, oklch(0.95 0.04 152 / 30%) 0%, transparent 50%),
     radial-gradient(ellipse at 80% 100%, oklch(0.94 0.03 85 / 20%) 0%, transparent 50%),
-    oklch(0.98 0.005 155 / 100%);
+    var(--background);
   min-height: 100vh;
 }
 
@@ -17,7 +17,7 @@
 .monitoring-hero {
   position: relative;
   overflow: hidden;
-  background: linear-gradient(135deg, oklch(0.35 0.12 155) 0%, oklch(0.30 0.10 170) 50%, oklch(0.28 0.08 155) 100%);
+  background: linear-gradient(135deg, oklch(0.35 0.12 152) 0%, oklch(0.30 0.10 165) 50%, oklch(0.28 0.08 152) 100%);
   border-radius: 1.25rem 1.25rem 0 0;
 }
 
@@ -26,7 +26,7 @@
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(circle at 30% 40%, oklch(0.45 0.15 155 / 20%) 0%, transparent 50%),
+    radial-gradient(circle at 30% 40%, oklch(0.45 0.15 152 / 20%) 0%, transparent 50%),
     radial-gradient(circle at 70% 60%, oklch(0.40 0.10 85 / 15%) 0%, transparent 40%);
   pointer-events: none;
 }
@@ -55,16 +55,16 @@
   position: relative;
   background: oklch(1 0 0 / 80%);
   backdrop-filter: blur(12px);
-  border: 1px solid oklch(0.92 0.01 155 / 60%);
+  border: 1px solid oklch(0.912 0.015 152 / 60%);
   border-radius: 1rem;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
 }
 
 .monitoring-section:hover {
-  border-color: oklch(0.85 0.04 155 / 60%);
+  border-color: oklch(0.85 0.04 152 / 60%);
   box-shadow:
-    0 4px 24px oklch(0.35 0.12 155 / 8%),
+    0 4px 24px oklch(0.35 0.12 152 / 8%),
     0 1px 3px oklch(0 0 0 / 4%);
 }
 
@@ -84,7 +84,7 @@
 }
 
 .section-area::before {
-  background: linear-gradient(180deg, oklch(0.55 0.15 155), oklch(0.42 0.12 155));
+  background: linear-gradient(180deg, oklch(0.55 0.16 152), oklch(0.42 0.12 152));
 }
 
 .section-entries::before {
@@ -98,7 +98,7 @@
   gap: 0.75rem;
   padding-bottom: 0.875rem;
   margin-bottom: 1rem;
-  border-bottom: 1px solid oklch(0.92 0.01 155 / 50%);
+  border-bottom: 1px solid oklch(0.912 0.015 152 / 50%);
 }
 
 .section-icon {
@@ -117,8 +117,8 @@
 }
 
 .section-icon-area {
-  background: oklch(0.94 0.06 155);
-  color: oklch(0.40 0.14 155);
+  background: oklch(0.935 0.025 152);
+  color: oklch(0.448 0.119 152);
 }
 
 .section-icon-entries {
@@ -129,16 +129,16 @@
 /* --- Entry Cards --- */
 .entry-card {
   position: relative;
-  background: oklch(0.985 0.005 155 / 60%);
-  border: 1px solid oklch(0.92 0.01 155 / 50%);
+  background: oklch(0.985 0.005 152 / 60%);
+  border: 1px solid oklch(0.912 0.015 152 / 50%);
   border-radius: 0.875rem;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   animation: slideIn 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .entry-card:hover {
-  border-color: oklch(0.85 0.04 155 / 50%);
-  box-shadow: 0 2px 12px oklch(0.35 0.12 155 / 6%);
+  border-color: oklch(0.85 0.04 152 / 50%);
+  box-shadow: 0 2px 12px oklch(0.35 0.12 152 / 6%);
 }
 
 @keyframes slideIn {
@@ -160,8 +160,8 @@
   width: 1.75rem;
   height: 1.75rem;
   border-radius: 0.5rem;
-  background: oklch(0.94 0.06 155);
-  color: oklch(0.35 0.12 155);
+  background: oklch(0.935 0.025 152);
+  color: oklch(0.35 0.12 152);
   font-size: 0.8rem;
   font-weight: 700;
   flex-shrink: 0;
@@ -239,14 +239,14 @@
 
 /* Severity: Low */
 .severity-low {
-  background: oklch(0.94 0.06 155);
-  color: oklch(0.35 0.12 155);
+  background: oklch(0.935 0.025 152);
+  color: oklch(0.35 0.12 152);
 }
 .severity-low.severity-active {
-  background: oklch(0.45 0.14 155);
+  background: oklch(0.448 0.119 152);
   color: white;
-  border-color: oklch(0.40 0.14 155);
-  box-shadow: 0 2px 10px oklch(0.45 0.14 155 / 30%);
+  border-color: oklch(0.40 0.14 152);
+  box-shadow: 0 2px 10px oklch(0.448 0.119 152 / 30%);
 }
 
 /* Severity: Medium */
@@ -293,7 +293,7 @@
   flex-shrink: 0;
 }
 
-.severity-dot-low { background: oklch(0.55 0.16 155); }
+.severity-dot-low { background: oklch(0.55 0.16 152); }
 .severity-dot-medium { background: oklch(0.70 0.18 85); }
 .severity-dot-high { background: oklch(0.65 0.20 50); }
 .severity-dot-critical { background: oklch(0.55 0.22 25); }
@@ -308,16 +308,16 @@
   font-size: 0.65rem;
   font-weight: 600;
   letter-spacing: 0.02em;
-  background: oklch(0.94 0.06 155);
-  color: oklch(0.40 0.14 155);
-  border: 1px solid oklch(0.88 0.06 155 / 50%);
+  background: oklch(0.935 0.025 152);
+  color: oklch(0.448 0.119 152);
+  border: 1px solid oklch(0.88 0.06 152 / 50%);
 }
 
 /* --- Submit Button --- */
 .monitoring-submit {
   position: relative;
   overflow: hidden;
-  background: linear-gradient(135deg, oklch(0.42 0.14 155) 0%, oklch(0.35 0.12 165) 100%);
+  background: linear-gradient(135deg, oklch(0.448 0.119 152) 0%, oklch(0.35 0.12 160) 100%);
   color: white;
   border: none;
   border-radius: 0.875rem;
@@ -329,14 +329,14 @@
 }
 
 .monitoring-submit:hover:not(:disabled) {
-  background: linear-gradient(135deg, oklch(0.38 0.14 155) 0%, oklch(0.32 0.12 165) 100%);
-  box-shadow: 0 6px 24px oklch(0.35 0.12 155 / 30%);
+  background: linear-gradient(135deg, oklch(0.38 0.14 152) 0%, oklch(0.32 0.12 160) 100%);
+  box-shadow: 0 6px 24px oklch(0.35 0.12 152 / 30%);
   transform: translateY(-1px);
 }
 
 .monitoring-submit:active:not(:disabled) {
   transform: translateY(0);
-  box-shadow: 0 2px 8px oklch(0.35 0.12 155 / 20%);
+  box-shadow: 0 2px 8px oklch(0.35 0.12 152 / 20%);
 }
 
 .monitoring-submit:disabled {
@@ -369,17 +369,17 @@
   border-radius: 0.625rem;
   font-weight: 600;
   font-size: 0.825rem;
-  color: oklch(0.40 0.14 155);
-  background: oklch(0.96 0.03 155 / 60%);
-  border: 1.5px dashed oklch(0.80 0.06 155 / 60%);
+  color: oklch(0.448 0.119 152);
+  background: oklch(0.96 0.03 152 / 60%);
+  border: 1.5px dashed oklch(0.80 0.06 152 / 60%);
   cursor: pointer;
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .add-button:hover {
-  background: oklch(0.94 0.05 155 / 80%);
-  border-color: oklch(0.65 0.10 155 / 60%);
-  box-shadow: 0 2px 8px oklch(0.35 0.12 155 / 10%);
+  background: oklch(0.94 0.05 152 / 80%);
+  border-color: oklch(0.65 0.10 152 / 60%);
+  box-shadow: 0 2px 8px oklch(0.35 0.12 152 / 10%);
 }
 
 .add-button-treatment {
@@ -436,10 +436,10 @@
 
 /* --- Success Toast --- */
 .success-banner {
-  background: linear-gradient(135deg, oklch(0.94 0.06 155), oklch(0.96 0.04 155));
-  border: 1px solid oklch(0.85 0.08 155 / 50%);
+  background: linear-gradient(135deg, oklch(0.935 0.025 152), oklch(0.96 0.04 152));
+  border: 1px solid oklch(0.85 0.08 152 / 50%);
   border-radius: 0.875rem;
-  color: oklch(0.30 0.10 155);
+  color: oklch(0.30 0.10 152);
   animation: successPulse 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -474,26 +474,26 @@
 .monitoring-section [data-slot="form-item-label"] {
   font-weight: 600;
   font-size: 0.825rem;
-  color: oklch(0.35 0 0);
+  color: oklch(0.155 0.015 155);
   letter-spacing: 0.01em;
 }
 
 /* Enhanced select triggers */
 .monitoring-select-trigger {
   border-radius: 0.625rem !important;
-  border-color: oklch(0.90 0.01 155 / 60%) !important;
+  border-color: oklch(0.912 0.015 152 / 60%) !important;
   background: oklch(1 0 0 / 70%) !important;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 
 .monitoring-select-trigger:hover:not(:disabled) {
-  border-color: oklch(0.75 0.06 155 / 60%) !important;
+  border-color: oklch(0.75 0.06 152 / 60%) !important;
   background: oklch(1 0 0 / 90%) !important;
 }
 
 .monitoring-select-trigger:focus {
-  border-color: oklch(0.55 0.14 155 / 60%) !important;
-  box-shadow: 0 0 0 3px oklch(0.55 0.14 155 / 12%) !important;
+  border-color: oklch(0.448 0.119 152 / 60%) !important;
+  box-shadow: 0 0 0 3px oklch(0.448 0.119 152 / 12%) !important;
 }
 
 /* --- Loading Skeleton --- */
@@ -516,8 +516,8 @@
   content: '';
   position: absolute;
   inset: 0;
-  border: 3px solid oklch(0.92 0.03 155);
-  border-top-color: oklch(0.45 0.14 155);
+  border: 3px solid oklch(0.912 0.015 152);
+  border-top-color: oklch(0.448 0.119 152);
   border-radius: 50%;
   animation: spinSmooth 0.8s linear infinite;
 }
@@ -561,16 +561,16 @@
 }
 
 .step-circle-active {
-  background: oklch(0.42 0.14 155);
+  background: oklch(0.448 0.119 152);
   color: white;
-  border: 2px solid oklch(0.42 0.14 155);
-  box-shadow: 0 2px 8px oklch(0.42 0.14 155 / 30%);
+  border: 2px solid oklch(0.448 0.119 152);
+  box-shadow: 0 2px 8px oklch(0.448 0.119 152 / 30%);
 }
 
 .step-circle-complete {
-  background: oklch(0.55 0.16 155);
+  background: oklch(0.55 0.16 152);
   color: white;
-  border: 2px solid oklch(0.55 0.16 155);
+  border: 2px solid oklch(0.55 0.16 152);
 }
 
 .step-label {
@@ -581,7 +581,7 @@
 }
 
 .step-label-active {
-  color: oklch(0.35 0.10 155);
+  color: oklch(0.35 0.10 152);
 }
 
 .step-connector {
@@ -594,14 +594,14 @@
 }
 
 .step-connector-complete {
-  background: oklch(0.55 0.16 155);
+  background: oklch(0.55 0.16 152);
 }
 
 /* --- Form Container --- */
 .monitoring-form-container {
   background: oklch(1 0 0 / 60%);
   backdrop-filter: blur(16px);
-  border: 1px solid oklch(0.92 0.01 155 / 40%);
+  border: 1px solid oklch(0.912 0.015 152 / 40%);
   border-radius: 1.25rem;
   box-shadow:
     0 4px 32px oklch(0 0 0 / 4%),
@@ -616,7 +616,7 @@
   z-index: 10;
   background: oklch(1 0 0 / 85%);
   backdrop-filter: blur(12px);
-  border-top: 1px solid oklch(0.92 0.01 155 / 40%);
+  border-top: 1px solid oklch(0.912 0.015 152 / 40%);
   padding: 1rem 1.5rem;
   margin: 0 -1.5rem -1.5rem -1.5rem;
 }

@@ -70,10 +70,10 @@ interface TaskCardProps {
 }
 
 const severityColors: Record<string, string> = {
-  low: 'bg-blue-100 text-blue-800',
-  medium: 'bg-yellow-100 text-yellow-800',
-  high: 'bg-orange-100 text-orange-800',
-  critical: 'bg-red-100 text-red-800',
+  low: 'bg-[oklch(0.94_0.06_155)] text-[oklch(0.35_0.12_155)]',
+  medium: 'bg-[oklch(0.95_0.06_85)] text-[oklch(0.45_0.12_85)]',
+  high: 'bg-[oklch(0.94_0.05_55)] text-[oklch(0.50_0.15_45)]',
+  critical: 'bg-[oklch(0.94_0.04_25)] text-[oklch(0.50_0.18_25)]',
 };
 
 function formatDate(dateStr: string): string {

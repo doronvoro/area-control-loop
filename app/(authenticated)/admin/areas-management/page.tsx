@@ -1,12 +1,13 @@
 import { redirect } from 'next/navigation';
 import { requireAuth } from '@/lib/auth';
 import { hasPermission } from '@/lib/permissions';
+import { PageHeader } from '@/components/layout/PageHeader';
 import { AreaManagementPageContent } from '@/components/area-management/AreaManagementPageContent';
+import { MapPin } from 'lucide-react';
 
 export default async function AreasManagementPage() {
   await requireAuth();
 
-  // Check permissions - allow access if user has any area management permission
   const [canCreateArea, canUpdateArea, canCreateSubArea, canUpdateSubArea] = await Promise.all([
     hasPermission('create_area'),
     hasPermission('update_area'),
@@ -22,7 +23,11 @@ export default async function AreasManagementPage() {
 
   return (
     <>
-      <h1 className="text-3xl font-bold mb-8">ניהול שטחים</h1>
+      <PageHeader
+        icon={MapPin}
+        title="ניהול שטחים"
+        description="ניהול שטחים, תתי-שטחים ומבנה היררכי"
+      />
       <AreaManagementPageContent />
     </>
   );

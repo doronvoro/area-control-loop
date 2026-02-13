@@ -1,12 +1,13 @@
 import { redirect } from 'next/navigation';
 import { requireAuth } from '@/lib/auth';
 import { hasRole } from '@/lib/permissions';
+import { PageHeader } from '@/components/layout/PageHeader';
 import { CropsManager } from '@/components/admin/CropsManager';
+import { Sprout } from 'lucide-react';
 
 export default async function CropsPage() {
   await requireAuth();
 
-  // Admins and customer owners can access this page
   const [isAdmin, isCustomerOwner] = await Promise.all([
     hasRole('admin'),
     hasRole('customer_owner'),
@@ -17,10 +18,11 @@ export default async function CropsPage() {
 
   return (
     <>
-      <h1 className="text-3xl font-bold mb-8">ניהול גידולים</h1>
-      <p className="text-muted-foreground mb-6">
-        ניהול רשימת הגידולים במערכת. גידולים משמשים לסיווג שטחים ותתי-שטחים ולהמלצות חומרים.
-      </p>
+      <PageHeader
+        icon={Sprout}
+        title="ניהול גידולים"
+        description="ניהול רשימת הגידולים במערכת. גידולים משמשים לסיווג שטחים ותתי-שטחים ולהמלצות חומרים."
+      />
       <CropsManager />
     </>
   );

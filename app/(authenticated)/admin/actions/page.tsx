@@ -1,7 +1,9 @@
 import { redirect } from 'next/navigation';
 import { requireAuth } from '@/lib/auth';
 import { hasRole } from '@/lib/permissions';
+import { PageHeader } from '@/components/layout/PageHeader';
 import { AdminActionPageContent } from '@/components/admin/AdminActionPageContent';
+import { ListChecks } from 'lucide-react';
 
 export default async function AdminActionsPage() {
   await requireAuth();
@@ -13,7 +15,11 @@ export default async function AdminActionsPage() {
 
   return (
     <>
-      <h1 className="text-3xl font-bold mb-8">דוח פעולה - מנהל</h1>
+      <PageHeader
+        icon={ListChecks}
+        title="דוח פעולה - מנהל"
+        description="צפייה בכל דוחות הפעולות במערכת"
+      />
       <AdminActionPageContent />
     </>
   );
