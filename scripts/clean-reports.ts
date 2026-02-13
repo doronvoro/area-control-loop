@@ -1,4 +1,14 @@
+/**
+ * Script to delete all report data from the database
+ * Deletes in correct order respecting foreign key constraints
+ *
+ * Run with: SUPABASE_SERVICE_ROLE_KEY=<key> npx tsx scripts/clean-reports.ts
+ */
+
 import { createClient } from '@supabase/supabase-js';
+import * as dotenv from 'dotenv';
+
+dotenv.config({ path: '.env.local' });
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -15,12 +25,17 @@ const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
 async function cleanReports() {
   console.log('Cleaning all report data...\n');
 
-  // Delete in order respecting foreign key constraints
+  // Delete in order respecting foreign key constraints:
+  // 1. monitoring_treatments (FK → action_treatments via action_treatment_id, FK → monitoring_area_report)
+  // 2. action_treatments (FK → actions_area_report)
+  // 3. monitoring_area_report (FK → report_areas, FK → actions_area_report)
+  // 4. actions_area_report (FK → report_areas)
+  // 5. report_areas (root report table)
   const tables = [
-    { name: 'action_treatments', label: 'Action Treatments' },
     { name: 'monitoring_treatments', label: 'Monitoring Treatments' },
-    { name: 'actions_area_report', label: 'Action Reports' },
+    { name: 'action_treatments', label: 'Action Treatments' },
     { name: 'monitoring_area_report', label: 'Monitoring Reports' },
+    { name: 'actions_area_report', label: 'Action Reports' },
     { name: 'report_areas', label: 'Report Areas' },
   ];
 
@@ -30,7 +45,7 @@ async function cleanReports() {
       .from(table.name)
       .select('*', { count: 'exact', head: true });
 
-    // Delete all rows
+    // Delete all rows (neq trick to match all rows)
     const { error } = await supabase
       .from(table.name)
       .delete()

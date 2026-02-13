@@ -274,34 +274,6 @@ export function ReportDetailSheet({
                           </div>
                         )}
 
-                        {/* Recommended Treatments from recommend_material */}
-                        {isMonitoring && entry.recommendedTreatments && entry.recommendedTreatments.length > 0 && (
-                          <div className="mt-3 space-y-2">
-                            <span className="text-xs font-medium text-muted-foreground">
-                              טיפולים מומלצים:
-                            </span>
-                            {entry.recommendedTreatments.map((rec) => (
-                              <div
-                                key={rec.id}
-                                className="bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-900 rounded-md p-2 text-xs space-y-1"
-                              >
-                                {rec.action_type && (
-                                  <div className="font-medium">
-                                    {rec.action_type.name}
-                                  </div>
-                                )}
-                                {rec.material && (
-                                  <div className="text-muted-foreground">
-                                    חומר: {rec.material.name}
-                                    {rec.dosage != null && rec.unit_type && (
-                                      <> - {rec.dosage} {rec.unit_type.name}</>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        )}
                       </div>
                     </div>
                   ))}

@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { getCurrentWorker, getCurrentCustomer, requireAuth } from '@/lib/auth';
 import { hasRole } from '@/lib/permissions';
 import { AreaTypeId } from '@/types/database';
+import { updateReportStatuses } from '@/lib/report-status';
 
 interface CompletedTask {
   monitoring_treatment_id: string;
@@ -302,6 +303,40 @@ export async function POST(request: Request) {
         errors.push(`Failed to create standalone action: ${msg}`);
       }
     }
+
+    // Step 4: Update statuses across all affected tables
+    const monitoringReportIds = [...new Set(
+      results
+        .filter((r: any) => r.type === 'completed_task' && r.monitoring_treatment_id)
+        .map((r: any) => {
+          const task = completed_tasks.find(t => t.monitoring_treatment_id === r.monitoring_treatment_id);
+          return task?.monitoring_report_id;
+        })
+        .filter(Boolean)
+    )] as string[];
+
+    const actionReportIds = [...new Set(
+      results.map((r: any) => r.action_report_id).filter(Boolean)
+    )] as string[];
+
+    // Look up the monitoring report_areas ID for the same area
+    let monitoringReportAreaId: string | undefined;
+    if (monitoringReportIds.length > 0) {
+      const { data: monReportArea } = await (supabase
+        .from('report_areas') as any)
+        .select('id')
+        .eq('area_id', area_id)
+        .eq('area_type_id', AreaTypeId.MONITORING)
+        .maybeSingle() as { data: { id: string } | null };
+      monitoringReportAreaId = monReportArea?.id;
+    }
+
+    await updateReportStatuses(adminClient, {
+      monitoringReportIds,
+      actionReportIds,
+      monitoringReportAreaId,
+      actionReportAreaId: reportAreaId,
+    });
 
     return NextResponse.json({
       success: true,

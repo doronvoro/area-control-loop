@@ -1,8 +1,9 @@
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { getCurrentWorker, requireAuth } from '@/lib/auth';
 import { hasRole } from '@/lib/permissions';
 import { AreaTypeId } from '@/types/database';
+import { updateReportStatuses } from '@/lib/report-status';
 
 export async function GET() {
   try {
@@ -137,13 +138,11 @@ export async function POST(request: Request) {
             if (treatmentError) throw treatmentError;
 
             // Link monitoring treatment to action treatment if monitoring_treatment_id provided
-            // Also sync the status from action_treatment to monitoring_treatment
             if (treatment.monitoring_treatment_id && actionTreatmentData) {
               const { error: linkError } = await (supabase
                 .from('monitoring_treatments') as any)
                 .update({
                   action_treatment_id: actionTreatmentData.id,
-                  status: actionTreatmentData.status, // Sync status
                 })
                 .eq('id', treatment.monitoring_treatment_id);
 
@@ -186,6 +185,33 @@ export async function POST(request: Request) {
 
         results.push(actionData);
       }
+
+      // Update statuses via centralized function
+      const adminClient = createAdminClient();
+      const monitoringReportIds = entries
+        .map((e: any) => e.monitoring_report_id)
+        .filter(Boolean) as string[];
+      const actionReportIds = results
+        .map((r: any) => r.id)
+        .filter(Boolean) as string[];
+
+      let monitoringReportAreaId: string | undefined;
+      if (monitoringReportIds.length > 0) {
+        const { data: monReportArea } = await (supabase
+          .from('report_areas') as any)
+          .select('id')
+          .eq('area_id', area_id)
+          .eq('area_type_id', AreaTypeId.MONITORING)
+          .maybeSingle() as { data: { id: string } | null };
+        monitoringReportAreaId = monReportArea?.id;
+      }
+
+      await updateReportStatuses(adminClient, {
+        monitoringReportIds,
+        actionReportIds,
+        monitoringReportAreaId,
+        actionReportAreaId: reportAreaId,
+      });
 
       return NextResponse.json(results, { status: 201 });
     }
@@ -247,13 +273,11 @@ export async function POST(request: Request) {
         if (treatmentError) throw treatmentError;
 
         // Link monitoring treatment to action treatment if monitoring_treatment_id provided
-        // Also sync the status from action_treatment to monitoring_treatment
         if (treatment.monitoring_treatment_id && actionTreatmentData) {
           const { error: linkError } = await (supabase
             .from('monitoring_treatments') as any)
             .update({
               action_treatment_id: actionTreatmentData.id,
-              status: actionTreatmentData.status, // Sync status
             })
             .eq('id', treatment.monitoring_treatment_id);
 
@@ -293,6 +317,38 @@ export async function POST(request: Request) {
 
       if (monitoringError) throw monitoringError;
     }
+
+    // Update statuses via centralized function
+    const singleAdminClient = createAdminClient();
+    const singleMonitoringReportIds = monitoring_report_id ? [monitoring_report_id] : [];
+    const singleActionReportIds = actionData ? [(actionData as any).id] : [];
+
+    let singleMonitoringReportAreaId: string | undefined;
+    if (singleMonitoringReportIds.length > 0) {
+      // Look up area_id from report_areas
+      const { data: reportArea } = await (supabase
+        .from('report_areas') as any)
+        .select('id, area_id')
+        .eq('id', area_report_id)
+        .single() as { data: { id: string; area_id: string } | null };
+
+      if (reportArea) {
+        const { data: monReportArea } = await (supabase
+          .from('report_areas') as any)
+          .select('id')
+          .eq('area_id', reportArea.area_id)
+          .eq('area_type_id', AreaTypeId.MONITORING)
+          .maybeSingle() as { data: { id: string } | null };
+        singleMonitoringReportAreaId = monReportArea?.id;
+      }
+    }
+
+    await updateReportStatuses(singleAdminClient, {
+      monitoringReportIds: singleMonitoringReportIds,
+      actionReportIds: singleActionReportIds,
+      monitoringReportAreaId: singleMonitoringReportAreaId,
+      actionReportAreaId: area_report_id,
+    });
 
     return NextResponse.json(actionData, { status: 201 });
   } catch (error: any) {

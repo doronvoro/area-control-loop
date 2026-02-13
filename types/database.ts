@@ -243,6 +243,7 @@ export interface Database {
           finding_id: string;
           actions_area_report_id: string | null;
           severity: ReportSeverity | null;
+          status: string;
           created_at: string;
           updated_at: string;
         };
@@ -253,6 +254,7 @@ export interface Database {
           finding_id: string;
           actions_area_report_id?: string | null;
           severity?: ReportSeverity | null;
+          status?: string;
           created_at?: string;
           updated_at?: string;
         };
@@ -263,6 +265,7 @@ export interface Database {
           finding_id?: string;
           actions_area_report_id?: string | null;
           severity?: ReportSeverity | null;
+          status?: string;
           created_at?: string;
           updated_at?: string;
         };
@@ -278,6 +281,7 @@ export interface Database {
           status: string;
           notes: string | null;
           action_treatment_id: string | null;
+          treatment_match: boolean | null;
           created_at: string;
           updated_at: string;
         };
@@ -291,6 +295,7 @@ export interface Database {
           status?: string;
           notes?: string | null;
           action_treatment_id?: string | null;
+          treatment_match?: boolean | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -304,6 +309,7 @@ export interface Database {
           status?: string;
           notes?: string | null;
           action_treatment_id?: string | null;
+          treatment_match?: boolean | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -315,6 +321,7 @@ export interface Database {
           sub_area_id: string;
           finding_id: string;
           severity: ReportSeverity | null;
+          status: string;
           created_at: string;
           updated_at: string;
         };
@@ -324,6 +331,7 @@ export interface Database {
           sub_area_id: string;
           finding_id: string;
           severity?: ReportSeverity | null;
+          status?: string;
           created_at?: string;
           updated_at?: string;
         };
@@ -333,6 +341,7 @@ export interface Database {
           sub_area_id?: string;
           finding_id?: string;
           severity?: ReportSeverity | null;
+          status?: string;
           created_at?: string;
           updated_at?: string;
         };
@@ -386,6 +395,7 @@ export interface Database {
           name: string;
           description: string | null;
           status: string;
+          completion_percentage: number;
           report_number: number;
           worker_id: string | null;
           created_at: string;
@@ -398,6 +408,7 @@ export interface Database {
           name: string;
           description?: string | null;
           status?: string;
+          completion_percentage?: number;
           report_number?: number;
           worker_id?: string | null;
           created_at?: string;
@@ -410,6 +421,7 @@ export interface Database {
           name?: string;
           description?: string | null;
           status?: string;
+          completion_percentage?: number;
           report_number?: number;
           worker_id?: string | null;
           created_at?: string;
