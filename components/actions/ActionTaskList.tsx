@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -37,9 +38,10 @@ interface FormData {
 }
 
 export function ActionTaskList() {
+  const searchParams = useSearchParams();
   const [tasks, setTasks] = useState<ActionTask[]>([]);
   const [areas, setAreas] = useState<Area[]>([]);
-  const [selectedAreaId, setSelectedAreaId] = useState<string>('all');
+  const [selectedAreaId, setSelectedAreaId] = useState<string>(searchParams.get('areaId') || 'all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
