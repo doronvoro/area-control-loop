@@ -16,7 +16,7 @@ export default async function DashboardPage() {
       />
       <DashboardContent />
       <div className="mt-8">
-        <h2 className="text-lg font-semibold mb-4">סטטוס שטחות</h2>
+        <h2 className="text-lg font-semibold mb-4">סטטוס שטחים</h2>
         <AreaStatusBoard />
       </div>
     </>

@@ -80,12 +80,12 @@ export function AreaStatusBoard() {
         const response = await fetch('/api/areas/status');
         if (!response.ok) {
           const errorData = await response.json();
-          throw new Error(errorData.error || 'שגיאה בטעינת סטטוס שטחות');
+          throw new Error(errorData.error || 'שגיאה בטעינת סטטוס שטחים');
         }
         const data = await response.json();
         setAreas(data.areas || []);
       } catch (err: unknown) {
-        setError(err instanceof Error ? err.message : 'שגיאה בטעינת סטטוס שטחות');
+        setError(err instanceof Error ? err.message : 'שגיאה בטעינת סטטוס שטחים');
       } finally {
         setLoading(false);
       }
@@ -97,7 +97,7 @@ export function AreaStatusBoard() {
     return (
       <div className="flex items-center justify-center py-16">
         <Loader2 className="size-6 animate-spin text-primary me-2" />
-        <span className="text-muted-foreground">טוען סטטוס שטחות...</span>
+        <span className="text-muted-foreground">טוען סטטוס שטחים...</span>
       </div>
     );
   }
@@ -114,9 +114,9 @@ export function AreaStatusBoard() {
     return (
       <div className="text-center py-12">
         <MapPin className="size-10 text-muted-foreground mx-auto mb-3" />
-        <p className="text-muted-foreground text-lg">אין שטחות להצגה</p>
+        <p className="text-muted-foreground text-lg">אין שטחים להצגה</p>
         <p className="text-sm text-muted-foreground mt-1">
-          לא נמצאו שטחות משויכים לחשבון שלך
+          לא נמצאו שטחים משויכים לחשבון שלך
         </p>
       </div>
     );
