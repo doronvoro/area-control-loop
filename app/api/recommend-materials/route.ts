@@ -34,52 +34,35 @@ export async function GET(request: Request) {
 
     if (error) throw error;
 
-    // Group by key (crop_id, finding_id, action_type_id, material_id)
+    // Group by composite key (crop_id, finding_id, action_type_id, material_id)
     const grouped: Record<string, any[]> = {};
     (data || []).forEach((item: any) => {
       const key = `${item.crop_id}_${item.finding_id || 'null'}_${item.action_type_id}_${item.material_id}`;
       if (!grouped[key]) {
         grouped[key] = [];
       }
-      grouped[key].push({
-        id: item.id,
-        unit_type_id: item.unit_type_id,
-        unit_type: item.unit_types,
-        dosage: item.dosage,
-        crop: item.crops,
-        finding: item.findings,
-        action_type: item.action_types,
-        material: item.materials,
-      });
+      grouped[key].push(item);
     });
 
-    // Format response - need to get the actual data from the first item
-    const result = Object.entries(grouped).map(([key, values]) => {
-      const [cropId, findingId, actionTypeId, materialId] = key.split('_');
-      // Get the full item data from the original data array
-      const firstItem = (data || []).find(
-        (item: any) =>
-          item.crop_id === cropId &&
-          (item.finding_id || 'null') === findingId &&
-          item.action_type_id === actionTypeId &&
-          item.material_id === materialId
-      ) as any;
+    // Format response using the first item in each group for relation data
+    const result = Object.values(grouped).map((items) => {
+      const first = items[0];
       return {
         key: {
-          crop_id: cropId,
-          finding_id: findingId === 'null' ? null : findingId,
-          action_type_id: actionTypeId,
-          material_id: materialId,
-          crop: firstItem?.crops || null,
-          finding: firstItem?.findings || null,
-          action_type: firstItem?.action_types || null,
-          material: firstItem?.materials || null,
+          crop_id: first.crop_id,
+          finding_id: first.finding_id || null,
+          action_type_id: first.action_type_id,
+          material_id: first.material_id,
+          crop: first.crops || null,
+          finding: first.findings || null,
+          action_type: first.action_types || null,
+          material: first.materials || null,
         },
-        values: values.map((v) => ({
-          id: v.id,
-          unit_type_id: v.unit_type_id,
-          unit_type: v.unit_type,
-          dosage: parseFloat(v.dosage),
+        values: items.map((item) => ({
+          id: item.id,
+          unit_type_id: item.unit_type_id,
+          unit_type: item.unit_types || null,
+          dosage: parseFloat(item.dosage),
         })),
       };
     });

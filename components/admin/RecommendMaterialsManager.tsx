@@ -66,7 +66,7 @@ export function RecommendMaterialsManager() {
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [crops, setCrops] = useState<any[]>([]);
   const [findings, setFindings] = useState<any[]>([]);
-  const [cropFindings, setCropFindings] = useState<any[]>([]);
+
   const [actionTypes, setActionTypes] = useState<any[]>([]);
   const [materials, setMaterials] = useState<any[]>([]);
   const [unitTypes, setUnitTypes] = useState<any[]>([]);
@@ -169,40 +169,18 @@ export function RecommendMaterialsManager() {
     }
   };
 
-  const fetchCropFindings = async (cropId: string) => {
-    if (!cropId) {
-      setCropFindings([]);
-      return;
-    }
-    try {
-      const res = await fetch(`/api/cascade?type=findings&cropId=${cropId}`);
-      if (res.ok) {
-        const data = await res.json();
-        setCropFindings(data);
-      }
-    } catch (err) {
-      console.error('Error fetching crop findings:', err);
-      setCropFindings([]);
-    }
-  };
-
-  const handleCropChange = async (cropId: string) => {
+  const handleCropChange = (cropId: string) => {
     form.setValue('crop_id', cropId);
     form.setValue('finding_id', '');
-    await fetchCropFindings(cropId);
   };
 
-  const handleOpenDialog = async (key?: string) => {
+  const handleOpenDialog = (key?: string) => {
     if (key) {
       const rec = recommendations.find(
         (r) => `${r.key.crop_id}_${r.key.finding_id || 'null'}_${r.key.action_type_id}_${r.key.material_id}` === key
       );
       if (rec) {
         setEditingKey(key);
-        // Fetch crop findings for editing
-        if (rec.key.crop_id) {
-          await fetchCropFindings(rec.key.crop_id);
-        }
         form.reset({
           crop_id: rec.key.crop_id,
           finding_id: rec.key.finding_id || '',
@@ -216,7 +194,6 @@ export function RecommendMaterialsManager() {
       }
     } else {
       setEditingKey(null);
-      setCropFindings([]);
       form.reset({
         crop_id: '',
         finding_id: '',
@@ -231,7 +208,6 @@ export function RecommendMaterialsManager() {
   const handleCloseDialog = () => {
     setDialogOpen(false);
     setEditingKey(null);
-    setCropFindings([]);
     form.reset();
   };
 
@@ -554,7 +530,7 @@ export function RecommendMaterialsManager() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__null__">ברירת מחדל לכל הגידול</SelectItem>
-                    {cropFindings.map((finding) => (
+                    {findings.map((finding) => (
                       <SelectItem key={finding.id} value={finding.id}>
                         {finding.description || finding.name}
                       </SelectItem>
