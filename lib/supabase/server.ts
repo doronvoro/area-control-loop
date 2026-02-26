@@ -39,7 +39,21 @@ const debugFetch: typeof fetch = async (input, init) => {
   return fetch(input, init);
 };
 
+/**
+ * Create a Supabase client that works for both web (cookies) and mobile (Bearer token).
+ * Checks the Authorization header first; falls back to cookie-based client.
+ */
 export async function createClient() {
+  // Check for Bearer token (mobile requests)
+  const headersList = await headers();
+  const authHeader = headersList.get('authorization');
+
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.slice(7);
+    return createClientWithToken(token);
+  }
+
+  // Fall back to cookie-based client (web requests)
   const cookieStore = await cookies();
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -78,21 +92,8 @@ export async function createClient() {
   );
 }
 
-/**
- * Create a Supabase client from either cookies (web) or Bearer token (mobile).
- * Checks the Authorization header first; falls back to cookie-based client.
- */
-export async function createClientFromRequest() {
-  const headersList = await headers();
-  const authHeader = headersList.get('authorization');
-
-  if (authHeader?.startsWith('Bearer ')) {
-    const token = authHeader.slice(7);
-    return createClientWithToken(token);
-  }
-
-  return createClient();
-}
+/** @deprecated Use createClient() instead - it's now token-aware */
+export const createClientFromRequest = createClient;
 
 /**
  * Create a Supabase admin client with service role key.
