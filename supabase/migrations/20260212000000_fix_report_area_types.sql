@@ -1,5 +1,6 @@
 -- Migration: Create report_area_types lookup table and fix area_type_id column
--- This migration handles the case where area_type_id might be UUID or TEXT
+-- This migration handles the case where the column might be named 'type' (original),
+-- 'area_type_id' as UUID, or 'area_type_id' as TEXT.
 
 -- Step 1: Create report_area_types lookup table with name as PK
 CREATE TABLE IF NOT EXISTS report_area_types (
@@ -25,41 +26,66 @@ INSERT INTO report_area_types (name, display_name, description) VALUES
   ('action', 'פעולה', 'Action report')
 ON CONFLICT (name) DO NOTHING;
 
--- Step 4: Check if we need to convert the column type
+-- Step 4: Ensure area_type_id column exists with correct type
 DO $$
 DECLARE
   col_type TEXT;
+  has_type_col BOOLEAN;
+  has_area_type_id_col BOOLEAN;
 BEGIN
-  -- Get the current data type of area_type_id
-  SELECT data_type INTO col_type
-  FROM information_schema.columns
-  WHERE table_name = 'report_areas' AND column_name = 'area_type_id';
+  -- Check if 'type' column exists (original schema)
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'report_areas' AND column_name = 'type'
+  ) INTO has_type_col;
 
-  -- If it's UUID, we need to convert
-  IF col_type = 'uuid' THEN
-    -- Drop existing FK constraint if exists
-    ALTER TABLE report_areas DROP CONSTRAINT IF EXISTS fk_report_areas_area_type;
-    ALTER TABLE report_areas DROP CONSTRAINT IF EXISTS report_areas_area_type_id_fkey;
+  -- Check if 'area_type_id' column exists
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'report_areas' AND column_name = 'area_type_id'
+  ) INTO has_area_type_id_col;
 
-    -- Add a temporary TEXT column
-    ALTER TABLE report_areas ADD COLUMN area_type_id_new TEXT;
-
-    -- Copy existing values - map any existing UUIDs to appropriate type
-    -- Since we don't have existing data to map, we'll default to 'monitoring'
-    UPDATE report_areas SET area_type_id_new = 'monitoring' WHERE area_type_id IS NOT NULL;
-
-    -- Drop old column
-    ALTER TABLE report_areas DROP COLUMN area_type_id;
-
-    -- Rename new column
-    ALTER TABLE report_areas RENAME COLUMN area_type_id_new TO area_type_id;
-
-    -- Make it NOT NULL with default
+  IF has_type_col AND NOT has_area_type_id_col THEN
+    -- Original schema: rename 'type' to 'area_type_id'
+    ALTER TABLE report_areas RENAME COLUMN type TO area_type_id;
     ALTER TABLE report_areas ALTER COLUMN area_type_id SET DEFAULT 'monitoring';
+    RAISE NOTICE 'Renamed type column to area_type_id';
 
-    RAISE NOTICE 'Converted area_type_id from UUID to TEXT';
+  ELSIF has_area_type_id_col THEN
+    -- Get the current data type of area_type_id
+    SELECT data_type INTO col_type
+    FROM information_schema.columns
+    WHERE table_name = 'report_areas' AND column_name = 'area_type_id';
+
+    IF col_type = 'uuid' THEN
+      -- Drop existing FK constraint if exists
+      ALTER TABLE report_areas DROP CONSTRAINT IF EXISTS fk_report_areas_area_type;
+      ALTER TABLE report_areas DROP CONSTRAINT IF EXISTS report_areas_area_type_id_fkey;
+
+      -- Add a temporary TEXT column
+      ALTER TABLE report_areas ADD COLUMN area_type_id_new TEXT;
+
+      -- Copy existing values - map any existing UUIDs to appropriate type
+      UPDATE report_areas SET area_type_id_new = 'monitoring' WHERE area_type_id IS NOT NULL;
+
+      -- Drop old column
+      ALTER TABLE report_areas DROP COLUMN area_type_id;
+
+      -- Rename new column
+      ALTER TABLE report_areas RENAME COLUMN area_type_id_new TO area_type_id;
+
+      -- Make it NOT NULL with default
+      ALTER TABLE report_areas ALTER COLUMN area_type_id SET DEFAULT 'monitoring';
+
+      RAISE NOTICE 'Converted area_type_id from UUID to TEXT';
+    ELSE
+      RAISE NOTICE 'area_type_id is already TEXT type, skipping conversion';
+    END IF;
+
   ELSE
-    RAISE NOTICE 'area_type_id is already TEXT type, skipping conversion';
+    -- Neither column exists, create area_type_id
+    ALTER TABLE report_areas ADD COLUMN area_type_id TEXT NOT NULL DEFAULT 'monitoring';
+    RAISE NOTICE 'Created area_type_id column';
   END IF;
 END $$;
 

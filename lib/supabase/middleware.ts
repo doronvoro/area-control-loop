@@ -2,6 +2,17 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 export async function updateSession(request: NextRequest) {
+  // For API requests with Bearer tokens (mobile), skip cookie-based auth
+  // and let the API route handlers authenticate via requireAuth()
+  const authHeader = request.headers.get('authorization');
+  if (authHeader?.startsWith('Bearer ') && request.nextUrl.pathname.startsWith('/api/')) {
+    const response = NextResponse.next({ request });
+    response.headers.set('Access-Control-Allow-Origin', '*');
+    response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    return response;
+  }
+
   let supabaseResponse = NextResponse.next({
     request,
   });

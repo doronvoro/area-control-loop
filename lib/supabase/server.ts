@@ -1,7 +1,8 @@
 import { createServerClient } from '@supabase/ssr';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { Database } from '@/types/database';
+import { createClientWithToken } from './server-with-token';
 
 // Enable debug logging for Supabase queries
 const DEBUG_SUPABASE = process.env.DEBUG_SUPABASE === 'true';
@@ -75,6 +76,22 @@ export async function createClient() {
       },
     }
   );
+}
+
+/**
+ * Create a Supabase client from either cookies (web) or Bearer token (mobile).
+ * Checks the Authorization header first; falls back to cookie-based client.
+ */
+export async function createClientFromRequest() {
+  const headersList = await headers();
+  const authHeader = headersList.get('authorization');
+
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.slice(7);
+    return createClientWithToken(token);
+  }
+
+  return createClient();
 }
 
 /**

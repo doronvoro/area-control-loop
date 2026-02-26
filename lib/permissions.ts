@@ -2,7 +2,7 @@
  * Permission checking utilities
  */
 
-import { createClient } from '@/lib/supabase/server';
+import { createClientFromRequest } from '@/lib/supabase/server';
 import { getCurrentUser } from './auth';
 
 /**
@@ -12,7 +12,7 @@ export async function hasPermission(permissionName: string): Promise<boolean> {
   const user = await getCurrentUser();
   if (!user) return false;
 
-  const supabase = await createClient();
+  const supabase = await createClientFromRequest();
   const { data, error } = await (supabase.rpc as any)('has_permission', {
     p_user_id: user.id,
     p_permission_name: permissionName,
@@ -33,7 +33,7 @@ export async function hasRole(roleName: string): Promise<boolean> {
   const user = await getCurrentUser();
   if (!user) return false;
 
-  const supabase = await createClient();
+  const supabase = await createClientFromRequest();
   const { data, error } = await (supabase.rpc as any)('has_role', {
     p_user_id: user.id,
     p_role_name: roleName,
@@ -54,7 +54,7 @@ export async function getUserRoles(): Promise<string[]> {
   const user = await getCurrentUser();
   if (!user) return [];
 
-  const supabase = await createClient();
+  const supabase = await createClientFromRequest();
   const { data, error } = await supabase
     .from('user_roles')
     .select('roles(name)')
@@ -75,7 +75,7 @@ export async function getUserPermissions(): Promise<string[]> {
   const user = await getCurrentUser();
   if (!user) return [];
 
-  const supabase = await createClient();
+  const supabase = await createClientFromRequest();
   const { data, error } = await supabase
     .from('user_roles')
     .select('roles(role_permissions(permissions(name)))')
