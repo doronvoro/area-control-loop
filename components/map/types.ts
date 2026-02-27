@@ -16,6 +16,27 @@ export interface AreaWithGeometry {
   sub_areas: SubAreaWithGeometry[];
 }
 
+// Treatment data for map popup
+export interface TreatmentForMap {
+  id: string;
+  action_type_name: string | null;
+  material_name: string | null;
+  dosage: number | null;
+  unit_type_name: string | null;
+  status: string;
+  notes: string | null;
+}
+
+// Monitoring report data for map popup
+export interface MonitoringReportForMap {
+  id: string;
+  finding_name: string;
+  severity: string | null;
+  status: string;
+  created_at: string;
+  treatments: TreatmentForMap[];
+}
+
 // Sub-area with geometry for the map view
 export interface SubAreaWithGeometry {
   id: string;
@@ -26,7 +47,16 @@ export interface SubAreaWithGeometry {
   level: number;
   geometry: GeoJSONPolygon | null;
   pending_monitoring: number;
+  monitoring_reports: MonitoringReportForMap[];
 }
+
+// Severity display config
+export const SEVERITY_CONFIG: Record<string, { label: string; color: string }> = {
+  low: { label: 'נמוכה', color: '#16a34a' },
+  medium: { label: 'בינונית', color: '#d97706' },
+  high: { label: 'גבוהה', color: '#ea580c' },
+  critical: { label: 'קריטית', color: '#dc2626' },
+};
 
 // State for the drawing/editing mode
 export interface DrawingState {

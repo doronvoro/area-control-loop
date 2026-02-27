@@ -47,33 +47,69 @@ export async function GET() {
 
     if (subAreasError) throw subAreasError;
 
-    // Get pending monitoring counts per sub-area
+    // Get monitoring reports with findings and treatments per sub-area
     const subAreaIds = (subAreas || []).map((sa: any) => sa.id);
-    let pendingCounts: Record<string, number> = {};
+    const monitoringBySubArea: Record<string, any[]> = {};
 
     if (subAreaIds.length > 0) {
-      const { data: pendingData, error: pendingError } = await (supabase
-        .from('monitoring_area_report') as any)
-        .select('sub_area_id')
+      const { data: monitoringData, error: monitoringError } = await (
+        supabase.from('monitoring_area_report') as any
+      )
+        .select(
+          `id, sub_area_id, severity, status, created_at,
+          finding:findings(id, name),
+          treatments:monitoring_treatments(
+            id, dosage, status, notes,
+            material:materials(name),
+            action_type:action_types(name, description),
+            unit_type:unit_types(name)
+          )`
+        )
         .in('sub_area_id', subAreaIds)
-        .neq('status', 'completed');
+        .order('created_at', { ascending: false });
 
-      if (!pendingError && pendingData) {
-        for (const row of pendingData as any[]) {
-          pendingCounts[row.sub_area_id] =
-            (pendingCounts[row.sub_area_id] || 0) + 1;
+      if (!monitoringError && monitoringData) {
+        for (const report of monitoringData as any[]) {
+          const subAreaId = report.sub_area_id;
+          if (!monitoringBySubArea[subAreaId]) {
+            monitoringBySubArea[subAreaId] = [];
+          }
+          monitoringBySubArea[subAreaId].push({
+            id: report.id,
+            finding_name: report.finding?.name || 'לא ידוע',
+            severity: report.severity,
+            status: report.status,
+            created_at: report.created_at,
+            treatments: (report.treatments || []).map((t: any) => ({
+              id: t.id,
+              action_type_name:
+                t.action_type?.description || t.action_type?.name || null,
+              material_name: t.material?.name || null,
+              dosage: t.dosage,
+              unit_type_name: t.unit_type?.name || null,
+              status: t.status,
+              notes: t.notes,
+            })),
+          });
         }
       }
     }
 
-    // Nest sub-areas under their areas with pending counts
+    // Nest sub-areas under their areas with monitoring data
     const areasWithSubAreas = areas.map((area: any) => {
       const areaSubAreas = (subAreas || [])
         .filter((sa: any) => sa.area_id === area.id)
-        .map((sa: any) => ({
-          ...sa,
-          pending_monitoring: pendingCounts[sa.id] || 0,
-        }));
+        .map((sa: any) => {
+          const reports = monitoringBySubArea[sa.id] || [];
+          const pendingCount = reports.filter(
+            (r: any) => r.status !== 'completed'
+          ).length;
+          return {
+            ...sa,
+            pending_monitoring: pendingCount,
+            monitoring_reports: reports,
+          };
+        });
 
       const areaPending = areaSubAreas.reduce(
         (sum: number, sa: any) => sum + sa.pending_monitoring,
