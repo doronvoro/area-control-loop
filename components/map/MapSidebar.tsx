@@ -126,6 +126,13 @@ export function MapSidebar({
                 {/* Name */}
                 <span className="flex-1 truncate">{area.name}</span>
 
+                {/* Pending monitoring badge */}
+                {area.pending_monitoring > 0 && (
+                  <span className="bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                    {area.pending_monitoring}
+                  </span>
+                )}
+
                 {/* Actions */}
                 <div className="flex items-center gap-0.5">
                   {hasGeometry ? (
@@ -211,6 +218,13 @@ export function MapSidebar({
                           </span>
                         )}
                       </span>
+
+                      {/* Pending monitoring badge */}
+                      {subArea.pending_monitoring > 0 && (
+                        <span className="bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[16px] h-[16px] flex items-center justify-center px-0.5">
+                          {subArea.pending_monitoring}
+                        </span>
+                      )}
 
                       <div className="flex items-center gap-0.5">
                         {saHasGeometry ? (

@@ -11,6 +11,9 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Download, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { ReportDetailSheet } from './ReportDetailSheet';
 import { STATUS_LABELS } from '@/lib/reports/labels';
 
@@ -33,17 +36,56 @@ interface ReportsTableProps {
 export function ReportsTable({ reportAreas }: ReportsTableProps) {
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   function handleRowClick(reportId: string) {
     setSelectedReportId(reportId);
     setSheetOpen(true);
   }
 
+  async function handleDownload() {
+    setDownloading(true);
+    try {
+      const response = await fetch('/api/reports/export');
+      if (!response.ok) throw new Error('שגיאה בהורדת הקובץ');
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download =
+        response.headers
+          .get('Content-Disposition')
+          ?.match(/filename="(.+)"/)?.[1] || 'reports.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      toast.error('שגיאה בהורדת הקובץ');
+    } finally {
+      setDownloading(false);
+    }
+  }
+
   return (
     <>
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>דוחות שטחים</CardTitle>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleDownload}
+            disabled={downloading || reportAreas.length === 0}
+          >
+            {downloading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+            <span>הורדה לאקסל</span>
+          </Button>
         </CardHeader>
         <CardContent>
           <Table>

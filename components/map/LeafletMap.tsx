@@ -7,7 +7,6 @@ import '@geoman-io/leaflet-geoman-free';
 import '@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css';
 import type {
   AreaWithGeometry,
-  SubAreaWithGeometry,
   GeoJSONPolygon,
   DrawingState,
 } from './types';
@@ -16,6 +15,8 @@ import {
   DEFAULT_ZOOM,
   AREA_STYLE,
   SUB_AREA_STYLE,
+  AREA_PENDING_STYLE,
+  SUB_AREA_PENDING_STYLE,
   SELECTED_STYLE,
 } from './types';
 
@@ -95,6 +96,32 @@ export function LeafletMap({
 
     // Add polygon layer group
     polygonLayersRef.current.addTo(map);
+
+    // Add legend control
+    const LegendControl = L.Control.extend({
+      onAdd: function () {
+        const div = L.DomUtil.create('div', 'leaflet-legend');
+        div.style.cssText =
+          'background: white; padding: 8px 12px; border-radius: 6px; box-shadow: 0 1px 5px rgba(0,0,0,0.3); font-size: 12px; direction: rtl;';
+        div.innerHTML = `
+          <div style="font-weight: 600; margin-bottom: 4px;">מקרא</div>
+          <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 2px;">
+            <span style="width: 14px; height: 14px; background: #3b82f6; opacity: 0.5; border: 2px solid #2563eb; display: inline-block; border-radius: 2px;"></span>
+            <span>שטח</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 2px;">
+            <span style="width: 14px; height: 14px; background: #22c55e; opacity: 0.5; border: 2px dashed #16a34a; display: inline-block; border-radius: 2px;"></span>
+            <span>תת-שטח</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <span style="width: 14px; height: 14px; background: #ef4444; opacity: 0.5; border: 2px solid #dc2626; display: inline-block; border-radius: 2px;"></span>
+            <span>ממתין לטיפול</span>
+          </div>
+        `;
+        return div;
+      },
+    });
+    new LegendControl({ position: 'bottomright' }).addTo(map);
 
     // Initialize Geoman controls (hidden by default)
     map.pm.addControls({
@@ -206,9 +233,11 @@ export function LeafletMap({
       // Render area polygon
       if (area.geometry) {
         const isSelected = selectedEntityId === area.id;
+        const baseStyle =
+          area.pending_monitoring > 0 ? AREA_PENDING_STYLE : AREA_STYLE;
         const style = isSelected
-          ? { ...AREA_STYLE, ...SELECTED_STYLE }
-          : AREA_STYLE;
+          ? { ...baseStyle, ...SELECTED_STYLE }
+          : baseStyle;
 
         const polygon = L.geoJSON(area.geometry as any, {
           style: () => style,
@@ -240,9 +269,13 @@ export function LeafletMap({
       area.sub_areas.forEach((subArea) => {
         if (subArea.geometry) {
           const isSelected = selectedEntityId === subArea.id;
+          const baseStyle =
+            subArea.pending_monitoring > 0
+              ? SUB_AREA_PENDING_STYLE
+              : SUB_AREA_STYLE;
           const style = isSelected
-            ? { ...SUB_AREA_STYLE, ...SELECTED_STYLE }
-            : SUB_AREA_STYLE;
+            ? { ...baseStyle, ...SELECTED_STYLE }
+            : baseStyle;
 
           const polygon = L.geoJSON(subArea.geometry as any, {
             style: () => style,

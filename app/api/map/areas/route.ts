@@ -47,11 +47,45 @@ export async function GET() {
 
     if (subAreasError) throw subAreasError;
 
-    // Nest sub-areas under their areas
-    const areasWithSubAreas = areas.map((area: any) => ({
-      ...area,
-      sub_areas: (subAreas || []).filter((sa: any) => sa.area_id === area.id),
-    }));
+    // Get pending monitoring counts per sub-area
+    const subAreaIds = (subAreas || []).map((sa: any) => sa.id);
+    let pendingCounts: Record<string, number> = {};
+
+    if (subAreaIds.length > 0) {
+      const { data: pendingData, error: pendingError } = await (supabase
+        .from('monitoring_area_report') as any)
+        .select('sub_area_id')
+        .in('sub_area_id', subAreaIds)
+        .neq('status', 'completed');
+
+      if (!pendingError && pendingData) {
+        for (const row of pendingData as any[]) {
+          pendingCounts[row.sub_area_id] =
+            (pendingCounts[row.sub_area_id] || 0) + 1;
+        }
+      }
+    }
+
+    // Nest sub-areas under their areas with pending counts
+    const areasWithSubAreas = areas.map((area: any) => {
+      const areaSubAreas = (subAreas || [])
+        .filter((sa: any) => sa.area_id === area.id)
+        .map((sa: any) => ({
+          ...sa,
+          pending_monitoring: pendingCounts[sa.id] || 0,
+        }));
+
+      const areaPending = areaSubAreas.reduce(
+        (sum: number, sa: any) => sum + sa.pending_monitoring,
+        0
+      );
+
+      return {
+        ...area,
+        pending_monitoring: areaPending,
+        sub_areas: areaSubAreas,
+      };
+    });
 
     return NextResponse.json({ areas: areasWithSubAreas });
   } catch (error: any) {
