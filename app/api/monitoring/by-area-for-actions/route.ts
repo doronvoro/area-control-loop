@@ -16,6 +16,8 @@ export async function GET(request: Request) {
     const areaId = searchParams.get('areaId');
     const includeProcessed = searchParams.get('includeProcessed') === 'true';
 
+    console.log('[Monitoring by-area-for-actions GET] areaId:', areaId, 'includeProcessed:', includeProcessed);
+
     if (!areaId) {
       return NextResponse.json(
         { error: 'areaId is required' },
@@ -144,8 +146,11 @@ export async function GET(request: Request) {
       (item: any) => item.treatments.length > 0 || !item.already_has_action
     );
 
+    console.log('[Monitoring by-area-for-actions GET] Fetched:', filteredFormatted.length, 'reports');
+
     return NextResponse.json(filteredFormatted);
   } catch (error: any) {
+    console.error('[Monitoring by-area-for-actions GET] Error:', error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

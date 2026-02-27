@@ -8,6 +8,8 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const areaId = searchParams.get('areaId');
 
+    console.log('[Monitoring by-area GET] areaId:', areaId);
+
     if (!areaId) {
       return NextResponse.json(
         { error: 'areaId is required' },
@@ -53,8 +55,11 @@ export async function GET(request: Request) {
       status: item.status,
     }));
 
+    console.log('[Monitoring by-area GET] Fetched monitoring reports:', formatted?.length ?? 0);
+
     return NextResponse.json(formatted);
   } catch (error: any) {
+    console.error('[Monitoring by-area GET] Error:', error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

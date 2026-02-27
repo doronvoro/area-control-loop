@@ -12,6 +12,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ReportDetailSheet } from './ReportDetailSheet';
+import { STATUS_LABELS } from '@/lib/reports/labels';
 
 interface ReportAreaData {
   id: string;
@@ -28,12 +29,6 @@ interface ReportAreaData {
 interface ReportsTableProps {
   reportAreas: ReportAreaData[];
 }
-
-const statusLabels: Record<string, string> = {
-  pending: 'ממתין',
-  in_progress: 'בביצוע',
-  completed: 'הושלם',
-};
 
 export function ReportsTable({ reportAreas }: ReportsTableProps) {
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
@@ -87,7 +82,7 @@ export function ReportsTable({ reportAreas }: ReportsTableProps) {
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline">
-                      {statusLabels[reportArea.status] || reportArea.status}
+                      {STATUS_LABELS[reportArea.status] || reportArea.status}
                     </Badge>
                   </TableCell>
                 </TableRow>

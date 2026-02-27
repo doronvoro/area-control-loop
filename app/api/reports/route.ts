@@ -6,6 +6,8 @@ export async function GET() {
   try {
     await requireAuth();
 
+    console.log('[Reports GET] Fetching report areas');
+
     const supabase = await createClient();
 
     const { data: reportAreas, error } = await supabase
@@ -21,8 +23,11 @@ export async function GET() {
 
     if (error) throw error;
 
+    console.log('[Reports GET] Fetched report areas:', reportAreas?.length ?? 0);
+
     return NextResponse.json(reportAreas || []);
   } catch (error: any) {
+    console.error('[Reports GET] Error:', error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

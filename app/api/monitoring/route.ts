@@ -16,7 +16,8 @@ interface TreatmentInput {
 }
 
 interface MonitoringEntryInput {
-  sub_area_id: string;
+  sub_area_id?: string;
+  sub_area_ids?: string[];
   finding_id: string;
   severity?: ReportSeverity | null;
   treatments?: TreatmentInput[];
@@ -29,6 +30,22 @@ interface MonitoringEntryInput {
   recommend_unit_type_id?: string | null;
   action_type_id?: string | null;
   recommend_action_type_id?: string | null;
+}
+
+// Expand multi-select entries into individual sub-area entries
+function expandEntries(entries: MonitoringEntryInput[]): (MonitoringEntryInput & { sub_area_id: string })[] {
+  const expanded: (MonitoringEntryInput & { sub_area_id: string })[] = [];
+  for (const entry of entries) {
+    const subAreaIds = entry.sub_area_ids || (entry.sub_area_id ? [entry.sub_area_id] : []);
+    for (const subAreaId of subAreaIds) {
+      expanded.push({
+        ...entry,
+        sub_area_id: subAreaId,
+        sub_area_ids: undefined,
+      });
+    }
+  }
+  return expanded;
 }
 
 interface BatchRequestBody {
@@ -154,6 +171,12 @@ export async function GET() {
     const isAdmin = await hasRole('admin');
     const customer = await getCurrentCustomer();
 
+    console.log('[Monitoring GET] Fetching monitoring reports', {
+      workerId: (worker as any)?.id,
+      isAdmin,
+      customerId: (customer as any)?.id,
+    });
+
     if (!worker && !isAdmin && !customer) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -176,9 +199,12 @@ export async function GET() {
 
     if (error) throw error;
 
+    console.log('[Monitoring GET] Fetched monitoring reports:', data?.length ?? 0);
+
     return NextResponse.json(data);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error('[Monitoring GET] Error:', message);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
@@ -204,6 +230,12 @@ export async function POST(request: Request) {
       // Use worker_id if provided, otherwise use inspector_id (from monitoring form)
       const effectiveWorkerId = worker_id || inspector_id;
 
+      console.log('[Monitoring POST] Batch request', {
+        area_id,
+        workerId: effectiveWorkerId,
+        entriesCount: entries.length,
+      });
+
       if (!area_id) {
         return NextResponse.json({ error: 'area_id is required' }, { status: 400 });
       }
@@ -214,12 +246,22 @@ export async function POST(request: Request) {
 
       const reportAreaId = await createReportArea(supabase, adminClient, area_id, effectiveWorkerId);
 
+      // Expand multi-select entries into individual sub-area rows
+      const expandedEntries = expandEntries(entries);
+
+      console.log('[Monitoring POST] Expanded entries:', {
+        original: entries.length,
+        expanded: expandedEntries.length,
+      });
+
       const results = [];
-      for (const entry of entries) {
+      for (const entry of expandedEntries) {
         const monitoringReport = await createMonitoringReport(adminClient, reportAreaId, entry);
         await createTreatmentsFromEntry(adminClient, monitoringReport.id, entry);
         results.push(monitoringReport);
       }
+
+      console.log('[Monitoring POST] Created monitoring reports:', results.length);
 
       return NextResponse.json(results, { status: 201 });
     }
@@ -231,6 +273,14 @@ export async function POST(request: Request) {
       worker_id,
       ...entryData
     } = body as SingleRequestBody;
+
+    console.log('[Monitoring POST] Single entry request', {
+      area_id,
+      area_report_id: providedAreaReportId,
+      worker_id,
+      sub_area_id: entryData.sub_area_id,
+      finding_id: entryData.finding_id,
+    });
 
     let finalAreaReportId = providedAreaReportId;
 
@@ -249,9 +299,12 @@ export async function POST(request: Request) {
     );
     await createTreatmentsFromEntry(adminClient, monitoringReport.id, entryData);
 
+    console.log('[Monitoring POST] Created monitoring report:', monitoringReport.id);
+
     return NextResponse.json(monitoringReport, { status: 201 });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error('[Monitoring POST] Error:', message);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

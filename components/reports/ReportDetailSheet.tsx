@@ -10,8 +10,11 @@ import {
 } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Download } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { toast } from 'sonner';
 import { SEVERITY_LABELS, ReportSeverity } from '@/types/database';
+import { STATUS_LABELS, TREATMENT_STATUS_LABELS } from '@/lib/reports/labels';
 
 interface ReportDetailSheetProps {
   reportId: string | null;
@@ -63,17 +66,6 @@ interface ReportDetail {
   actionEntries: ReportEntry[] | null;
 }
 
-const statusLabels: Record<string, string> = {
-  pending: 'ממתין',
-  in_progress: 'בביצוע',
-  completed: 'הושלם',
-};
-
-const treatmentStatusLabels: Record<string, string> = {
-  pending: 'ממתין',
-  completed: 'בוצע',
-};
-
 export function ReportDetailSheet({
   reportId,
   open,
@@ -82,6 +74,33 @@ export function ReportDetailSheet({
   const [report, setReport] = useState<ReportDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
+
+  async function handleDownload() {
+    if (!reportId) return;
+    setDownloading(true);
+    try {
+      const response = await fetch(`/api/reports/${reportId}/export`);
+      if (!response.ok) throw new Error('שגיאה בהורדת הקובץ');
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download =
+        response.headers
+          .get('Content-Disposition')
+          ?.match(/filename="(.+)"/)?.[1] || `report-${reportId}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      toast.error('שגיאה בהורדת הקובץ');
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   useEffect(() => {
     if (!reportId || !open) {
@@ -121,9 +140,26 @@ export function ReportDetailSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="left" className="w-full sm:max-w-xl overflow-y-auto">
         <SheetHeader>
-          <SheetTitle>
-            {report ? `דוח מס׳ ${report.report_number}` : 'פרטי דוח'}
-          </SheetTitle>
+          <div className="flex items-center justify-between">
+            <SheetTitle>
+              {report ? `דוח מס׳ ${report.report_number}` : 'פרטי דוח'}
+            </SheetTitle>
+            {report && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDownload}
+                disabled={downloading}
+              >
+                {downloading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+                <span>הורדה לאקסל</span>
+              </Button>
+            )}
+          </div>
           {report && (
             <SheetDescription>
               {report.area_type?.display_name} - {report.area?.name}
@@ -179,7 +215,7 @@ export function ReportDetailSheet({
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">סטטוס:</span>
                   <Badge variant="outline">
-                    {statusLabels[report.status] || report.status}
+                    {STATUS_LABELS[report.status] || report.status}
                   </Badge>
                 </div>
                 {report.description && (
@@ -247,7 +283,7 @@ export function ReportDetailSheet({
                                     {treatment.action_type?.name || 'סוג פעולה לא ידוע'}
                                   </span>
                                   <Badge variant="outline" className="text-xs">
-                                    {treatmentStatusLabels[treatment.status] || treatment.status}
+                                    {TREATMENT_STATUS_LABELS[treatment.status] || treatment.status}
                                   </Badge>
                                 </div>
                                 {treatment.material && (

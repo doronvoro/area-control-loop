@@ -12,6 +12,11 @@ export async function GET() {
     const worker = await getCurrentWorker();
     const isAdmin = await hasRole('admin');
 
+    console.log('[Actions GET] Fetching action reports', {
+      workerId: (worker as any)?.id,
+      isAdmin,
+    });
+
     if (!worker && !isAdmin) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -34,8 +39,11 @@ export async function GET() {
 
     if (error) throw error;
 
+    console.log('[Actions GET] Fetched action reports:', data?.length ?? 0);
+
     return NextResponse.json(data);
   } catch (error: any) {
+    console.error('[Actions GET] Error:', error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
@@ -56,6 +64,12 @@ export async function POST(request: Request) {
     // Handle batch creation (admin form with entries array)
     if (body.entries && Array.isArray(body.entries)) {
       const { area_id, worker_id, entries } = body;
+
+      console.log('[Actions POST] Batch request', {
+        area_id,
+        worker_id,
+        entriesCount: entries.length,
+      });
 
       if (!area_id) {
         return NextResponse.json({ error: 'area_id is required' }, { status: 400 });
@@ -213,10 +227,18 @@ export async function POST(request: Request) {
         actionReportAreaId: reportAreaId,
       });
 
+      console.log('[Actions POST] Created action reports:', results.length);
+
       return NextResponse.json(results, { status: 201 });
     }
 
     // Handle single action creation (legacy format)
+    console.log('[Actions POST] Single entry request', {
+      area_report_id: body.area_report_id,
+      sub_area_id: body.sub_area_id,
+      finding_id: body.finding_id,
+    });
+
     const {
       area_report_id,
       sub_area_id,
@@ -350,8 +372,11 @@ export async function POST(request: Request) {
       actionReportAreaId: area_report_id,
     });
 
+    console.log('[Actions POST] Created action report:', (actionData as any)?.id);
+
     return NextResponse.json(actionData, { status: 201 });
   } catch (error: any) {
+    console.error('[Actions POST] Error:', error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

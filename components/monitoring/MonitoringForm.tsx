@@ -37,6 +37,7 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import { ReportSeverity, SEVERITY_OPTIONS } from '@/types/database';
+import { MultiSelect } from '@/components/ui/multi-select';
 
 const treatmentSchema = z.object({
   action_type_id: z.string().optional(),
@@ -47,7 +48,7 @@ const treatmentSchema = z.object({
 });
 
 const subAreaEntrySchema = z.object({
-  sub_area_id: z.string().min(1, 'נדרש לבחור תת-שטח'),
+  sub_area_ids: z.array(z.string()).min(1, 'נדרש לבחור לפחות תת-שטח אחד'),
   finding_id: z.string().min(1, 'נדרש לבחור ממצא'),
   severity: z.nativeEnum(ReportSeverity).optional(),
   treatments: z.array(treatmentSchema),
@@ -127,7 +128,7 @@ export function MonitoringForm({
       inspector_id: '',
       area_id: '',
       entries: [{
-        sub_area_id: '',
+        sub_area_ids: [],
         finding_id: '',
         severity: undefined,
         treatments: [],
@@ -160,7 +161,7 @@ export function MonitoringForm({
       form.setValue('inspector_id', '');
       form.setValue('area_id', '');
       form.setValue('entries', [{
-        sub_area_id: '',
+        sub_area_ids: [],
         finding_id: '',
         severity: undefined,
         treatments: [],
@@ -179,7 +180,7 @@ export function MonitoringForm({
       fetchSubAreas(watchedAreaId);
       // Reset all entries when area changes
       form.setValue('entries', [{
-        sub_area_id: '',
+        sub_area_ids: [],
         finding_id: '',
         severity: undefined,
         treatments: [],
@@ -293,13 +294,26 @@ export function MonitoringForm({
   };
 
   // Entry-specific handlers
-  const handleSubAreaChange = (subAreaId: string, index: number) => {
-    const subArea = subAreas.find(sa => sa.id === subAreaId);
-    const selectedArea = areas.find(a => a.id === watchedAreaId);
-    const cropId = subArea?.crop_id || selectedArea?.crop_id;
+  const handleSubAreaIdsChange = (subAreaIds: string[], index: number) => {
+    form.setValue(`entries.${index}.sub_area_ids`, subAreaIds);
 
-    form.setValue(`entries.${index}.sub_area_id`, subAreaId);
-    setEntryCropIds(prev => ({ ...prev, [index]: cropId || null }));
+    // Determine the effective crop ID for the cascade
+    const selectedArea = areas.find(a => a.id === watchedAreaId);
+    const areaCropId = selectedArea?.crop_id || null;
+
+    let effectiveCropId: string | null = null;
+    if (subAreaIds.length > 0) {
+      const cropIds = subAreaIds
+        .map(id => {
+          const sa = subAreas.find(s => s.id === id);
+          return sa?.effective_crop_id || sa?.crop_id || areaCropId;
+        })
+        .filter(Boolean);
+      const uniqueCrops = [...new Set(cropIds)];
+      effectiveCropId = uniqueCrops.length === 1 ? uniqueCrops[0] : areaCropId;
+    }
+
+    setEntryCropIds(prev => ({ ...prev, [index]: effectiveCropId }));
 
     // Reset dependent fields for this entry
     form.setValue(`entries.${index}.finding_id`, '');
@@ -405,7 +419,7 @@ export function MonitoringForm({
 
   const addEntry = () => {
     append({
-      sub_area_id: '',
+      sub_area_ids: [],
       finding_id: '',
       severity: undefined,
       treatments: [],
@@ -468,16 +482,25 @@ export function MonitoringForm({
   };
 
   const getEntrySummary = (index: number) => {
-    const subAreaId = form.watch(`entries.${index}.sub_area_id`);
+    const subAreaIds = form.watch(`entries.${index}.sub_area_ids`) || [];
     const findingId = form.watch(`entries.${index}.finding_id`);
     const severity = form.watch(`entries.${index}.severity`);
     const treatments = form.watch(`entries.${index}.treatments`) || [];
 
-    const subArea = subAreas.find(sa => sa.id === subAreaId);
+    const selectedSubAreas = subAreaIds
+      .map((id: string) => subAreas.find(sa => sa.id === id))
+      .filter(Boolean);
+
+    const subAreaName = selectedSubAreas.length === 0
+      ? ''
+      : selectedSubAreas.length === 1
+        ? (selectedSubAreas[0]?.display || selectedSubAreas[0]?.name || '')
+        : `${selectedSubAreas.length} תתי-שטח`;
+
     const finding = findings.find(f => f.id === findingId);
 
     return {
-      subAreaName: subArea?.display || subArea?.name || '',
+      subAreaName,
       findingName: finding?.description || finding?.name || '',
       severity,
       treatmentCount: treatments.length,
@@ -752,11 +775,11 @@ export function MonitoringForm({
 
                 <div className="space-y-4">
                   {fields.map((field, index) => {
-                    const entrySubAreaId = form.watch(`entries.${index}.sub_area_id`);
+                    const entrySubAreaIds = form.watch(`entries.${index}.sub_area_ids`) || [];
                     const entryFindingId = form.watch(`entries.${index}.finding_id`);
                     const treatments = form.watch(`entries.${index}.treatments`) || [];
                     const cropId = entryCropIds[index];
-                    const isCollapsed = collapsedEntries[index] && entrySubAreaId;
+                    const isCollapsed = collapsedEntries[index] && entrySubAreaIds.length > 0;
                     const summary = getEntrySummary(index);
 
                     return (
@@ -780,7 +803,7 @@ export function MonitoringForm({
                             )}
                           </div>
                           <div className="flex items-center gap-1">
-                            {entrySubAreaId && (
+                            {entrySubAreaIds.length > 0 && (
                               <button
                                 type="button"
                                 className="delete-button"
@@ -805,34 +828,30 @@ export function MonitoringForm({
                         {!isCollapsed && (
                           <>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              {/* Sub-area select */}
+                              {/* Sub-area multi-select */}
                               <FormField
                                 control={form.control}
-                                name={`entries.${index}.sub_area_id`}
+                                name={`entries.${index}.sub_area_ids`}
                                 render={({ field: subField }) => (
-                                  <FormItem>
+                                  <FormItem className="md:col-span-2">
                                     <FormLabel className="font-semibold text-sm">
-                                      תת-שטח *
+                                      תתי-שטח *
                                       {loadingSubAreas && <LoadingSpinner />}
                                     </FormLabel>
-                                    <Select
-                                      onValueChange={(v) => handleSubAreaChange(v, index)}
-                                      value={subField.value}
-                                      disabled={loadingSubAreas}
-                                    >
-                                      <FormControl>
-                                        <SelectTrigger className="h-11 monitoring-select-trigger">
-                                          <SelectValue placeholder="בחר תת-שטח" />
-                                        </SelectTrigger>
-                                      </FormControl>
-                                      <SelectContent>
-                                        {subAreas.map((subArea) => (
-                                          <SelectItem key={subArea.id} value={subArea.id}>
-                                            {subArea.display || subArea.name}
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
+                                    <FormControl>
+                                      <MultiSelect
+                                        options={subAreas.map((sa) => ({
+                                          value: sa.id,
+                                          label: sa.display || sa.name,
+                                        }))}
+                                        value={subField.value}
+                                        onValueChange={(ids) => handleSubAreaIdsChange(ids, index)}
+                                        placeholder="בחר תתי-שטח"
+                                        selectAllLabel="כל תתי-השטח"
+                                        disabled={loadingSubAreas}
+                                        className="monitoring-select-trigger"
+                                      />
+                                    </FormControl>
                                     <FormMessage />
                                   </FormItem>
                                 )}
@@ -848,12 +867,12 @@ export function MonitoringForm({
                                     <Select
                                       onValueChange={(v) => handleFindingChange(v, index)}
                                       value={findingField.value}
-                                      disabled={!entrySubAreaId}
+                                      disabled={entrySubAreaIds.length === 0}
                                     >
                                       <FormControl>
                                         <SelectTrigger className="h-11 monitoring-select-trigger">
                                           <SelectValue placeholder={
-                                            !entrySubAreaId ? 'בחר תת-שטח תחילה' : 'בחר ממצא'
+                                            entrySubAreaIds.length === 0 ? 'בחר תתי-שטח תחילה' : 'בחר ממצא'
                                           } />
                                         </SelectTrigger>
                                       </FormControl>
