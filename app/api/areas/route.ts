@@ -50,7 +50,7 @@ export async function PUT(request: Request) {
     }
 
     const body = await request.json();
-    const { id, name, description, crop_id, size, size_unit_type } = body;
+    const { id, name, description, crop_id, size, size_unit_type, geometry } = body;
 
     if (!id || !name) {
       return NextResponse.json(
@@ -69,6 +69,7 @@ export async function PUT(request: Request) {
         crop_id: crop_id || null,
         size: size ?? null,
         size_unit_type: size_unit_type || null,
+        ...(geometry !== undefined ? { geometry: geometry || null } : {}),
         updated_at: new Date().toISOString(),
       })
       .eq('id', id)
@@ -97,7 +98,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { name, description, customer_id, crop_id, size, size_unit_type } = body;
+    const { name, description, customer_id, crop_id, size, size_unit_type, geometry } = body;
 
     if (!name) {
       return NextResponse.json(
@@ -118,6 +119,7 @@ export async function POST(request: Request) {
         crop_id: crop_id || null,
         size: size ?? null,
         size_unit_type: size_unit_type || null,
+        ...(geometry !== undefined ? { geometry: geometry || null } : {}),
       })
       .select()
       .single();

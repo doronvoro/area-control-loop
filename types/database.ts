@@ -164,6 +164,7 @@ export interface Database {
           crop_id: string | null;
           size: number | null;
           size_unit_type: string | null;
+          geometry: Json | null;
           created_at: string;
           updated_at: string;
         };
@@ -174,6 +175,7 @@ export interface Database {
           crop_id?: string | null;
           size?: number | null;
           size_unit_type?: string | null;
+          geometry?: Json | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -184,6 +186,7 @@ export interface Database {
           crop_id?: string | null;
           size?: number | null;
           size_unit_type?: string | null;
+          geometry?: Json | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -201,6 +204,7 @@ export interface Database {
           crop_id: string | null;
           size: number | null;
           size_unit_type: string | null;
+          geometry: Json | null;
           created_at: string;
           updated_at: string;
         };
@@ -216,6 +220,7 @@ export interface Database {
           crop_id?: string | null;
           size?: number | null;
           size_unit_type?: string | null;
+          geometry?: Json | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -231,6 +236,7 @@ export interface Database {
           crop_id?: string | null;
           size?: number | null;
           size_unit_type?: string | null;
+          geometry?: Json | null;
           created_at?: string;
           updated_at?: string;
         };

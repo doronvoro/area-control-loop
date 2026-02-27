@@ -5,6 +5,7 @@ import {
   FileText,
   Users,
   MapPin,
+  MapPinned,
   Sprout,
   Bug,
   FlaskConical,
@@ -36,6 +37,7 @@ export const workflowGroup: NavGroup = {
     { href: '/monitoring', label: 'ניטור', icon: Search },
     { href: '/actions', label: 'פעולות', icon: Zap },
     { href: '/area-map', label: 'מפת שטחים', icon: Map },
+    { href: '/map', label: 'מפה', icon: MapPinned },
     { href: '/reports', label: 'דוחות', icon: FileText },
   ],
 };
