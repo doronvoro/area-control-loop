@@ -25,6 +25,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Plus, Trash2 } from 'lucide-react';
+import { ENTIRE_AREA, ENTIRE_AREA_DISPLAY } from '@/lib/constants';
 
 const subAreaEntrySchema = z.object({
   sub_area_id: z.string().min(1, 'נדרש לבחור תת-שטח'),
@@ -375,7 +376,7 @@ export function AdminMonitoringForm({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             area_report_id: reportAreaId,
-            sub_area_id: entry.sub_area_id,
+            sub_area_id: entry.sub_area_id === ENTIRE_AREA ? null : entry.sub_area_id,
             finding_id: entry.finding_id,
             recommend_material: material?.description || material?.name || '',
             recommend_dosage: entry.dosage,
@@ -593,6 +594,9 @@ export function AdminMonitoringForm({
                                 </SelectTrigger>
                               </FormControl>
                               <SelectContent>
+                                <SelectItem value={ENTIRE_AREA}>
+                                  {ENTIRE_AREA_DISPLAY}
+                                </SelectItem>
                                 {subAreas.map((subArea) => (
                                   <SelectItem key={subArea.id} value={subArea.id}>
                                     {subArea.display || subArea.name}

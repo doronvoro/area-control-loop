@@ -198,7 +198,7 @@ export function ReportDetailSheet({
                       <div className="space-y-2 text-sm">
                         <div className="flex justify-between items-start">
                           <span className="font-medium">
-                            {entry.sub_area?.display || entry.sub_area?.name || 'תת-שטח לא ידוע'}
+                            {entry.sub_area?.display || entry.sub_area?.name || 'כל השטח'}
                           </span>
                           {entry.severity && (
                             <Badge

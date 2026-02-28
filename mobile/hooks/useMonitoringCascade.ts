@@ -22,7 +22,7 @@ export interface MonitoringFormValues {
   inspector_id: string;
   area_id: string;
   entries: {
-    sub_area_id: string;
+    sub_area_id: string | null;
     finding_id: string;
     severity?: string;
     treatments: {

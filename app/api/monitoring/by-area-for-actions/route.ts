@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { hasRole } from '@/lib/permissions';
+import { ENTIRE_AREA_DISPLAY } from '@/lib/constants';
 
 export async function GET(request: Request) {
   try {
@@ -50,12 +51,12 @@ export async function GET(request: Request) {
         finding_id,
         actions_area_report_id,
         status,
-        sub_areas!inner (
+        sub_areas (
           id,
           name,
           display,
           crop_id,
-          areas!inner (
+          areas (
             id,
             name,
             crop_id
@@ -103,10 +104,17 @@ export async function GET(request: Request) {
 
     if (error) throw error;
 
+    // Get area info for cases where sub_area_id is null (entire area)
+    const { data: areaInfo } = await supabase
+      .from('areas')
+      .select('id, name, crop_id')
+      .eq('id', areaId)
+      .single();
+
     // Format for the actions form
     const formatted = data?.map((item: any) => {
       const subArea = item.sub_areas;
-      const area = subArea?.areas;
+      const area = subArea?.areas || areaInfo;
       const effectiveCropId = subArea?.crop_id || area?.crop_id;
 
       // Filter out completed treatments - action workers only need to see non-completed ones
@@ -119,9 +127,9 @@ export async function GET(request: Request) {
 
       return {
         monitoring_report_id: item.id,
-        sub_area_id: item.sub_area_id,
-        sub_area_display: subArea?.display || subArea?.name || '',
-        sub_area_name: subArea?.name || '',
+        sub_area_id: item.sub_area_id ?? null,
+        sub_area_display: subArea?.display || subArea?.name || ENTIRE_AREA_DISPLAY,
+        sub_area_name: subArea?.name || ENTIRE_AREA_DISPLAY,
         finding_id: item.finding_id,
         finding_name: item.findings?.name || '',
         finding_description: item.findings?.description || '',

@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { ENTIRE_AREA, ENTIRE_AREA_DISPLAY } from '@/lib/constants';
 
 interface SubArea {
   id: string;
@@ -41,7 +42,7 @@ interface UnitType {
 }
 
 export interface StandaloneActionData {
-  sub_area_id: string;
+  sub_area_id: string | null;
   finding_id: string;
   action_type_id?: string;
   material_id?: string;
@@ -120,7 +121,7 @@ export function StandaloneActionForm({
     if (!subAreaId || !findingId) return;
 
     onSubmit({
-      sub_area_id: subAreaId,
+      sub_area_id: subAreaId === ENTIRE_AREA ? null : subAreaId,
       finding_id: findingId,
       action_type_id: actionTypeId || undefined,
       material_id: materialId || undefined,
@@ -155,6 +156,9 @@ export function StandaloneActionForm({
                 <SelectValue placeholder="בחר תת-שטח" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value={ENTIRE_AREA}>
+                  {ENTIRE_AREA_DISPLAY}
+                </SelectItem>
                 {subAreas.map((sa) => (
                   <SelectItem key={sa.id} value={sa.id}>
                     {sa.display || sa.name}

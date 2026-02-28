@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { getCurrentWorker, getCurrentCustomer, requireAuth } from '@/lib/auth';
 import { hasRole } from '@/lib/permissions';
 import { AreaTypeId } from '@/types/database';
+import { ENTIRE_AREA_DISPLAY } from '@/lib/constants';
 
 export async function GET(request: Request) {
   try {
@@ -82,7 +83,7 @@ export async function GET(request: Request) {
           area_id,
           name
         ),
-        sub_area:sub_areas!inner (
+        sub_area:sub_areas (
           id,
           name,
           display,
@@ -131,7 +132,7 @@ export async function GET(request: Request) {
       const reportArea = report.report_area as any;
       const subArea = report.sub_area as any;
       const finding = report.finding as any;
-      const areaData = (areas || []).find((a: any) => a.id === reportArea?.area_id);
+      const areaData = (areas || []).find((a: any) => a.id === reportArea?.area_id || a.id === subArea?.area_id);
       const effectiveCropId = subArea?.crop_id || areaData?.crop_id || null;
 
       for (const treatment of (report.treatments || [])) {
@@ -143,10 +144,14 @@ export async function GET(request: Request) {
           monitoring_report_id: report.id,
           area_id: reportArea?.area_id,
           area_name: areaData?.name || '',
-          sub_area: {
-            id: subArea?.id,
-            name: subArea?.name,
-            display: subArea?.display,
+          sub_area: subArea ? {
+            id: subArea.id,
+            name: subArea.name,
+            display: subArea.display,
+          } : {
+            id: null,
+            name: ENTIRE_AREA_DISPLAY,
+            display: ENTIRE_AREA_DISPLAY,
           },
           finding: {
             id: finding?.id,

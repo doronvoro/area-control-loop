@@ -227,7 +227,7 @@ export default function MonitoringScreen() {
                 <EntryCard
                   key={index}
                   index={index}
-                  subAreaId={entry.sub_area_id}
+                  subAreaId={entry.sub_area_id || ''}
                   findingId={entry.finding_id}
                   severity={entry.severity}
                   treatments={entry.treatments}

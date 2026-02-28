@@ -165,6 +165,7 @@ export interface Database {
           size: number | null;
           size_unit_type: string | null;
           geometry: Json | null;
+          area_type: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -176,6 +177,7 @@ export interface Database {
           size?: number | null;
           size_unit_type?: string | null;
           geometry?: Json | null;
+          area_type?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -187,6 +189,7 @@ export interface Database {
           size?: number | null;
           size_unit_type?: string | null;
           geometry?: Json | null;
+          area_type?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -245,7 +248,7 @@ export interface Database {
         Row: {
           id: string;
           area_report_id: string;
-          sub_area_id: string;
+          sub_area_id: string | null;
           finding_id: string;
           actions_area_report_id: string | null;
           severity: ReportSeverity | null;
@@ -256,7 +259,7 @@ export interface Database {
         Insert: {
           id?: string;
           area_report_id: string;
-          sub_area_id: string;
+          sub_area_id: string | null;
           finding_id: string;
           actions_area_report_id?: string | null;
           severity?: ReportSeverity | null;
@@ -267,7 +270,7 @@ export interface Database {
         Update: {
           id?: string;
           area_report_id?: string;
-          sub_area_id?: string;
+          sub_area_id?: string | null;
           finding_id?: string;
           actions_area_report_id?: string | null;
           severity?: ReportSeverity | null;
@@ -324,7 +327,7 @@ export interface Database {
         Row: {
           id: string;
           area_report_id: string;
-          sub_area_id: string;
+          sub_area_id: string | null;
           finding_id: string;
           severity: ReportSeverity | null;
           status: string;
@@ -334,7 +337,7 @@ export interface Database {
         Insert: {
           id?: string;
           area_report_id: string;
-          sub_area_id: string;
+          sub_area_id: string | null;
           finding_id: string;
           severity?: ReportSeverity | null;
           status?: string;
@@ -344,7 +347,7 @@ export interface Database {
         Update: {
           id?: string;
           area_report_id?: string;
-          sub_area_id?: string;
+          sub_area_id?: string | null;
           finding_id?: string;
           severity?: ReportSeverity | null;
           status?: string;

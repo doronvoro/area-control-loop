@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
+import { ENTIRE_AREA_DISPLAY } from '@/lib/constants';
 
 export async function GET(request: Request) {
   try {
@@ -47,9 +48,9 @@ export async function GET(request: Request) {
     // Format for dropdown: sub-area name (key) + finding name (display)
     const formatted = data?.map((item: any) => ({
       id: item.id,
-      key: item.sub_area?.display || item.sub_area?.name || '',
-      display: `${item.sub_area?.name || ''} | ${item.finding?.name || ''}`,
-      sub_area_id: item.sub_area?.id,
+      key: item.sub_area?.display || item.sub_area?.name || ENTIRE_AREA_DISPLAY,
+      display: `${item.sub_area?.name || ENTIRE_AREA_DISPLAY} | ${item.finding?.name || ''}`,
+      sub_area_id: item.sub_area?.id ?? null,
       finding_id: item.finding?.id,
       finding_name: item.finding?.name,
       status: item.status,

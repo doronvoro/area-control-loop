@@ -25,7 +25,7 @@ export interface ActionFormValues {
   entries: {
     source: 'monitoring' | 'standalone';
     monitoring_report_id?: string;
-    sub_area_id: string;
+    sub_area_id: string | null;
     sub_area_display?: string;
     finding_id: string;
     finding_name?: string;

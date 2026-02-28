@@ -38,6 +38,7 @@ import {
 } from 'lucide-react';
 import { ReportSeverity, SEVERITY_OPTIONS } from '@/types/database';
 import { MultiSelect } from '@/components/ui/multi-select';
+import { ENTIRE_AREA, ENTIRE_AREA_DISPLAY, isEntireArea } from '@/lib/constants';
 
 const treatmentSchema = z.object({
   action_type_id: z.string().optional(),
@@ -293,6 +294,24 @@ export function MonitoringForm({
     }
   };
 
+  // Build parentMap for multi-select hierarchy support
+  const subAreaParentMap = useMemo(() => {
+    const map: Record<string, string | null> = {};
+    for (const sa of subAreas) {
+      map[sa.id] = sa.parent_sub_area_id || null;
+    }
+    return map;
+  }, [subAreas]);
+
+  // Build levelMap for tree indentation (convert 1-based level to 0-based)
+  const subAreaLevelMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const sa of subAreas) {
+      map[sa.id] = (sa.level || 1) - 1;
+    }
+    return map;
+  }, [subAreas]);
+
   // Entry-specific handlers
   const handleSubAreaIdsChange = (subAreaIds: string[], index: number) => {
     form.setValue(`entries.${index}.sub_area_ids`, subAreaIds);
@@ -303,14 +322,19 @@ export function MonitoringForm({
 
     let effectiveCropId: string | null = null;
     if (subAreaIds.length > 0) {
-      const cropIds = subAreaIds
-        .map(id => {
-          const sa = subAreas.find(s => s.id === id);
-          return sa?.effective_crop_id || sa?.crop_id || areaCropId;
-        })
-        .filter(Boolean);
-      const uniqueCrops = [...new Set(cropIds)];
-      effectiveCropId = uniqueCrops.length === 1 ? uniqueCrops[0] : areaCropId;
+      if (isEntireArea(subAreaIds[0])) {
+        // Entire area selected - use area-level crop
+        effectiveCropId = areaCropId;
+      } else {
+        const cropIds = subAreaIds
+          .map(id => {
+            const sa = subAreas.find(s => s.id === id);
+            return sa?.effective_crop_id || sa?.crop_id || areaCropId;
+          })
+          .filter(Boolean);
+        const uniqueCrops = [...new Set(cropIds)];
+        effectiveCropId = uniqueCrops.length === 1 ? uniqueCrops[0] : areaCropId;
+      }
     }
 
     setEntryCropIds(prev => ({ ...prev, [index]: effectiveCropId }));
@@ -487,15 +511,21 @@ export function MonitoringForm({
     const severity = form.watch(`entries.${index}.severity`);
     const treatments = form.watch(`entries.${index}.treatments`) || [];
 
-    const selectedSubAreas = subAreaIds
-      .map((id: string) => subAreas.find(sa => sa.id === id))
-      .filter(Boolean);
+    const hasEntireArea = subAreaIds.length > 0 && isEntireArea(subAreaIds[0]);
 
-    const subAreaName = selectedSubAreas.length === 0
-      ? ''
-      : selectedSubAreas.length === 1
-        ? (selectedSubAreas[0]?.display || selectedSubAreas[0]?.name || '')
-        : `${selectedSubAreas.length} תתי-שטח`;
+    const selectedSubAreas = hasEntireArea
+      ? []
+      : subAreaIds
+          .map((id: string) => subAreas.find(sa => sa.id === id))
+          .filter(Boolean);
+
+    const subAreaName = hasEntireArea
+      ? ENTIRE_AREA_DISPLAY
+      : selectedSubAreas.length === 0
+        ? ''
+        : selectedSubAreas.length === 1
+          ? (selectedSubAreas[0]?.display || selectedSubAreas[0]?.name || '')
+          : `${selectedSubAreas.length} תתי-שטח`;
 
     const finding = findings.find(f => f.id === findingId);
 
@@ -513,6 +543,14 @@ export function MonitoringForm({
     setSuccess(false);
 
     try {
+      // Convert ENTIRE_AREA sentinel to null before sending to API
+      const entries = data.entries.map(entry => ({
+        ...entry,
+        sub_area_ids: entry.sub_area_ids.includes(ENTIRE_AREA)
+          ? [null]
+          : entry.sub_area_ids,
+      }));
+
       const response = await fetch('/api/monitoring', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -520,7 +558,7 @@ export function MonitoringForm({
           customer_id: data.customer_id,
           inspector_id: data.inspector_id,
           area_id: data.area_id,
-          entries: data.entries,
+          entries,
         }),
       });
 
@@ -843,11 +881,14 @@ export function MonitoringForm({
                                         options={subAreas.map((sa) => ({
                                           value: sa.id,
                                           label: sa.display || sa.name,
+                                          shortLabel: sa.name,
                                         }))}
                                         value={subField.value}
                                         onValueChange={(ids) => handleSubAreaIdsChange(ids, index)}
                                         placeholder="בחר תתי-שטח"
-                                        selectAllLabel="כל תתי-השטח"
+                                        selectAllLabel="בחר את כל השטח"
+                                        parentMap={subAreaParentMap}
+                                        levelMap={subAreaLevelMap}
                                         disabled={loadingSubAreas}
                                         className="monitoring-select-trigger"
                                       />

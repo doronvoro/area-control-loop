@@ -256,7 +256,7 @@ export default function ActionsScreen() {
                           label={`${HEBREW.subArea} *`}
                           placeholder={HEBREW.selectSubArea}
                           options={cascade.subAreaOptions}
-                          value={entry.sub_area_id}
+                          value={entry.sub_area_id || ''}
                           onChange={(v) =>
                             form.setValue(`entries.${index}.sub_area_id`, v)
                           }

@@ -17,11 +17,11 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get areas for customer with geometry
+    // Get areas for customer with geometry (exclude indoor areas)
     const { data: customerAreas, error: areasError } = await supabase
       .from('customer_areas')
       .select(
-        'area_id, areas(id, name, description, geometry)'
+        'area_id, areas(id, name, description, geometry, area_type)'
       )
       .eq('customer_id', targetCustomerId);
 
@@ -29,7 +29,8 @@ export async function GET() {
 
     const areas = (customerAreas || [])
       .map((item: any) => item.areas)
-      .filter(Boolean);
+      .filter(Boolean)
+      .filter((area: any) => area.area_type !== 'indoor');
 
     // Get sub-areas for all these areas
     const areaIds = areas.map((a: any) => a.id);
@@ -52,12 +53,14 @@ export async function GET() {
     const monitoringBySubArea: Record<string, any[]> = {};
 
     if (subAreaIds.length > 0) {
+      // Fetch monitoring reports for specific sub-areas AND entire-area reports (sub_area_id IS NULL)
       const { data: monitoringData, error: monitoringError } = await (
         supabase.from('monitoring_area_report') as any
       )
         .select(
           `id, sub_area_id, severity, status, created_at,
           finding:findings(id, name),
+          area_report:report_areas!inner(area_id),
           treatments:monitoring_treatments(
             id, dosage, status, notes,
             material:materials(name),
@@ -65,16 +68,13 @@ export async function GET() {
             unit_type:unit_types(name)
           )`
         )
-        .in('sub_area_id', subAreaIds)
+        .or(`sub_area_id.in.(${subAreaIds.join(',')}),sub_area_id.is.null`)
         .order('created_at', { ascending: false });
 
       if (!monitoringError && monitoringData) {
         for (const report of monitoringData as any[]) {
           const subAreaId = report.sub_area_id;
-          if (!monitoringBySubArea[subAreaId]) {
-            monitoringBySubArea[subAreaId] = [];
-          }
-          monitoringBySubArea[subAreaId].push({
+          const reportFormatted = {
             id: report.id,
             finding_name: report.finding?.name || 'לא ידוע',
             severity: report.severity,
@@ -90,7 +90,25 @@ export async function GET() {
               status: t.status,
               notes: t.notes,
             })),
-          });
+          };
+
+          if (subAreaId === null) {
+            // Entire-area report: associate with the area itself via area_report
+            const areaId = report.area_report?.area_id;
+            // Add to all sub-areas of this area so it shows on the map
+            const relevantSubAreas = ((subAreas || []) as any[]).filter((sa) => sa.area_id === areaId);
+            for (const sa of relevantSubAreas) {
+              if (!monitoringBySubArea[sa.id]) {
+                monitoringBySubArea[sa.id] = [];
+              }
+              monitoringBySubArea[sa.id].push({ ...reportFormatted, is_entire_area: true });
+            }
+          } else {
+            if (!monitoringBySubArea[subAreaId]) {
+              monitoringBySubArea[subAreaId] = [];
+            }
+            monitoringBySubArea[subAreaId].push(reportFormatted);
+          }
         }
       }
     }

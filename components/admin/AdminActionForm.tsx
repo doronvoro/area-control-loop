@@ -25,6 +25,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Plus, Trash2 } from 'lucide-react';
+import { ENTIRE_AREA, ENTIRE_AREA_DISPLAY } from '@/lib/constants';
 
 const subAreaEntrySchema = z.object({
   source: z.enum(['monitoring', 'standalone']),
@@ -232,8 +233,8 @@ export function AdminActionForm({
       .map((report: any) => ({
         source: 'monitoring' as const,
         monitoring_report_id: report.monitoring_report_id,
-        sub_area_id: report.sub_area_id,
-        sub_area_display: report.sub_area_display || report.sub_area_name,
+        sub_area_id: report.sub_area_id || ENTIRE_AREA,
+        sub_area_display: report.sub_area_display || report.sub_area_name || ENTIRE_AREA_DISPLAY,
         finding_id: report.finding_id,
         finding_name: report.finding_name,
         crop_id: report.effective_crop_id || '',
@@ -409,7 +410,7 @@ export function AdminActionForm({
           area_id: data.area_id,
           worker_id: data.worker_id,
           entries: data.entries.map((entry) => ({
-            sub_area_id: entry.sub_area_id,
+            sub_area_id: entry.sub_area_id === ENTIRE_AREA ? null : entry.sub_area_id,
             finding_id: entry.finding_id,
             action_type_id: entry.action_type_id,
             material: entry.material,

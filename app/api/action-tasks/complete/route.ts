@@ -17,7 +17,7 @@ interface CompletedTask {
 }
 
 interface StandaloneAction {
-  sub_area_id: string;
+  sub_area_id: string | null;
   finding_id: string;
   severity?: string;
   action_type_id?: string;
@@ -140,18 +140,24 @@ export async function POST(request: Request) {
         }
 
         const monReport = monitoringTreatment.monitoring_report as any;
-        const subAreaId = monReport.sub_area_id;
+        const subAreaId = monReport.sub_area_id ?? null;
         const findingId = monReport.finding_id;
         const severity = monReport.severity;
 
         // Get or create actions_area_report for this sub_area + finding
-        const { data: existingAction } = await (supabase
+        let existingActionQuery = (supabase
           .from('actions_area_report') as any)
           .select('id')
           .eq('area_report_id', reportAreaId)
-          .eq('sub_area_id', subAreaId)
-          .eq('finding_id', findingId)
-          .maybeSingle() as { data: { id: string } | null };
+          .eq('finding_id', findingId);
+
+        if (subAreaId === null) {
+          existingActionQuery = existingActionQuery.is('sub_area_id', null);
+        } else {
+          existingActionQuery = existingActionQuery.eq('sub_area_id', subAreaId);
+        }
+
+        const { data: existingAction } = await existingActionQuery.maybeSingle() as { data: { id: string } | null };
 
         let actionReportId: string;
 
@@ -242,19 +248,25 @@ export async function POST(request: Request) {
     // Step 3: Process standalone actions
     for (const action of standalone_actions) {
       try {
-        if (!action.sub_area_id || !action.finding_id) {
-          errors.push('Standalone action missing sub_area_id or finding_id');
+        if (!action.finding_id) {
+          errors.push('Standalone action missing finding_id');
           continue;
         }
 
         // Get or create actions_area_report
-        const { data: existingAction } = await (supabase
+        let existingStandaloneQuery = (supabase
           .from('actions_area_report') as any)
           .select('id')
           .eq('area_report_id', reportAreaId)
-          .eq('sub_area_id', action.sub_area_id)
-          .eq('finding_id', action.finding_id)
-          .maybeSingle() as { data: { id: string } | null };
+          .eq('finding_id', action.finding_id);
+
+        if (action.sub_area_id === null || action.sub_area_id === undefined) {
+          existingStandaloneQuery = existingStandaloneQuery.is('sub_area_id', null);
+        } else {
+          existingStandaloneQuery = existingStandaloneQuery.eq('sub_area_id', action.sub_area_id);
+        }
+
+        const { data: existingAction } = await existingStandaloneQuery.maybeSingle() as { data: { id: string } | null };
 
         let actionReportId: string;
 
@@ -265,7 +277,7 @@ export async function POST(request: Request) {
             .from('actions_area_report') as any)
             .insert({
               area_report_id: reportAreaId,
-              sub_area_id: action.sub_area_id,
+              sub_area_id: action.sub_area_id ?? null,
               finding_id: action.finding_id,
               severity: action.severity || null,
             })

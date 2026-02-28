@@ -16,8 +16,8 @@ interface TreatmentInput {
 }
 
 interface MonitoringEntryInput {
-  sub_area_id?: string;
-  sub_area_ids?: string[];
+  sub_area_id?: string | null;
+  sub_area_ids?: (string | null)[];
   finding_id: string;
   severity?: ReportSeverity | null;
   treatments?: TreatmentInput[];
@@ -33,14 +33,17 @@ interface MonitoringEntryInput {
 }
 
 // Expand multi-select entries into individual sub-area entries
-function expandEntries(entries: MonitoringEntryInput[]): (MonitoringEntryInput & { sub_area_id: string })[] {
-  const expanded: (MonitoringEntryInput & { sub_area_id: string })[] = [];
+// null sub_area_id means "entire area" - stored as a single row
+function expandEntries(entries: MonitoringEntryInput[]): (MonitoringEntryInput & { sub_area_id: string | null })[] {
+  const expanded: (MonitoringEntryInput & { sub_area_id: string | null })[] = [];
   for (const entry of entries) {
-    const subAreaIds = entry.sub_area_ids || (entry.sub_area_id ? [entry.sub_area_id] : []);
+    const subAreaIds = entry.sub_area_ids || (entry.sub_area_id !== undefined ? [entry.sub_area_id] : []);
+    if (subAreaIds.length === 0) continue;
+
     for (const subAreaId of subAreaIds) {
       expanded.push({
         ...entry,
-        sub_area_id: subAreaId,
+        sub_area_id: subAreaId ?? null,
         sub_area_ids: undefined,
       });
     }
