@@ -419,21 +419,28 @@ export function ReportsTable({ reportAreas }: ReportsTableProps) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredAndSortedReports.flatMap((reportArea) => {
-                  const rows: React.ReactNode[] = [renderRow(reportArea)];
+                {(() => {
+                  const rendered = new Set<string>();
+                  return filteredAndSortedReports.flatMap((reportArea) => {
+                    if (rendered.has(reportArea.id)) return [];
+                    rendered.add(reportArea.id);
+                    const rows: React.ReactNode[] = [renderRow(reportArea)];
 
-                  if (
-                    expandedRows.has(reportArea.id) &&
-                    reportArea.linked_action_report_ids?.length
-                  ) {
-                    for (const childId of reportArea.linked_action_report_ids) {
-                      const child = reportMap.get(childId);
-                      if (child) rows.push(renderRow(child, true));
+                    if (
+                      expandedRows.has(reportArea.id) &&
+                      reportArea.linked_action_report_ids?.length
+                    ) {
+                      for (const childId of reportArea.linked_action_report_ids) {
+                        if (rendered.has(childId)) continue;
+                        rendered.add(childId);
+                        const child = reportMap.get(childId);
+                        if (child) rows.push(renderRow(child, true));
+                      }
                     }
-                  }
 
-                  return rows;
-                })}
+                    return rows;
+                  });
+                })()}
               </TableBody>
             </Table>
           )}

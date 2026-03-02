@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Pencil, Eye } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { HierarchyTree } from '@/components/area-management/HierarchyTree';
@@ -42,7 +42,10 @@ export function UnifiedAreasLayout({
 
   // Hierarchy state (from AreaManagementLayout)
   const [customers, setCustomers] = useState<Customer[]>(initialCustomers);
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  // Auto-expand all customer nodes on load
+  const [expanded, setExpanded] = useState<Set<string>>(
+    () => new Set(initialCustomers.map((c) => `customer_${c.id}`))
+  );
   const [selectedNode, setSelectedNode] = useState<TreeNode | null>(null);
   const [customerAreasMap, setCustomerAreasMap] =
     useState<Record<string, AreaWithType[]>>(initialCustomerAreasMap);
@@ -134,9 +137,46 @@ export function UnifiedAreasLayout({
     [areaSubAreasMap]
   );
 
+  // Pre-load sub-areas for all areas on mount
+  const initialLoadDone = useRef(false);
+  useEffect(() => {
+    if (initialLoadDone.current) return;
+    initialLoadDone.current = true;
+
+    const allAreaIds: string[] = [];
+    for (const areas of Object.values(initialCustomerAreasMap)) {
+      for (const area of areas) {
+        allAreaIds.push(area.id);
+      }
+    }
+
+    // Load sub-areas for each area
+    allAreaIds.forEach((areaId) => {
+      fetch(`/api/sub-areas/tree?areaId=${areaId}`)
+        .then((res) => res.ok ? res.json() : [])
+        .then((subAreas) => {
+          setAreaSubAreasMap((prev) => ({ ...prev, [areaId]: subAreas }));
+        })
+        .catch(console.error);
+    });
+  }, [initialCustomerAreasMap]);
+
   const handleSelectNode = useCallback((node: TreeNode) => {
     setSelectedNode(node);
-  }, []);
+
+    // Auto-load sub-areas when selecting an area node so the canvas isn't empty
+    if (node.type === 'area') {
+      const areaId = (node.data as any).id;
+      if (areaId && !areaSubAreasMap[areaId]) {
+        handleLoadSubAreas(areaId);
+      }
+    } else if (node.type === 'sub_area') {
+      const areaId = (node.data as any).area_id;
+      if (areaId && !areaSubAreasMap[areaId]) {
+        handleLoadSubAreas(areaId);
+      }
+    }
+  }, [areaSubAreasMap, handleLoadSubAreas]);
 
   const handleDrillDown = useCallback(
     async (node: TreeNode) => {

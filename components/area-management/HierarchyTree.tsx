@@ -98,7 +98,7 @@ export function HierarchyTree({
   };
 
   return (
-    <Card className="h-full flex flex-col">
+    <Card className={`h-full flex flex-col ${!showHeader ? 'pt-2' : ''}`}>
       {showHeader && (
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
