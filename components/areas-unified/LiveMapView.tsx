@@ -6,10 +6,23 @@ import { Loader2 } from 'lucide-react';
 import { InteractiveMap } from '@/components/map/InteractiveMap';
 import type { AreaWithGeometry, DrawingState, GeoJSONPolygon } from './types';
 
-export function LiveMapView() {
+interface LiveMapViewProps {
+  selectedEntityId?: string | null;
+  fitToEntityId?: string | null;
+  onEntitySelect?: (entityId: string, entityType: 'area' | 'sub_area') => void;
+}
+
+export function LiveMapView({
+  selectedEntityId: externalSelectedId,
+  fitToEntityId: externalFitId,
+  onEntitySelect: externalOnSelect,
+}: LiveMapViewProps = {}) {
   const [areas, setAreas] = useState<AreaWithGeometry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
+  const [internalSelectedId, setInternalSelectedId] = useState<string | null>(null);
+
+  const selectedEntityId = externalSelectedId !== undefined ? externalSelectedId : internalSelectedId;
+  const fitToEntityId = externalFitId !== undefined ? externalFitId : null;
 
   const viewOnlyDrawing: DrawingState = { mode: 'view' };
 
@@ -32,10 +45,14 @@ export function LiveMapView() {
   }, [fetchAreas]);
 
   const handleEntitySelect = useCallback(
-    (entityId: string, _entityType: 'area' | 'sub_area') => {
-      setSelectedEntityId(entityId);
+    (entityId: string, entityType: 'area' | 'sub_area') => {
+      if (externalOnSelect) {
+        externalOnSelect(entityId, entityType);
+      } else {
+        setInternalSelectedId(entityId);
+      }
     },
-    []
+    [externalOnSelect]
   );
 
   // No-ops for view-only mode
@@ -63,7 +80,7 @@ export function LiveMapView() {
         onPolygonCreated={noop as any}
         onPolygonEdited={noopGeometry}
         onEntitySelect={handleEntitySelect}
-        fitToEntityId={null}
+        fitToEntityId={fitToEntityId}
       />
     </div>
   );

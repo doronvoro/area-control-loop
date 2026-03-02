@@ -504,6 +504,69 @@ export function UnifiedAreasLayout({
     [customerAreasMap]
   );
 
+  // Derive map entity ID from selected tree node (strip prefix to get raw ID)
+  const liveMapEntityId = selectedNode
+    ? selectedNode.type === 'area'
+      ? (selectedNode.data as AreaWithType).id
+      : selectedNode.type === 'sub_area'
+        ? (selectedNode.data as SubArea).id
+        : null
+    : null;
+
+  // When user clicks an entity on the live map, select the corresponding tree node
+  const handleLiveMapEntitySelect = useCallback(
+    (entityId: string, entityType: 'area' | 'sub_area') => {
+      if (entityType === 'area') {
+        for (const areas of Object.values(customerAreasMap)) {
+          const area = areas.find((a) => a.id === entityId);
+          if (area) {
+            handleSelectNode({
+              id: `area_${entityId}`,
+              type: 'area',
+              name: area.name,
+              data: area,
+            });
+            return;
+          }
+        }
+      } else {
+        // Find sub-area in loaded data
+        for (const [areaId, subAreas] of Object.entries(areaSubAreasMap)) {
+          const findSubArea = (items: SubArea[]): SubArea | null => {
+            for (const sa of items) {
+              if (sa.id === entityId) return sa;
+              if (sa.children) {
+                const found = findSubArea(sa.children);
+                if (found) return found;
+              }
+            }
+            return null;
+          };
+          const subArea = findSubArea(subAreas);
+          if (subArea) {
+            handleSelectNode({
+              id: `sub_area_${entityId}`,
+              type: 'sub_area',
+              name: subArea.name,
+              data: subArea,
+            });
+            // Auto-expand parent nodes
+            setExpanded((prev) => {
+              const next = new Set(prev);
+              next.add(`area_${areaId}`);
+              if (subArea.parent_sub_area_id) {
+                next.add(`sub_area_${subArea.parent_sub_area_id}`);
+              }
+              return next;
+            });
+            return;
+          }
+        }
+      }
+    },
+    [customerAreasMap, areaSubAreasMap, handleSelectNode]
+  );
+
   // Render inline indoor sub-area form below a specific tree node
   const renderInlineContent = useCallback(
     (nodeId: string, depth: number): React.ReactNode | null => {
@@ -554,72 +617,72 @@ export function UnifiedAreasLayout({
         </Tabs>
       </div>
 
-      {mode === 'edit' ? (
-        <div className="flex flex-col lg:flex-row h-[calc(100vh-220px)] gap-4">
-          {/* Left Panel - Tree */}
-          <div className="w-full lg:w-1/3 lg:min-w-[300px] lg:max-w-[400px] h-[40vh] lg:h-full overflow-hidden">
-            <HierarchyTree
-              customers={customers}
-              customerAreasMap={customerAreasMap}
-              areaSubAreasMap={areaSubAreasMap}
-              expanded={expanded}
-              selectedNodeId={selectedNode?.id || null}
-              loadingSubAreas={loadingSubAreas}
-              onToggleExpand={toggleExpand}
-              onSelectNode={handleSelectNode}
-              onLoadSubAreas={handleLoadSubAreas}
-              onCreateCustomer={
-                permissions.canCreateCustomer
-                  ? handleCreateCustomer
-                  : undefined
-              }
-              onCreateArea={
-                permissions.canCreateArea
-                  ? handleTreeCreateArea
-                  : undefined
-              }
-              onCreateSubArea={
-                permissions.canCreateSubArea
-                  ? handleTreeCreateSubArea
-                  : undefined
-              }
-              onEditCustomer={
-                permissions.canUpdateCustomer
-                  ? handleEditCustomer
-                  : undefined
-              }
-              onEditArea={
-                permissions.canUpdateArea
-                  ? (area) => handleTreeEditArea(area as AreaWithType)
-                  : undefined
-              }
-              onEditSubArea={
-                permissions.canUpdateSubArea
-                  ? handleTreeEditSubArea
-                  : undefined
-              }
-              onDeleteCustomer={
-                permissions.canDeleteCustomer
-                  ? handleDeleteCustomer
-                  : undefined
-              }
-              onDeleteArea={
-                permissions.canDeleteArea
-                  ? (area) => handleTreeDeleteArea(area as AreaWithType)
-                  : undefined
-              }
-              onDeleteSubArea={
-                permissions.canDeleteSubArea
-                  ? handleTreeDeleteSubArea
-                  : undefined
-              }
-              renderInlineContent={renderInlineContent}
-              showHeader={false}
-            />
-          </div>
+      <div className="flex flex-col lg:flex-row h-[calc(100vh-220px)] gap-4">
+        {/* Tree Panel — shown in both modes */}
+        <div className="w-full lg:w-1/3 lg:min-w-[300px] lg:max-w-[400px] h-[40vh] lg:h-full overflow-hidden">
+          <HierarchyTree
+            customers={customers}
+            customerAreasMap={customerAreasMap}
+            areaSubAreasMap={areaSubAreasMap}
+            expanded={expanded}
+            selectedNodeId={selectedNode?.id || null}
+            loadingSubAreas={loadingSubAreas}
+            onToggleExpand={toggleExpand}
+            onSelectNode={handleSelectNode}
+            onLoadSubAreas={handleLoadSubAreas}
+            onCreateCustomer={
+              mode === 'edit' && permissions.canCreateCustomer
+                ? handleCreateCustomer
+                : undefined
+            }
+            onCreateArea={
+              mode === 'edit' && permissions.canCreateArea
+                ? handleTreeCreateArea
+                : undefined
+            }
+            onCreateSubArea={
+              mode === 'edit' && permissions.canCreateSubArea
+                ? handleTreeCreateSubArea
+                : undefined
+            }
+            onEditCustomer={
+              mode === 'edit' && permissions.canUpdateCustomer
+                ? handleEditCustomer
+                : undefined
+            }
+            onEditArea={
+              mode === 'edit' && permissions.canUpdateArea
+                ? (area) => handleTreeEditArea(area as AreaWithType)
+                : undefined
+            }
+            onEditSubArea={
+              mode === 'edit' && permissions.canUpdateSubArea
+                ? handleTreeEditSubArea
+                : undefined
+            }
+            onDeleteCustomer={
+              mode === 'edit' && permissions.canDeleteCustomer
+                ? handleDeleteCustomer
+                : undefined
+            }
+            onDeleteArea={
+              mode === 'edit' && permissions.canDeleteArea
+                ? (area) => handleTreeDeleteArea(area as AreaWithType)
+                : undefined
+            }
+            onDeleteSubArea={
+              mode === 'edit' && permissions.canDeleteSubArea
+                ? handleTreeDeleteSubArea
+                : undefined
+            }
+            renderInlineContent={mode === 'edit' ? renderInlineContent : undefined}
+            showHeader={false}
+          />
+        </div>
 
-          {/* Right Panel - Context-dependent */}
-          <div className="flex-1 h-[60vh] lg:h-full overflow-hidden">
+        {/* Main Panel — context-dependent in edit, map in live */}
+        <div className="flex-1 h-[60vh] lg:h-full overflow-hidden">
+          {mode === 'edit' ? (
             <ContextPanel
               selectedNode={selectedNode}
               areaType={getAreaTypeForNode(selectedNode)}
@@ -640,13 +703,15 @@ export function UnifiedAreasLayout({
                   : undefined
               }
             />
-          </div>
+          ) : (
+            <LiveMapView
+              selectedEntityId={liveMapEntityId}
+              fitToEntityId={liveMapEntityId}
+              onEntitySelect={handleLiveMapEntitySelect}
+            />
+          )}
         </div>
-      ) : (
-        <div className="h-[calc(100vh-220px)]">
-          <LiveMapView />
-        </div>
-      )}
+      </div>
 
       {/* Customer Form Dialog */}
       <CustomerForm
