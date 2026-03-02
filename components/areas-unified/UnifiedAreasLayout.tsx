@@ -574,6 +574,7 @@ export function UnifiedAreasLayout({
                   : undefined
               }
               renderInlineContent={renderInlineContent}
+              showHeader={false}
             />
           </div>
 

@@ -27,6 +27,7 @@ interface HierarchyTreeProps {
   onDeleteArea?: (area: Area) => void;
   onDeleteSubArea?: (subArea: SubArea) => void;
   renderInlineContent?: (nodeId: string, depth: number) => React.ReactNode | null;
+  showHeader?: boolean;
 }
 
 export function HierarchyTree({
@@ -49,6 +50,7 @@ export function HierarchyTree({
   onDeleteArea,
   onDeleteSubArea,
   renderInlineContent,
+  showHeader = true,
 }: HierarchyTreeProps) {
   const handleExpandArea = async (areaId: string) => {
     await onLoadSubAreas(areaId);
@@ -97,20 +99,22 @@ export function HierarchyTree({
 
   return (
     <Card className="h-full flex flex-col">
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Layers className="h-5 w-5" />
-            <CardTitle className="text-lg">מבנה היררכי</CardTitle>
+      {showHeader && (
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Layers className="h-5 w-5" />
+              <CardTitle className="text-lg">מבנה היררכי</CardTitle>
+            </div>
+            {onCreateCustomer && (
+              <Button size="sm" onClick={onCreateCustomer}>
+                <Plus className="h-4 w-4 ml-1" />
+                לקוח
+              </Button>
+            )}
           </div>
-          {onCreateCustomer && (
-            <Button size="sm" onClick={onCreateCustomer}>
-              <Plus className="h-4 w-4 ml-1" />
-              לקוח
-            </Button>
-          )}
-        </div>
-      </CardHeader>
+        </CardHeader>
+      )}
       <CardContent className="flex-1 overflow-y-auto p-2">
         {customers.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">

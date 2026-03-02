@@ -5,9 +5,7 @@ import { toast } from 'sonner';
 import { Save, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { TreeHeader } from '@/components/indoor-designer/tree/TreeHeader';
 import { DesignerBreadcrumb } from '@/components/indoor-designer/shared/Breadcrumb';
-import { InteractiveTree } from '@/components/indoor-designer/tree/InteractiveTree';
 import { InteractiveIndoorCanvas } from '@/components/indoor-designer/canvas/InteractiveIndoorCanvas';
 import { useTreeData } from '@/components/indoor-designer/hooks/useTreeData';
 import { useDesignerActions } from '@/components/indoor-designer/hooks/useDesignerActions';
@@ -15,16 +13,6 @@ import { getBounds } from '@/components/indoor-designer/geometry/geometry-utils'
 import type { DesignerState, GeneratedSubArea } from '@/components/indoor-designer/types';
 import type { GeoJSONPolygon } from '@/components/map/types';
 import type { SubArea, Permissions, AreaWithType } from './types';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 
 interface IndoorAreaEditorProps {
   area: AreaWithType;
@@ -107,10 +95,6 @@ export function IndoorAreaEditor({
   const [saving, setSaving] = useState(false);
   const [saveProgress, setSaveProgress] = useState(0);
   const [saveMessage, setSaveMessage] = useState('');
-  const [dimensionConfirm, setDimensionConfirm] = useState<{
-    width: number;
-    height: number;
-  } | null>(null);
 
   // Re-initialize when area changes
   useEffect(() => {
@@ -125,25 +109,6 @@ export function IndoorAreaEditor({
     useTreeData(state);
 
   const actions = useDesignerActions(state, setState);
-
-  const handleDimensionsChange = useCallback(
-    (width: number, height: number) => {
-      if (state.generatedSubAreas.length > 0) {
-        setDimensionConfirm({ width, height });
-      } else {
-        actions.setDimensions(width, height);
-      }
-    },
-    [state.generatedSubAreas.length, actions]
-  );
-
-  const confirmDimensionChange = useCallback(() => {
-    if (dimensionConfirm) {
-      actions.clearSubAreas();
-      actions.setDimensions(dimensionConfirm.width, dimensionConfirm.height);
-      setDimensionConfirm(null);
-    }
-  }, [dimensionConfirm, actions]);
 
   const handleSave = useCallback(async () => {
     const { areaName, areaDescription, areaGeometry, generatedSubAreas } = state;
@@ -240,80 +205,40 @@ export function IndoorAreaEditor({
 
   return (
     <div className="flex flex-col h-full border rounded-lg bg-card overflow-hidden">
-      {/* Main 2-panel layout */}
-      <div className="flex flex-1 overflow-hidden gap-0">
-        {/* Canvas panel */}
-        <div className="flex-1 flex flex-col min-w-0">
-          {/* Breadcrumb + dimensions bar */}
-          <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/10">
-            <DesignerBreadcrumb
-              segments={breadcrumb}
-              onNavigate={actions.selectNode}
-            />
-            {selectedNodeDimensions && (
-              <span className="text-xs text-muted-foreground whitespace-nowrap ms-3">
-                {selectedNodeDimensions.width}m × {selectedNodeDimensions.height}m
-              </span>
-            )}
-          </div>
+      {/* Breadcrumb + dimensions bar */}
+      <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/10">
+        <DesignerBreadcrumb
+          segments={breadcrumb}
+          onNavigate={actions.selectNode}
+        />
+        {selectedNodeDimensions && (
+          <span className="text-xs text-muted-foreground whitespace-nowrap ms-3">
+            {selectedNodeDimensions.width}m × {selectedNodeDimensions.height}m
+          </span>
+        )}
+      </div>
 
-          {/* Canvas — z-0 creates stacking context so canvas z-indices don't overlap dialogs */}
-          <div className="flex-1 relative z-0">
-            {state.areaGeometry ? (
-              <InteractiveIndoorCanvas
-                areaGeometry={state.areaGeometry}
-                subAreas={state.generatedSubAreas}
-                width={state.width}
-                height={state.height}
-                drawingState={{ mode: 'view' }}
-                selectedTempId={state.selectedNodeId}
-                selectionContext={selectionContext}
-                onSubAreaSelect={actions.selectNode}
-                showLabels
-                showLegend
-                showGrid
-              />
-            ) : (
-              <div className="flex items-center justify-center h-full text-muted-foreground">
-                <p className="text-sm">הגדר מימדים כדי להציג את הקנבס</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Tree panel */}
-        <div className="w-72 border-s flex flex-col bg-background overflow-hidden">
-          <TreeHeader
-            areaName={state.areaName}
-            areaDescription={state.areaDescription}
+      {/* Canvas — z-0 creates stacking context so canvas z-indices don't overlap dialogs */}
+      <div className="flex-1 relative z-0">
+        {state.areaGeometry ? (
+          <InteractiveIndoorCanvas
+            areaGeometry={state.areaGeometry}
+            subAreas={state.generatedSubAreas}
             width={state.width}
             height={state.height}
-            onAreaNameChange={actions.setAreaName}
-            onAreaDescriptionChange={actions.setAreaDescription}
-            onDimensionsChange={handleDimensionsChange}
-            hasSubAreas={state.generatedSubAreas.length > 0}
+            drawingState={{ mode: 'view' }}
+            selectedTempId={state.selectedNodeId}
+            selectionContext={selectionContext}
+            onSubAreaSelect={actions.selectNode}
+            showLabels
+            showLegend
+            showGrid
           />
-
-          <div className="flex-1 overflow-y-auto">
-            <InteractiveTree
-              areaName={state.areaName}
-              areaGeometry={state.areaGeometry}
-              subAreas={state.generatedSubAreas}
-              tree={tree}
-              selectedNodeId={state.selectedNodeId}
-              activeTemplateNodeId={state.activeTemplateNodeId}
-              renamingNodeId={state.renamingNodeId}
-              onSelectNode={actions.selectNode}
-              onAddChildren={actions.addChildren}
-              onAddChildrenToSiblings={actions.addChildrenToSiblings}
-              onAddSingleChild={actions.addSingleChild}
-              onDeleteNode={actions.deleteNode}
-              onRenameNode={actions.renameNode}
-              onOpenTemplate={actions.openTemplate}
-              onStartRename={actions.startRename}
-            />
+        ) : (
+          <div className="flex items-center justify-center h-full text-muted-foreground">
+            <p className="text-sm">הגדר מימדים כדי להציג את הקנבס</p>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Bottom bar */}
@@ -351,27 +276,6 @@ export function IndoorAreaEditor({
           </Button>
         </div>
       </div>
-
-      {/* Dimension change confirmation */}
-      <AlertDialog
-        open={!!dimensionConfirm}
-        onOpenChange={(open) => !open && setDimensionConfirm(null)}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>שינוי מימדים</AlertDialogTitle>
-            <AlertDialogDescription>
-              שינוי מימדים ימחק את כל החלוקות הקיימות. להמשיך?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>ביטול</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDimensionChange}>
-              המשך
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }
