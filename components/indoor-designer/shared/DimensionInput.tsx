@@ -116,7 +116,7 @@ export function DimensionInput({
         <Input
           type="number"
           min={0.001}
-          step={0.1}
+          step="any"
           value={displayDunam}
           onChange={(e) => handleDunamChange(e.target.value)}
           onFocus={handleDunamFocus}
