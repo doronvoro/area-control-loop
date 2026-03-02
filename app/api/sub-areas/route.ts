@@ -171,7 +171,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { area_id, name, variety, rows, parent_sub_area_id, level, crop_id, size, size_unit_type } = body;
+    const { area_id, name, variety, rows, parent_sub_area_id, level, crop_id, size, size_unit_type, geometry } = body;
 
     if (!area_id || !name) {
       return NextResponse.json(
@@ -229,6 +229,7 @@ export async function POST(request: Request) {
       crop_id: crop_id || null,
       size: size ?? null,
       size_unit_type: size_unit_type || null,
+      ...(geometry !== undefined ? { geometry: geometry || null } : {}),
     };
 
     // Use admin client to bypass RLS

@@ -41,6 +41,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { area, sub_areas } = body as {
       area: {
+        id?: string; // If provided, update existing area
         name: string;
         description?: string | null;
         area_type: string;
@@ -99,42 +100,82 @@ export async function POST(request: Request) {
     (async () => {
       try {
         const adminClient = createAdminClient();
+        const isUpdate = !!area.id;
 
-        // 1. Create the area
-        await send({ step: 'area', message: 'יוצר שטח...', progress: 5 });
+        let areaId: string;
+        let areaName: string;
 
-        const { data: areaData, error: areaError } = await (
-          adminClient.from('areas') as any
-        )
-          .insert({
-            name: area.name,
-            description: area.description || null,
-            area_type: area.area_type || 'indoor',
-            geometry: area.geometry,
-            crop_id: area.crop_id || null,
-            size: area.size ?? null,
-            size_unit_type: area.size_unit_type || null,
-          })
-          .select()
-          .single();
+        if (isUpdate) {
+          // Update existing area
+          await send({ step: 'area', message: 'מעדכן שטח...', progress: 5 });
 
-        if (areaError) throw areaError;
+          const { data: areaData, error: areaError } = await (
+            adminClient.from('areas') as any
+          )
+            .update({
+              name: area.name,
+              description: area.description || null,
+              area_type: area.area_type || 'indoor',
+              geometry: area.geometry,
+            })
+            .eq('id', area.id)
+            .select()
+            .single();
 
-        const areaId = areaData.id;
-        const areaName = areaData.name;
+          if (areaError) throw areaError;
 
-        // 2. Link area to customer
-        await send({ step: 'link', message: 'מקשר ללקוח...', progress: 10 });
+          areaId = areaData.id;
+          areaName = areaData.name;
 
-        const { error: linkError } = await (
-          adminClient.from('customer_areas') as any
-        ).insert({
-          customer_id: customerId,
-          area_id: areaId,
-        });
+          // Delete existing sub-areas for this area
+          await send({ step: 'cleanup', message: 'מנקה תתי-שטחים ישנים...', progress: 10 });
 
-        if (linkError) {
-          console.error('Error linking area to customer:', linkError);
+          const { error: deleteError } = await (
+            adminClient.from('sub_areas') as any
+          )
+            .delete()
+            .eq('area_id', areaId);
+
+          if (deleteError) {
+            console.error('Error deleting old sub-areas:', deleteError);
+          }
+        } else {
+          // Create new area
+          await send({ step: 'area', message: 'יוצר שטח...', progress: 5 });
+
+          const { data: areaData, error: areaError } = await (
+            adminClient.from('areas') as any
+          )
+            .insert({
+              name: area.name,
+              description: area.description || null,
+              area_type: area.area_type || 'indoor',
+              geometry: area.geometry,
+              crop_id: area.crop_id || null,
+              size: area.size ?? null,
+              size_unit_type: area.size_unit_type || null,
+            })
+            .select()
+            .single();
+
+          if (areaError) throw areaError;
+
+          areaId = areaData.id;
+          areaName = areaData.name;
+
+          // Link area to customer
+          await send({ step: 'link', message: 'מקשר ללקוח...', progress: 10 });
+
+          const { error: linkError } = await (
+            adminClient.from('customer_areas') as any
+          ).insert({
+            customer_id: customerId,
+            area_id: areaId,
+          });
+
+          if (linkError) {
+            console.error('Error linking area to customer:', linkError);
+          }
         }
 
         // 3. Create sub-areas level by level (batch insert per level)
@@ -225,7 +266,7 @@ export async function POST(request: Request) {
           progress: 100,
           message: 'הושלם!',
           data: {
-            area: areaData,
+            area: { id: areaId, name: areaName },
             sub_areas: createdSubAreas,
             total_created: createdSubAreas.length,
           },

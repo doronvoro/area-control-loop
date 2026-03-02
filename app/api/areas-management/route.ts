@@ -52,12 +52,12 @@ export async function GET() {
     if (isAdmin) {
       const adminClient = createAdminClient();
       const { data } = await (adminClient.from('customer_areas') as any).select(
-        'customer_id, area_id, areas(id, name, description, crop_id)'
+        'customer_id, area_id, areas(id, name, description, crop_id, area_type)'
       );
       customerAreas = data;
     } else {
       const { data } = await (supabase.from('customer_areas') as any).select(
-        'customer_id, area_id, areas(id, name, description, crop_id)'
+        'customer_id, area_id, areas(id, name, description, crop_id, area_type)'
       );
       customerAreas = data;
     }

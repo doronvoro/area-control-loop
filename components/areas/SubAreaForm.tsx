@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -31,6 +31,9 @@ import {
 } from '@/components/ui/select';
 import { showToast } from '@/lib/toast';
 import { SIZE_UNIT_TYPES } from '@/types/database';
+import { DimensionInput } from '@/components/indoor-designer/shared/DimensionInput';
+import { createRectangleGeometry, getBounds } from '@/components/indoor-designer/geometry/geometry-utils';
+import type { GeoJSONPolygon } from '@/components/map/types';
 
 const subAreaSchema = z.object({
   name: z.string().min(1, 'שם התת-שטח נדרש'),
@@ -63,10 +66,12 @@ interface SubAreaFormProps {
     crop_id?: string | null;
     size?: number | null;
     size_unit_type?: string | null;
+    geometry?: GeoJSONPolygon | null;
   } | null;
   areaId: string;
   subAreas?: Array<{ id: string; name: string; display?: string }>;
   crops?: Crop[];
+  areaType?: 'indoor' | 'outdoor';
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
@@ -78,6 +83,7 @@ export function SubAreaForm({
   areaId,
   subAreas = [],
   crops = [],
+  areaType,
   open,
   onOpenChange,
   onSuccess,
@@ -85,6 +91,26 @@ export function SubAreaForm({
 }: SubAreaFormProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isIndoor = areaType === 'indoor';
+
+  // Extract width/height from existing geometry for editing
+  const getExistingDimensions = (): { width: number; height: number } => {
+    const geom = subArea?.geometry as GeoJSONPolygon | null;
+    if (!geom) return { width: 0, height: 0 };
+    const bounds = getBounds(geom);
+    const w = Math.round((bounds.maxX - bounds.minX) * 10) / 10;
+    const h = Math.round((bounds.maxY - bounds.minY) * 10) / 10;
+    return { width: w > 0 ? w : 0, height: h > 0 ? h : 0 };
+  };
+
+  // Numeric dimension state for DimensionInput
+  const [dimWidth, setDimWidth] = useState(0);
+  const [dimHeight, setDimHeight] = useState(0);
+
+  const handleDimensionsChange = (w: number, h: number) => {
+    setDimWidth(w);
+    setDimHeight(h);
+  };
 
   const form = useForm<SubAreaFormData>({
     resolver: zodResolver(subAreaSchema),
@@ -100,6 +126,15 @@ export function SubAreaForm({
     },
   });
 
+  // Reset dimensions when dialog opens
+  useEffect(() => {
+    if (open) {
+      const dims = subArea ? getExistingDimensions() : { width: 0, height: 0 };
+      setDimWidth(dims.width);
+      setDimHeight(dims.height);
+    }
+  }, [open, subArea]);
+
   // Filter out current sub-area and its children from parent options
   const parentOptions = subAreas.filter(
     (sa) => sa.id !== subArea?.id && sa.id !== subArea?.parent_sub_area_id
@@ -111,6 +146,17 @@ export function SubAreaForm({
 
     try {
       const method = subArea ? 'PUT' : 'POST';
+
+      // For indoor sub-areas, compute geometry and size from dimensions
+      const geometry = isIndoor && dimWidth > 0 && dimHeight > 0
+        ? createRectangleGeometry(0, 0, dimWidth, dimHeight)
+        : undefined;
+
+      const size = isIndoor
+        ? (dimWidth > 0 && dimHeight > 0 ? Math.round((dimWidth * dimHeight) / 1000 * 100) / 100 : null)
+        : (data.size ? parseFloat(data.size) : null);
+      const sizeUnitType = isIndoor ? 'dunam' : (data.size_unit_type || null);
+
       const response = await fetch('/api/sub-areas', {
         method,
         headers: {
@@ -121,8 +167,9 @@ export function SubAreaForm({
           ...data,
           parent_sub_area_id: data.parent_sub_area_id || null,
           crop_id: data.crop_id || null,
-          size: data.size ? parseFloat(data.size) : null,
-          size_unit_type: data.size_unit_type || null,
+          size,
+          size_unit_type: sizeUnitType,
+          ...(geometry ? { geometry } : {}),
         }),
       });
 
@@ -198,54 +245,62 @@ export function SubAreaForm({
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="size"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>גודל</FormLabel>
-                    <FormControl>
-                      <Input
-                        {...field}
-                        type="number"
-                        step="0.01"
-                        placeholder="גודל התת-שטח (אופציונלי)"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
+            {isIndoor ? (
+              <DimensionInput
+                width={dimWidth}
+                height={dimHeight}
+                onDimensionsChange={handleDimensionsChange}
               />
-
-              <FormField
-                control={form.control}
-                name="size_unit_type"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>יחידת מידה</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      value={field.value || 'dunam'}
-                    >
+            ) : (
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="size"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>גודל</FormLabel>
                       <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="בחר יחידה" />
-                        </SelectTrigger>
+                        <Input
+                          {...field}
+                          type="number"
+                          step="0.01"
+                          placeholder="גודל התת-שטח (אופציונלי)"
+                        />
                       </FormControl>
-                      <SelectContent>
-                        {SIZE_UNIT_TYPES.map((unitType) => (
-                          <SelectItem key={unitType.name} value={unitType.name}>
-                            {unitType.description}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="size_unit_type"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>יחידת מידה</FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value || 'dunam'}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="בחר יחידה" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {SIZE_UNIT_TYPES.map((unitType) => (
+                            <SelectItem key={unitType.name} value={unitType.name}>
+                              {unitType.description}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            )}
 
             {parentOptions.length > 0 && (
               <FormField

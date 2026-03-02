@@ -99,7 +99,7 @@ export async function GET(request: Request) {
 
     let query = (adminClient
       .from('customer_areas') as any)
-      .select('id, customer_id, area_id, areas(id, name, description, crop_id, crops(id, name, description)), customers(id, name)');
+      .select('id, customer_id, area_id, areas(id, name, description, crop_id, area_type, crops(id, name, description)), customers(id, name)');
 
     if (customerId) {
       query = query.eq('customer_id', customerId);

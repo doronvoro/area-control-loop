@@ -281,17 +281,10 @@ export function LeafletMap({
           fillOpacity: 0.2,
         },
       });
-    } else if (drawingState.mode === 'edit' && drawingState.targetEntityId) {
-      // Find the layer to edit
-      polygonLayersRef.current.eachLayer((layer: any) => {
-        if (layer.options?.entityId === drawingState.targetEntityId) {
-          layer.pm.enable({
-            allowSelfIntersection: false,
-          });
-          editableLayerRef.current = layer;
-        }
-      });
     }
+    // Note: 'edit' mode enablement is handled in the polygon render effect
+    // to avoid a race condition where this effect enables edit on a layer
+    // that the render effect then destroys and recreates.
   }, [drawingState]);
 
   // Handle Geoman create event
@@ -330,6 +323,7 @@ export function LeafletMap({
     layerGroup.clearLayers();
 
     const isViewMode = drawingState.mode === 'view';
+    const isEditMode = drawingState.mode === 'edit';
 
     areas.forEach((area) => {
       // Render area polygon
@@ -349,11 +343,14 @@ export function LeafletMap({
           layer.options.entityId = area.id;
           layer.options.entityType = 'area';
 
-          layer.bindTooltip(area.name, {
-            permanent: false,
-            direction: 'center',
-            className: 'area-tooltip',
-          });
+          // Don't bind tooltip/popup in edit mode — they interfere with vertex dragging
+          if (!isEditMode) {
+            layer.bindTooltip(area.name, {
+              permanent: false,
+              direction: 'center',
+              className: 'area-tooltip',
+            });
+          }
 
           if (isViewMode) {
             layer.bindPopup(buildAreaPopup(area), {
@@ -394,11 +391,14 @@ export function LeafletMap({
             layer.options.entityId = subArea.id;
             layer.options.entityType = 'sub_area';
 
-            layer.bindTooltip(subArea.display || subArea.name, {
-              permanent: false,
-              direction: 'center',
-              className: 'sub-area-tooltip',
-            });
+            // Don't bind tooltip/popup in edit mode — they interfere with vertex dragging
+            if (!isEditMode) {
+              layer.bindTooltip(subArea.display || subArea.name, {
+                permanent: false,
+                direction: 'center',
+                className: 'sub-area-tooltip',
+              });
+            }
 
             if (isViewMode) {
               layer.bindPopup(buildSubAreaPopup(subArea), {
@@ -420,7 +420,31 @@ export function LeafletMap({
         }
       });
     });
-  }, [areas, selectedEntityId, drawingState.mode, onEntitySelect, handleEditEnd]);
+
+    // Enable edit mode on target layer AFTER layers are created
+    if (isEditMode && drawingState.targetEntityId) {
+      // Clean up previous editable layer ref
+      if (editableLayerRef.current) {
+        (editableLayerRef.current as any).pm?.disable();
+        editableLayerRef.current = null;
+      }
+
+      // L.geoJSON creates wrapper layer groups — entityId is on the inner polygon layers.
+      // We need to iterate into nested layers to find the actual path layer.
+      layerGroup.eachLayer((outerLayer: any) => {
+        if (outerLayer.eachLayer) {
+          outerLayer.eachLayer((innerLayer: any) => {
+            if (innerLayer.options?.entityId === drawingState.targetEntityId) {
+              innerLayer.pm.enable({
+                allowSelfIntersection: false,
+              });
+              editableLayerRef.current = innerLayer;
+            }
+          });
+        }
+      });
+    }
+  }, [areas, selectedEntityId, drawingState, onEntitySelect, handleEditEnd]);
 
   // Fit map to entity bounds
   useEffect(() => {

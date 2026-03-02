@@ -5,7 +5,6 @@ import {
   FileText,
   Users,
   MapPin,
-  MapPinned,
   Sprout,
   Bug,
   FlaskConical,
@@ -13,7 +12,6 @@ import {
   ClipboardList,
   ListChecks,
   Map,
-  Warehouse,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -37,8 +35,8 @@ export const workflowGroup: NavGroup = {
     { href: '/dashboard', label: 'דשבורד', icon: LayoutDashboard },
     { href: '/monitoring', label: 'ניטור', icon: Search },
     { href: '/actions', label: 'פעולות', icon: Zap },
+    { href: '/areas', label: 'שטחים', icon: MapPin },
     { href: '/area-map', label: 'מפת שטחים', icon: Map },
-    { href: '/map', label: 'מפה', icon: MapPinned },
     { href: '/reports', label: 'דוחות', icon: FileText },
   ],
 };
@@ -49,11 +47,10 @@ export const managementGroup: NavGroup = {
   requiredRole: 'customer_owner',
   items: [
     { href: '/admin/workers', label: 'ניהול עובדים', icon: Users },
-    { href: '/admin/areas-management', label: 'ניהול שטחים', icon: MapPin },
+    { href: '/areas', label: 'ניהול שטחים', icon: MapPin },
     { href: '/admin/crops', label: 'ניהול גידולים', icon: Sprout },
     { href: '/admin/findings', label: 'ניהול ממצאים', icon: Bug },
     { href: '/admin/recommend-materials', label: 'המלצות חומרים', icon: FlaskConical },
-    { href: '/indoor-designer', label: 'מעצב שטחים פנימיים', icon: Warehouse },
   ],
 };
 

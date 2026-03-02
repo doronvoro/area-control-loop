@@ -22,6 +22,7 @@ interface DetailPanelProps {
   onDrillDown?: (node: TreeNode) => void;
   onEditCustomer?: (customer: Customer) => void;
   onDeleteCustomer?: (customer: Customer) => void;
+  onCreateArea?: (customerId: string) => void;
 }
 
 export function DetailPanel({
@@ -34,6 +35,7 @@ export function DetailPanel({
   onDrillDown,
   onEditCustomer,
   onDeleteCustomer,
+  onCreateArea,
 }: DetailPanelProps) {
   const [editAreaOpen, setEditAreaOpen] = useState(false);
   const [editSubAreaOpen, setEditSubAreaOpen] = useState(false);
@@ -73,6 +75,10 @@ export function DetailPanel({
   };
 
   const handleCreateArea = (customerId: string) => {
+    if (onCreateArea) {
+      onCreateArea(customerId);
+      return;
+    }
     setParentAreaId(customerId);
     setEditingArea(null);
     setCreateAreaOpen(true);

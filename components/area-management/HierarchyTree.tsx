@@ -17,6 +17,16 @@ interface HierarchyTreeProps {
   onSelectNode: (node: TreeNode) => void;
   onLoadSubAreas: (areaId: string) => Promise<void>;
   onCreateCustomer?: () => void;
+  // Node action callbacks
+  onCreateArea?: (customerId: string) => void;
+  onCreateSubArea?: (areaId: string, parentSubAreaId?: string) => void;
+  onEditCustomer?: (customer: Customer) => void;
+  onEditArea?: (area: Area) => void;
+  onEditSubArea?: (subArea: SubArea) => void;
+  onDeleteCustomer?: (customer: Customer) => void;
+  onDeleteArea?: (area: Area) => void;
+  onDeleteSubArea?: (subArea: SubArea) => void;
+  renderInlineContent?: (nodeId: string, depth: number) => React.ReactNode | null;
 }
 
 export function HierarchyTree({
@@ -30,6 +40,15 @@ export function HierarchyTree({
   onSelectNode,
   onLoadSubAreas,
   onCreateCustomer,
+  onCreateArea,
+  onCreateSubArea,
+  onEditCustomer,
+  onEditArea,
+  onEditSubArea,
+  onDeleteCustomer,
+  onDeleteArea,
+  onDeleteSubArea,
+  renderInlineContent,
 }: HierarchyTreeProps) {
   const handleExpandArea = async (areaId: string) => {
     await onLoadSubAreas(areaId);
@@ -61,7 +80,15 @@ export function HierarchyTree({
                 data: subArea,
               })
             }
+            onCreateChild={
+              onCreateSubArea
+                ? () => onCreateSubArea(subArea.area_id, subArea.id)
+                : undefined
+            }
+            onEdit={onEditSubArea ? () => onEditSubArea(subArea) : undefined}
+            onDelete={onDeleteSubArea ? () => onDeleteSubArea(subArea) : undefined}
           />
+          {renderInlineContent?.(nodeId, depth + 1)}
           {hasChildren && isExpanded && renderSubAreas(subArea.children!, depth + 1, parentAreaId)}
         </div>
       );
@@ -116,6 +143,13 @@ export function HierarchyTree({
                         data: customer,
                       })
                     }
+                    onCreateChild={
+                      onCreateArea
+                        ? () => onCreateArea(customer.id)
+                        : undefined
+                    }
+                    onEdit={onEditCustomer ? () => onEditCustomer(customer) : undefined}
+                    onDelete={onDeleteCustomer ? () => onDeleteCustomer(customer) : undefined}
                   />
                   {hasAreas && isExpanded && (
                     <div>
@@ -136,6 +170,7 @@ export function HierarchyTree({
                               isExpanded={isAreaExpanded}
                               isSelected={selectedNodeId === areaId}
                               isLoading={isLoading}
+                              areaType={(area as any).area_type || 'outdoor'}
                               depth={1}
                               onToggleExpand={() => handleExpandArea(area.id)}
                               onSelect={() =>
@@ -146,7 +181,15 @@ export function HierarchyTree({
                                   data: area,
                                 })
                               }
+                              onCreateChild={
+                                onCreateSubArea
+                                  ? () => onCreateSubArea(area.id)
+                                  : undefined
+                              }
+                              onEdit={onEditArea ? () => onEditArea(area) : undefined}
+                              onDelete={onDeleteArea ? () => onDeleteArea(area) : undefined}
                             />
+                            {renderInlineContent?.(areaId, 2)}
                             {isAreaExpanded && hasSubAreas && renderSubAreas(subAreas, 2, area.id)}
                           </div>
                         );
