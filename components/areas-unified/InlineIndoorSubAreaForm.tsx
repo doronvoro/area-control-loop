@@ -157,6 +157,7 @@ export function InlineIndoorSubAreaForm({
   return (
     <div
       ref={containerRef}
+      className="overflow-hidden pe-2"
       style={{ paddingInlineStart: `${depth * 1.5 + 0.5}rem` }}
     >
       {isLoading ? (

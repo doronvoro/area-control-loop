@@ -291,8 +291,15 @@ export function IndoorCanvas({
       polygon.eachLayer((layer: any) => {
         layer.options.tempId = sa.tempId;
 
-        // Show tooltip: permanent for level 2+ when highlighted or no selection
-        const showPermanent = showLabels && sa.level >= 2 && (isHighlighted || !hasSelection);
+        // Only show permanent label when sub-area is large enough to fit text
+        const saBounds = L.geoJSON(sa.geometry as any).getBounds();
+        const saHeight = saBounds.getNorth() - saBounds.getSouth();
+        const saWidth = saBounds.getEast() - saBounds.getWest();
+        const minDim = Math.min(saHeight, saWidth);
+        // Require minimum ~3m in the smallest dimension to show permanent label
+        const isLargeEnough = minDim >= 3;
+
+        const showPermanent = showLabels && sa.level >= 2 && isLargeEnough && (isHighlighted || !hasSelection);
         layer.bindTooltip(sa.name, {
           permanent: showPermanent,
           direction: 'center',

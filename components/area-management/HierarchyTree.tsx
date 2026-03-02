@@ -90,7 +90,7 @@ export function HierarchyTree({
             onEdit={onEditSubArea ? () => onEditSubArea(subArea) : undefined}
             onDelete={onDeleteSubArea ? () => onDeleteSubArea(subArea) : undefined}
           />
-          {renderInlineContent?.(nodeId, depth + 1)}
+          {renderInlineContent?.(nodeId, depth)}
           {hasChildren && isExpanded && renderSubAreas(subArea.children!, depth + 1, parentAreaId)}
         </div>
       );
@@ -193,7 +193,7 @@ export function HierarchyTree({
                               onEdit={onEditArea ? () => onEditArea(area) : undefined}
                               onDelete={onDeleteArea ? () => onDeleteArea(area) : undefined}
                             />
-                            {renderInlineContent?.(areaId, 2)}
+                            {renderInlineContent?.(areaId, 1)}
                             {isAreaExpanded && hasSubAreas && renderSubAreas(subAreas, 2, area.id)}
                           </div>
                         );
