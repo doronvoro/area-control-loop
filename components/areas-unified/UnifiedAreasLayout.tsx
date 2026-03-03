@@ -91,6 +91,23 @@ export function UnifiedAreasLayout({
     siblingCount: number;
   } | null>(null);
 
+  // Monitoring counts for tree indicators
+  const [pendingMonitoringCounts, setPendingMonitoringCounts] = useState<
+    Record<string, number>
+  >({});
+
+  // Fetch monitoring counts only in live mode
+  useEffect(() => {
+    if (mode !== 'live') {
+      setPendingMonitoringCounts({});
+      return;
+    }
+    fetch('/api/map/monitoring-counts')
+      .then((res) => (res.ok ? res.json() : { counts: {} }))
+      .then((data) => setPendingMonitoringCounts(data.counts || {}))
+      .catch(console.error);
+  }, [mode]);
+
   // Delete confirmation (from tree)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingItem, setDeletingItem] = useState<{
@@ -236,6 +253,17 @@ export function UnifiedAreasLayout({
       } catch (error) {
         console.error('Error refreshing sub-areas:', error);
       }
+    }
+
+    // Refresh monitoring counts
+    try {
+      const res = await fetch('/api/map/monitoring-counts');
+      if (res.ok) {
+        const data = await res.json();
+        setPendingMonitoringCounts(data.counts || {});
+      }
+    } catch (error) {
+      console.error('Error refreshing monitoring counts:', error);
     }
   }, [areaSubAreasMap]);
 
@@ -677,6 +705,7 @@ export function UnifiedAreasLayout({
             }
             renderInlineContent={mode === 'edit' ? renderInlineContent : undefined}
             showHeader={false}
+            pendingMonitoringCounts={pendingMonitoringCounts}
           />
         </div>
 

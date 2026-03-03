@@ -28,6 +28,7 @@ interface HierarchyTreeProps {
   onDeleteSubArea?: (subArea: SubArea) => void;
   renderInlineContent?: (nodeId: string, depth: number) => React.ReactNode | null;
   showHeader?: boolean;
+  pendingMonitoringCounts?: Record<string, number>;
 }
 
 export function HierarchyTree({
@@ -51,6 +52,7 @@ export function HierarchyTree({
   onDeleteSubArea,
   renderInlineContent,
   showHeader = true,
+  pendingMonitoringCounts,
 }: HierarchyTreeProps) {
   const handleExpandArea = async (areaId: string) => {
     await onLoadSubAreas(areaId);
@@ -89,6 +91,7 @@ export function HierarchyTree({
             }
             onEdit={onEditSubArea ? () => onEditSubArea(subArea) : undefined}
             onDelete={onDeleteSubArea ? () => onDeleteSubArea(subArea) : undefined}
+            pendingMonitoringCount={pendingMonitoringCounts?.[subArea.id]}
           />
           {renderInlineContent?.(nodeId, depth)}
           {hasChildren && isExpanded && renderSubAreas(subArea.children!, depth + 1, parentAreaId)}
@@ -192,6 +195,7 @@ export function HierarchyTree({
                               }
                               onEdit={onEditArea ? () => onEditArea(area) : undefined}
                               onDelete={onDeleteArea ? () => onDeleteArea(area) : undefined}
+                              pendingMonitoringCount={pendingMonitoringCounts?.[area.id]}
                             />
                             {renderInlineContent?.(areaId, 1)}
                             {isAreaExpanded && hasSubAreas && renderSubAreas(subAreas, 2, area.id)}

@@ -115,6 +115,23 @@ function buildAreaPopup(area: AreaWithGeometry): string {
   return html;
 }
 
+function buildAreaTooltipContent(area: AreaWithGeometry): string {
+  if (area.pending_monitoring === 0) return area.name;
+  return `<div style="direction: rtl; text-align: center;">
+    <div style="font-weight: 600;">${area.name}</div>
+    <div style="font-size: 11px; color: #dc2626;">&#9888; ${area.pending_monitoring} ממתינים</div>
+  </div>`;
+}
+
+function buildSubAreaTooltipContent(subArea: SubAreaWithGeometry): string {
+  const name = subArea.display || subArea.name;
+  if (subArea.pending_monitoring === 0) return name;
+  return `<div style="direction: rtl; text-align: center;">
+    <div style="font-weight: 600;">${name}</div>
+    <div style="font-size: 11px; color: #dc2626;">&#9888; ${subArea.pending_monitoring} ממתינים</div>
+  </div>`;
+}
+
 // Fix Leaflet default marker icon issue with bundlers
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -345,7 +362,7 @@ export function LeafletMap({
 
           // Don't bind tooltip/popup in edit mode — they interfere with vertex dragging
           if (!isEditMode) {
-            layer.bindTooltip(area.name, {
+            layer.bindTooltip(buildAreaTooltipContent(area), {
               permanent: false,
               direction: 'center',
               className: 'area-tooltip',
@@ -393,7 +410,7 @@ export function LeafletMap({
 
             // Don't bind tooltip/popup in edit mode — they interfere with vertex dragging
             if (!isEditMode) {
-              layer.bindTooltip(subArea.display || subArea.name, {
+              layer.bindTooltip(buildSubAreaTooltipContent(subArea), {
                 permanent: false,
                 direction: 'center',
                 className: 'sub-area-tooltip',

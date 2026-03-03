@@ -31,6 +31,7 @@ interface HierarchyTreeNodeProps {
   onCreateChild?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
+  pendingMonitoringCount?: number;
 }
 
 export function HierarchyTreeNode({
@@ -47,6 +48,7 @@ export function HierarchyTreeNode({
   onCreateChild,
   onEdit,
   onDelete,
+  pendingMonitoringCount,
 }: HierarchyTreeNodeProps) {
   const getIcon = () => {
     switch (nodeType) {
@@ -101,6 +103,13 @@ export function HierarchyTreeNode({
       )}
       {getIcon()}
       <span className="text-sm font-medium truncate flex-1">{name}</span>
+
+      {/* Pending monitoring indicator */}
+      {pendingMonitoringCount != null && pendingMonitoringCount > 0 && (
+        <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold leading-none shrink-0">
+          {pendingMonitoringCount}
+        </span>
+      )}
 
       {/* Action buttons — visible on hover */}
       {hasActions && (
