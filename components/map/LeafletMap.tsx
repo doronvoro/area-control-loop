@@ -20,38 +20,8 @@ import {
   AREA_PENDING_STYLE,
   SUB_AREA_PENDING_STYLE,
   SELECTED_STYLE,
-  SEVERITY_CONFIG,
 } from './types';
-
-function buildSeverityBadge(severity: string | null): string {
-  if (!severity) return '';
-  const config = SEVERITY_CONFIG[severity];
-  if (!config) return '';
-  return `<span style="background: ${config.color}; color: white; padding: 1px 6px; border-radius: 9999px; font-size: 10px; font-weight: 600;">${config.label}</span>`;
-}
-
-function buildTreatmentHtml(t: MonitoringReportForMap['treatments'][0]): string {
-  const parts: string[] = [];
-  if (t.action_type_name) parts.push(t.action_type_name);
-  if (t.material_name) parts.push(t.material_name);
-  if (t.dosage && t.unit_type_name) parts.push(`${t.dosage} ${t.unit_type_name}`);
-  else if (t.dosage) parts.push(`${t.dosage}`);
-
-  const statusIcon = t.status === 'completed' ? '&#10003;' : '&#9202;';
-  const statusLabel = t.status === 'completed' ? 'בוצע' : 'ממתין';
-  const statusColor = t.status === 'completed' ? '#16a34a' : '#d97706';
-
-  let html = `<div style="padding: 2px 0; font-size: 11px; color: #555;">`;
-  if (parts.length > 0) {
-    html += `${parts.join(' &middot; ')} `;
-  }
-  html += `<span style="color: ${statusColor}; font-weight: 500;">${statusIcon} ${statusLabel}</span>`;
-  if (t.notes) {
-    html += `<div style="color: #888; font-size: 10px; margin-top: 1px;">${t.notes}</div>`;
-  }
-  html += `</div>`;
-  return html;
-}
+import { buildSeverityBadge, buildTreatmentHtml, createPinIcon } from './pin-marker-utils';
 
 function buildSubAreaPopup(subArea: SubAreaWithGeometry): string {
   const title = subArea.display || subArea.name;
@@ -165,6 +135,7 @@ export function LeafletMap({
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const polygonLayersRef = useRef<L.LayerGroup>(L.layerGroup());
+  const pinMarkersRef = useRef<L.LayerGroup>(L.layerGroup());
   const editableLayerRef = useRef<L.Layer | null>(null);
   const initializedRef = useRef(false);
 
@@ -206,8 +177,9 @@ export function LeafletMap({
     };
     L.control.layers(baseLayers, {}, { position: 'topright' }).addTo(map);
 
-    // Add polygon layer group
+    // Add polygon layer group and pin markers
     polygonLayersRef.current.addTo(map);
+    pinMarkersRef.current.addTo(map);
 
     // Add legend control
     const LegendControl = L.Control.extend({
@@ -437,6 +409,27 @@ export function LeafletMap({
         }
       });
     });
+
+    // Pin markers for sub-areas with pending monitoring (view mode only)
+    pinMarkersRef.current.clearLayers();
+    if (isViewMode) {
+      areas.forEach((area) => {
+        area.sub_areas.forEach((subArea) => {
+          if (subArea.pending_monitoring > 0 && subArea.geometry) {
+            const center = L.geoJSON(subArea.geometry as any).getBounds().getCenter();
+            const pin = L.marker(center, {
+              icon: createPinIcon(subArea.pending_monitoring),
+              zIndexOffset: 1000,
+            });
+            pin.bindPopup(buildSubAreaPopup(subArea), {
+              maxWidth: 320,
+              className: 'map-popup',
+            });
+            pinMarkersRef.current.addLayer(pin);
+          }
+        });
+      });
+    }
 
     // Enable edit mode on target layer AFTER layers are created
     if (isEditMode && drawingState.targetEntityId) {

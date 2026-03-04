@@ -4,9 +4,9 @@ import { getCurrentCustomer, getCurrentWorker, requireAuth } from '@/lib/auth';
 
 /**
  * GET /api/map/monitoring-counts
- * Returns pending monitoring report counts keyed by area/sub-area ID.
+ * Returns pending monitoring report counts and full report details keyed by area/sub-area ID.
  * Covers ALL area types (indoor + outdoor).
- * Response: { counts: Record<string, number> }
+ * Response: { counts: Record<string, number>, reports: Record<string, MonitoringReportForMap[]> }
  */
 export async function GET() {
   try {
@@ -33,7 +33,7 @@ export async function GET() {
 
     const areaIds = (customerAreas || []).map((item: any) => item.area_id);
     if (areaIds.length === 0) {
-      return NextResponse.json({ counts: {} });
+      return NextResponse.json({ counts: {}, reports: {} });
     }
 
     // Get report_areas for our areas (small set — one per area visit)
@@ -46,7 +46,7 @@ export async function GET() {
 
     const reportAreaIds = (reportAreas || []).map((ra: any) => ra.id);
     if (reportAreaIds.length === 0) {
-      return NextResponse.json({ counts: {} });
+      return NextResponse.json({ counts: {}, reports: {} });
     }
 
     // Build report_area_id → area_id mapping
@@ -55,8 +55,7 @@ export async function GET() {
       reportAreaToArea[ra.id] = ra.area_id;
     }
 
-    // Get ALL monitoring reports for these report_areas (filters through area, not sub-area)
-    // Batch reportAreaIds if needed (unlikely to be large, but safe)
+    // Get ALL monitoring reports with full details for these report_areas
     const BATCH_SIZE = 100;
     const allReports: any[] = [];
 
@@ -65,7 +64,16 @@ export async function GET() {
       const { data: reports, error: reportsError } = await (
         supabase.from('monitoring_area_report') as any
       )
-        .select('id, sub_area_id, area_report_id, status')
+        .select(
+          `id, sub_area_id, area_report_id, status, severity, created_at,
+          finding:findings(id, name),
+          treatments:monitoring_treatments(
+            id, dosage, status, notes,
+            material:materials(name),
+            action_type:action_types(name, description),
+            unit_type:unit_types(name)
+          )`
+        )
         .in('area_report_id', batch);
 
       if (reportsError) throw reportsError;
@@ -73,6 +81,7 @@ export async function GET() {
     }
 
     const counts: Record<string, number> = {};
+    const reportsMap: Record<string, any[]> = {};
 
     // Get sub-areas to build sub_area → area mapping
     const { data: subAreas, error: subAreasError } = await supabase
@@ -82,24 +91,39 @@ export async function GET() {
 
     if (subAreasError) throw subAreasError;
 
-    const subAreaToArea: Record<string, string> = {};
-    for (const sa of (subAreas || []) as any[]) {
-      subAreaToArea[sa.id] = sa.area_id;
-    }
-
-    // Count non-completed reports
+    // Process reports: build counts and formatted reports
     for (const report of allReports) {
       if (report.status === 'completed') continue;
 
+      const formatted = {
+        id: report.id,
+        finding_name: report.finding?.name || 'לא ידוע',
+        severity: report.severity,
+        status: report.status,
+        created_at: report.created_at,
+        treatments: (report.treatments || []).map((t: any) => ({
+          id: t.id,
+          action_type_name:
+            t.action_type?.description || t.action_type?.name || null,
+          material_name: t.material?.name || null,
+          dosage: t.dosage,
+          unit_type_name: t.unit_type?.name || null,
+          status: t.status,
+          notes: t.notes,
+        })),
+      };
+
       if (report.sub_area_id) {
-        // Sub-area report
         counts[report.sub_area_id] =
           (counts[report.sub_area_id] || 0) + 1;
+        if (!reportsMap[report.sub_area_id]) reportsMap[report.sub_area_id] = [];
+        reportsMap[report.sub_area_id].push(formatted);
       } else {
-        // Entire-area report: count under the area ID
         const areaId = reportAreaToArea[report.area_report_id];
         if (areaId) {
           counts[areaId] = (counts[areaId] || 0) + 1;
+          if (!reportsMap[areaId]) reportsMap[areaId] = [];
+          reportsMap[areaId].push(formatted);
         }
       }
     }
@@ -111,7 +135,7 @@ export async function GET() {
       }
     }
 
-    return NextResponse.json({ counts });
+    return NextResponse.json({ counts, reports: reportsMap });
   } catch (error: any) {
     // Re-throw Next.js internal errors (redirect, notFound)
     if (error?.digest?.startsWith('NEXT_')) {

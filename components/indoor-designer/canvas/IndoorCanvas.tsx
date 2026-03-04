@@ -14,6 +14,7 @@ import {
   DIMMED_STYLE,
   LEGEND_ITEMS,
 } from './indoor-canvas-styles';
+import { createPinIcon, buildMonitoringPopup } from '@/components/map/pin-marker-utils';
 
 interface IndoorCanvasProps {
   areaGeometry: GeoJSONPolygon | null;
@@ -29,6 +30,8 @@ interface IndoorCanvasProps {
   showLabels?: boolean;
   showLegend?: boolean;
   showGrid?: boolean;
+  pendingMonitoringCounts?: Record<string, number>;
+  monitoringReports?: Record<string, any[]>;
 }
 
 export function IndoorCanvas({
@@ -45,12 +48,15 @@ export function IndoorCanvas({
   showLabels = true,
   showLegend = true,
   showGrid = true,
+  pendingMonitoringCounts,
+  monitoringReports,
 }: IndoorCanvasProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const polygonLayersRef = useRef<L.LayerGroup>(L.layerGroup());
   const gridLayerRef = useRef<L.LayerGroup>(L.layerGroup());
   const labelLayerRef = useRef<L.LayerGroup>(L.layerGroup());
+  const pinMarkersRef = useRef<L.LayerGroup>(L.layerGroup());
   const initializedRef = useRef(false);
 
   // Initialize map with CRS.Simple
@@ -76,6 +82,7 @@ export function IndoorCanvas({
     polygonLayersRef.current.addTo(map);
     gridLayerRef.current.addTo(map);
     labelLayerRef.current.addTo(map);
+    pinMarkersRef.current.addTo(map);
 
     // Legend
     if (showLegend) {
@@ -273,11 +280,14 @@ export function IndoorCanvas({
       const isHighlighted = hasSelection
         ? selectionContext!.highlightedIds.has(sa.tempId)
         : true;
+      const pendingCount = pendingMonitoringCounts?.[sa.tempId] || 0;
 
       const baseStyle = getStyleForLevel(sa.level);
       let style;
       if (isSelected) {
         style = { ...baseStyle, ...SELECTED_STYLE };
+      } else if (pendingCount > 0) {
+        style = { ...baseStyle, color: '#dc2626', fillColor: '#fecaca', fillOpacity: 0.45, weight: 2 };
       } else if (isHighlighted) {
         style = baseStyle;
       } else {
@@ -300,7 +310,14 @@ export function IndoorCanvas({
         const isLargeEnough = minDim >= 3;
 
         const showPermanent = showLabels && sa.level >= 2 && isLargeEnough && (isHighlighted || !hasSelection);
-        layer.bindTooltip(sa.name, {
+
+        // Build tooltip content — include pending count when available
+        let tooltipContent = sa.name;
+        if (pendingCount > 0) {
+          tooltipContent = `<div style="text-align: center; direction: rtl;"><div>${sa.name}</div><div style="color: #dc2626; font-size: 10px;">&#9888; ${pendingCount} ממתינים</div></div>`;
+        }
+
+        layer.bindTooltip(tooltipContent, {
           permanent: showPermanent,
           direction: 'center',
           className: 'indoor-tooltip',
@@ -330,7 +347,27 @@ export function IndoorCanvas({
         labelGroup.addLayer(marker);
       }
     });
-  }, [areaGeometry, subAreas, selectionContext, showLabels, onSubAreaSelect]);
+
+    // Pin markers for monitoring reports
+    pinMarkersRef.current.clearLayers();
+    if (monitoringReports) {
+      subAreas.forEach((sa) => {
+        const reports = monitoringReports[sa.tempId];
+        if (!reports || reports.length === 0) return;
+        const bounds = L.geoJSON(sa.geometry as any).getBounds();
+        const center = bounds.getCenter();
+        const pin = L.marker(center, {
+          icon: createPinIcon(reports.length),
+          zIndexOffset: 1000,
+        });
+        pin.bindPopup(buildMonitoringPopup(sa.name, reports), {
+          maxWidth: 320,
+          className: 'map-popup',
+        });
+        pinMarkersRef.current.addLayer(pin);
+      });
+    }
+  }, [areaGeometry, subAreas, selectionContext, showLabels, onSubAreaSelect, pendingMonitoringCounts, monitoringReports]);
 
   return (
     <div

@@ -48,32 +48,46 @@ export async function GET() {
 
     if (subAreasError) throw subAreasError;
 
-    // Get monitoring reports with findings and treatments per sub-area
-    const subAreaIds = (subAreas || []).map((sa: any) => sa.id);
+    // Get monitoring reports via report_areas (avoids PostgREST URL length limit)
     const monitoringBySubArea: Record<string, any[]> = {};
 
-    if (subAreaIds.length > 0) {
-      // Fetch monitoring reports for specific sub-areas AND entire-area reports (sub_area_id IS NULL)
-      const { data: monitoringData, error: monitoringError } = await (
-        supabase.from('monitoring_area_report') as any
-      )
-        .select(
-          `id, sub_area_id, severity, status, created_at,
-          finding:findings(id, name),
-          area_report:report_areas!inner(area_id),
-          treatments:monitoring_treatments(
-            id, dosage, status, notes,
-            material:materials(name),
-            action_type:action_types(name, description),
-            unit_type:unit_types(name)
-          )`
-        )
-        .or(`sub_area_id.in.(${subAreaIds.join(',')}),sub_area_id.is.null`)
-        .order('created_at', { ascending: false });
+    if (areaIds.length > 0) {
+      // Get report_areas for our areas
+      const { data: reportAreas, error: reportAreasError } = await supabase
+        .from('report_areas')
+        .select('id, area_id')
+        .in('area_id', areaIds);
 
-      if (!monitoringError && monitoringData) {
-        for (const report of monitoringData as any[]) {
-          const subAreaId = report.sub_area_id;
+      if (!reportAreasError && reportAreas && reportAreas.length > 0) {
+        const reportAreaIds = reportAreas.map((ra: any) => ra.id);
+        const reportAreaToArea: Record<string, string> = {};
+        for (const ra of reportAreas as any[]) {
+          reportAreaToArea[ra.id] = ra.area_id;
+        }
+
+        // Batch fetch monitoring reports
+        const BATCH_SIZE = 100;
+        const allReports: any[] = [];
+        for (let i = 0; i < reportAreaIds.length; i += BATCH_SIZE) {
+          const batch = reportAreaIds.slice(i, i + BATCH_SIZE);
+          const { data: reports, error: reportsError } = await (
+            supabase.from('monitoring_area_report') as any
+          )
+            .select(
+              `id, sub_area_id, area_report_id, severity, status, created_at,
+              finding:findings(id, name),
+              treatments:monitoring_treatments(
+                id, dosage, status, notes,
+                material:materials(name),
+                action_type:action_types(name, description),
+                unit_type:unit_types(name)
+              )`
+            )
+            .in('area_report_id', batch);
+          if (!reportsError && reports) allReports.push(...reports);
+        }
+
+        for (const report of allReports) {
           const reportFormatted = {
             id: report.id,
             finding_name: report.finding?.name || 'לא ידוע',
@@ -92,22 +106,25 @@ export async function GET() {
             })),
           };
 
-          if (subAreaId === null) {
-            // Entire-area report: associate with the area itself via area_report
-            const areaId = report.area_report?.area_id;
-            // Add to all sub-areas of this area so it shows on the map
-            const relevantSubAreas = ((subAreas || []) as any[]).filter((sa) => sa.area_id === areaId);
-            for (const sa of relevantSubAreas) {
-              if (!monitoringBySubArea[sa.id]) {
-                monitoringBySubArea[sa.id] = [];
-              }
-              monitoringBySubArea[sa.id].push({ ...reportFormatted, is_entire_area: true });
+          if (report.sub_area_id) {
+            if (!monitoringBySubArea[report.sub_area_id]) {
+              monitoringBySubArea[report.sub_area_id] = [];
             }
+            monitoringBySubArea[report.sub_area_id].push(reportFormatted);
           } else {
-            if (!monitoringBySubArea[subAreaId]) {
-              monitoringBySubArea[subAreaId] = [];
+            // Entire-area report: associate with all sub-areas of that area
+            const areaId = reportAreaToArea[report.area_report_id];
+            if (areaId) {
+              const relevantSubAreas = ((subAreas || []) as any[]).filter(
+                (sa: any) => sa.area_id === areaId
+              );
+              for (const sa of relevantSubAreas) {
+                if (!monitoringBySubArea[sa.id]) {
+                  monitoringBySubArea[sa.id] = [];
+                }
+                monitoringBySubArea[sa.id].push({ ...reportFormatted, is_entire_area: true });
+              }
             }
-            monitoringBySubArea[subAreaId].push(reportFormatted);
           }
         }
       }

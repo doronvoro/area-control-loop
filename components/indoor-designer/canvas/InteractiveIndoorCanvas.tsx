@@ -30,6 +30,8 @@ interface InteractiveIndoorCanvasProps {
   showLabels?: boolean;
   showLegend?: boolean;
   showGrid?: boolean;
+  pendingMonitoringCounts?: Record<string, number>;
+  monitoringReports?: Record<string, any[]>;
 }
 
 export function InteractiveIndoorCanvas(props: InteractiveIndoorCanvasProps) {

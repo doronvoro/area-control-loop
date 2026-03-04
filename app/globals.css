@@ -234,6 +234,12 @@ body {
   animation: page-fade-in 300ms ease-out;
 }
 
+/* ========== Leaflet Pin Markers ========== */
+.monitoring-pin-marker {
+  background: none !important;
+  border: none !important;
+}
+
 /* ========== Safe Area ========== */
 @supports (padding-bottom: env(safe-area-inset-bottom)) {
   .safe-bottom {

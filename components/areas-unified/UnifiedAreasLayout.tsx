@@ -12,6 +12,7 @@ import { ConfirmationDialog } from '@/components/ui/confirmation-dialog';
 import { InlineIndoorSubAreaForm } from './InlineIndoorSubAreaForm';
 import { ContextPanel } from './ContextPanel';
 import { LiveMapView } from './LiveMapView';
+import { LiveIndoorView } from './LiveIndoorView';
 import { showToast } from '@/lib/toast';
 import type {
   Customer,
@@ -91,20 +92,27 @@ export function UnifiedAreasLayout({
     siblingCount: number;
   } | null>(null);
 
-  // Monitoring counts for tree indicators
+  // Monitoring counts and reports for tree indicators + pin popups
   const [pendingMonitoringCounts, setPendingMonitoringCounts] = useState<
     Record<string, number>
+  >({});
+  const [monitoringReports, setMonitoringReports] = useState<
+    Record<string, any[]>
   >({});
 
   // Fetch monitoring counts only in live mode
   useEffect(() => {
     if (mode !== 'live') {
       setPendingMonitoringCounts({});
+      setMonitoringReports({});
       return;
     }
     fetch('/api/map/monitoring-counts')
-      .then((res) => (res.ok ? res.json() : { counts: {} }))
-      .then((data) => setPendingMonitoringCounts(data.counts || {}))
+      .then((res) => (res.ok ? res.json() : { counts: {}, reports: {} }))
+      .then((data) => {
+        setPendingMonitoringCounts(data.counts || {});
+        setMonitoringReports(data.reports || {});
+      })
       .catch(console.error);
   }, [mode]);
 
@@ -255,17 +263,20 @@ export function UnifiedAreasLayout({
       }
     }
 
-    // Refresh monitoring counts
-    try {
-      const res = await fetch('/api/map/monitoring-counts');
-      if (res.ok) {
-        const data = await res.json();
-        setPendingMonitoringCounts(data.counts || {});
+    // Refresh monitoring counts (only in live mode)
+    if (mode === 'live') {
+      try {
+        const res = await fetch('/api/map/monitoring-counts');
+        if (res.ok) {
+          const data = await res.json();
+          setPendingMonitoringCounts(data.counts || {});
+          setMonitoringReports(data.reports || {});
+        }
+      } catch (error) {
+        console.error('Error refreshing monitoring counts:', error);
       }
-    } catch (error) {
-      console.error('Error refreshing monitoring counts:', error);
     }
-  }, [areaSubAreasMap]);
+  }, [areaSubAreasMap, mode]);
 
   const handleCreateCustomer = useCallback(() => {
     setEditingCustomer(null);
@@ -731,6 +742,31 @@ export function UnifiedAreasLayout({
                   ? handleDeleteCustomer
                   : undefined
               }
+            />
+          ) : getAreaTypeForNode(selectedNode) === 'indoor' && selectedNode ? (
+            <LiveIndoorView
+              area={(selectedNode.type === 'area'
+                ? selectedNode.data
+                : (() => {
+                    const subArea = selectedNode.data as SubArea;
+                    for (const areas of Object.values(customerAreasMap)) {
+                      const found = areas.find((a) => a.id === subArea.area_id);
+                      if (found) return found;
+                    }
+                    return null;
+                  })()) as AreaWithType}
+              subAreas={
+                selectedNode.type === 'area'
+                  ? areaSubAreasMap[(selectedNode.data as AreaWithType).id] || []
+                  : areaSubAreasMap[(selectedNode.data as SubArea).area_id] || []
+              }
+              selectedSubAreaId={
+                selectedNode.type === 'sub_area'
+                  ? (selectedNode.data as SubArea).id
+                  : undefined
+              }
+              pendingMonitoringCounts={pendingMonitoringCounts}
+              monitoringReports={monitoringReports}
             />
           ) : (
             <LiveMapView
