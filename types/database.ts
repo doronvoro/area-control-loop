@@ -664,8 +664,8 @@ export interface Database {
           finding_id: string | null;
           action_type_id: string | null;
           material_id: string;
-          unit_type_id: string;
-          dosage: number;
+          unit_type_id: string | null;
+          dosage: number | null;
           source: string;
           registry_id: string | null;
           created_at: string;
@@ -677,8 +677,8 @@ export interface Database {
           finding_id?: string | null;
           action_type_id?: string | null;
           material_id: string;
-          unit_type_id: string;
-          dosage: number;
+          unit_type_id?: string | null;
+          dosage?: number | null;
           source?: string;
           registry_id?: string | null;
           created_at?: string;
@@ -690,8 +690,8 @@ export interface Database {
           finding_id?: string | null;
           action_type_id?: string | null;
           material_id?: string;
-          unit_type_id?: string;
-          dosage?: number;
+          unit_type_id?: string | null;
+          dosage?: number | null;
           source?: string;
           registry_id?: string | null;
           created_at?: string;

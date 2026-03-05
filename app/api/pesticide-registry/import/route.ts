@@ -148,10 +148,9 @@ export async function POST(request: NextRequest) {
     const uniqueCrops = [...new Set(filteredRows.map((r) => r.crop_name).filter(Boolean))];
     const cropMap: Record<string, string> = {};
     for (const name of uniqueCrops) {
-      const enName = filteredRows.find((r) => r.crop_name === name)?.crop_name_en || '';
       cropMap[name] = await getOrCreate(supabase, 'crops', 'name', name, {
         name,
-        description: enName || name,
+        description: name,
         source: 'registry',
       });
     }
@@ -159,10 +158,9 @@ export async function POST(request: NextRequest) {
     const uniquePests = [...new Set(filteredRows.map((r) => r.pest_name).filter(Boolean))];
     const findingMap: Record<string, string> = {};
     for (const name of uniquePests) {
-      const enName = filteredRows.find((r) => r.pest_name === name)?.pest_name_en || '';
       findingMap[name] = await getOrCreate(supabase, 'findings', 'name', name, {
         name,
-        description: enName || name,
+        description: name,
         source: 'registry',
       });
     }
@@ -173,7 +171,7 @@ export async function POST(request: NextRequest) {
       const row = filteredRows.find((r) => r.material_name === name);
       materialMap[name] = await getOrCreate(supabase, 'materials', 'name', name, {
         name,
-        description: row?.material_name_en || name,
+        description: name,
         active_ingredient: row?.active_ingredient || null,
         source: 'registry',
       });
@@ -257,22 +255,18 @@ export async function POST(request: NextRequest) {
 
     for (const regRow of registryRows || []) {
       const parsed = parseDosage(regRow.dosage_text || '');
-      if (parsed.value === null || parsed.unit_name === null) {
-        rmSkipped++;
-        continue;
-      }
 
       const cropId = cropMap[regRow.crop_name];
       const findingId = regRow.pest_name ? findingMap[regRow.pest_name] : null;
       const materialId = materialMap[regRow.material_name];
-      const unitTypeId = unitTypeMap[parsed.unit_name];
+      const unitTypeId = parsed.unit_name ? unitTypeMap[parsed.unit_name] : null;
 
-      if (!cropId || !materialId || !unitTypeId) {
+      if (!cropId || !materialId) {
         rmSkipped++;
         continue;
       }
 
-      const key = `${cropId}|${findingId || ''}|${materialId}|${unitTypeId}`;
+      const key = `${cropId}|${findingId || ''}|${materialId}|${unitTypeId || ''}`;
       if (seenKeys.has(key)) continue;
       seenKeys.add(key);
 

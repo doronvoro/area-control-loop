@@ -36,7 +36,7 @@ const dosageSchema = z.object({
 const recommendationSchema = z.object({
   crop_id: z.string().min(1, 'גידול נדרש'),
   finding_id: z.string().optional(),
-  action_type_id: z.string().min(1, 'סוג פעולה נדרש'),
+  action_type_id: z.string().optional(),
   material_id: z.string().min(1, 'חומר נדרש'),
   dosages: z.array(dosageSchema).min(1, 'נדרש לפחות מינון אחד'),
 });
@@ -47,11 +47,11 @@ interface Recommendation {
   key: {
     crop_id: string;
     finding_id: string | null;
-    action_type_id: string;
+    action_type_id: string | null;
     material_id: string;
     crop?: { id: string; name: string; description?: string };
     finding?: { id: string; name: string; description?: string };
-    action_type?: { id: string; name: string; description?: string };
+    action_type?: { id: string; name: string; description?: string } | null;
     material?: { id: string; name: string; description?: string };
   };
   values: Array<{
@@ -177,14 +177,14 @@ export function RecommendMaterialsManager() {
   const handleOpenDialog = (key?: string) => {
     if (key) {
       const rec = recommendations.find(
-        (r) => `${r.key.crop_id}_${r.key.finding_id || 'null'}_${r.key.action_type_id}_${r.key.material_id}` === key
+        (r) => `${r.key.crop_id}_${r.key.finding_id || 'null'}_${r.key.action_type_id || 'null'}_${r.key.material_id}` === key
       );
       if (rec) {
         setEditingKey(key);
         form.reset({
           crop_id: rec.key.crop_id,
           finding_id: rec.key.finding_id || '',
-          action_type_id: rec.key.action_type_id,
+          action_type_id: rec.key.action_type_id || '',
           material_id: rec.key.material_id,
           dosages: rec.values.map((v) => ({
             unit_type_id: v.unit_type_id,
@@ -232,7 +232,7 @@ export function RecommendMaterialsManager() {
         body: JSON.stringify({
           crop_id: data.crop_id,
           finding_id: data.finding_id || null,
-          action_type_id: data.action_type_id,
+          action_type_id: data.action_type_id || null,
           material_id: data.material_id,
           dosages,
         }),
@@ -276,7 +276,10 @@ export function RecommendMaterialsManager() {
       if (filterFindingId === '__null__' && rec.key.finding_id !== null) return false;
       if (filterFindingId !== '__null__' && rec.key.finding_id !== filterFindingId) return false;
     }
-    if (filterActionTypeId && rec.key.action_type_id !== filterActionTypeId) return false;
+    if (filterActionTypeId) {
+      if (filterActionTypeId === '__null__' && rec.key.action_type_id !== null) return false;
+      if (filterActionTypeId !== '__null__' && rec.key.action_type_id !== filterActionTypeId) return false;
+    }
     if (filterMaterialId && rec.key.material_id !== filterMaterialId) return false;
     return true;
   });
@@ -430,7 +433,7 @@ export function RecommendMaterialsManager() {
         </div>
 
         {filteredRecommendations.map((rec) => {
-          const key = `${rec.key.crop_id}_${rec.key.finding_id || 'null'}_${rec.key.action_type_id}_${rec.key.material_id}`;
+          const key = `${rec.key.crop_id}_${rec.key.finding_id || 'null'}_${rec.key.action_type_id || 'null'}_${rec.key.material_id}`;
           return (
             <div
               key={key}
@@ -440,7 +443,7 @@ export function RecommendMaterialsManager() {
               <div className={rec.key.finding ? '' : 'text-muted-foreground'}>
                 {rec.key.finding?.description || rec.key.finding?.name || 'ברירת מחדל'}
               </div>
-              <div>{rec.key.action_type?.description || rec.key.action_type?.name || 'סוג פעולה לא ידוע'}</div>
+              <div className={rec.key.action_type ? '' : 'text-muted-foreground'}>{rec.key.action_type?.description || rec.key.action_type?.name || 'כל סוגי הפעולות'}</div>
               <div>{rec.key.material?.name || 'חומר לא ידוע'}</div>
               <div className="space-y-1">
                 {rec.values.map((value) => (
@@ -545,15 +548,16 @@ export function RecommendMaterialsManager() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label>סוג פעולה</Label>
+                <Label>סוג פעולה (אופציונלי)</Label>
                 <Select
-                  value={form.watch('action_type_id')}
-                  onValueChange={(value) => form.setValue('action_type_id', value)}
+                  value={form.watch('action_type_id') || '__null__'}
+                  onValueChange={(value) => form.setValue('action_type_id', value === '__null__' ? '' : value)}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="בחר סוג פעולה" />
+                    <SelectValue placeholder="כל סוגי הפעולות" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="__null__">כל סוגי הפעולות</SelectItem>
                     {actionTypes.map((at) => (
                       <SelectItem key={at.id} value={at.id}>
                         {at.description || at.name}
@@ -561,11 +565,9 @@ export function RecommendMaterialsManager() {
                     ))}
                   </SelectContent>
                 </Select>
-                {form.formState.errors.action_type_id && (
-                  <p className="text-sm text-destructive mt-1">
-                    {form.formState.errors.action_type_id.message}
-                  </p>
-                )}
+                <p className="text-xs text-muted-foreground mt-1">
+                  השאר ריק להמלצה לכל סוגי הפעולות
+                </p>
               </div>
 
               <div>

@@ -58,13 +58,22 @@ export async function POST(request: NextRequest) {
     const csvUnitNames = new Set<string>();
     let unparsableDosages = 0;
     let parsableDosages = 0;
-    for (const row of filteredRows) {
+    const unparsableRows: Array<{ row: number; crop: string; pest: string; material: string; dosage_text: string }> = [];
+    for (let i = 0; i < filteredRows.length; i++) {
+      const row = filteredRows[i];
       const parsed = parseDosage(row.dosage_text || '');
       if (parsed.value !== null && parsed.unit_name !== null) {
         csvUnitNames.add(parsed.unit_name);
         parsableDosages++;
       } else {
         unparsableDosages++;
+        unparsableRows.push({
+          row: i + 1,
+          crop: row.crop_name || '',
+          pest: row.pest_name || '',
+          material: row.material_name || '',
+          dosage_text: row.dosage_text || '',
+        });
       }
     }
 
@@ -111,6 +120,7 @@ export async function POST(request: NextRequest) {
         cropFindingPairs: csvCropFindingPairs.size,
         parsableRecommendations: parsableDosages,
         unparsableDosages,
+        unparsableRows,
         registryRows: filteredRows.length,
       },
     });

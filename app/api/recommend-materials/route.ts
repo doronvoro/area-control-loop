@@ -37,7 +37,7 @@ export async function GET(request: Request) {
     // Group by composite key (crop_id, finding_id, action_type_id, material_id)
     const grouped: Record<string, any[]> = {};
     (data || []).forEach((item: any) => {
-      const key = `${item.crop_id}_${item.finding_id || 'null'}_${item.action_type_id}_${item.material_id}`;
+      const key = `${item.crop_id}_${item.finding_id || 'null'}_${item.action_type_id || 'null'}_${item.material_id}`;
       if (!grouped[key]) {
         grouped[key] = [];
       }
@@ -89,9 +89,9 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { crop_id, finding_id, action_type_id, material_id, dosages } = body;
 
-    if (!crop_id || !action_type_id || !material_id || !dosages || !Array.isArray(dosages)) {
+    if (!crop_id || !material_id || !dosages || !Array.isArray(dosages)) {
       return NextResponse.json(
-        { error: 'crop_id, action_type_id, material_id ו-dosages נדרשים' },
+        { error: 'crop_id, material_id ו-dosages נדרשים' },
         { status: 400 }
       );
     }
@@ -100,7 +100,7 @@ export async function POST(request: Request) {
     const recommendations = dosages.map((d: any) => ({
       crop_id,
       finding_id: finding_id || null,
-      action_type_id,
+      action_type_id: action_type_id || null,
       material_id,
       unit_type_id: d.unit_type_id,
       dosage: d.dosage,
@@ -197,7 +197,6 @@ export async function DELETE(request: Request) {
       let deleteQuery = query
         .delete()
         .eq('crop_id', crop_id)
-        .eq('action_type_id', action_type_id)
         .eq('material_id', material_id);
 
       // Handle finding_id (can be 'null' string for NULL values)
@@ -205,6 +204,13 @@ export async function DELETE(request: Request) {
         deleteQuery = deleteQuery.is('finding_id', null);
       } else {
         deleteQuery = deleteQuery.eq('finding_id', finding_id);
+      }
+
+      // Handle action_type_id (can be 'null' string for NULL values)
+      if (action_type_id === 'null') {
+        deleteQuery = deleteQuery.is('action_type_id', null);
+      } else {
+        deleteQuery = deleteQuery.eq('action_type_id', action_type_id);
       }
 
       const { error } = await deleteQuery;

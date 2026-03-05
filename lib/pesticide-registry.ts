@@ -68,10 +68,16 @@ export const UNIT_PATTERNS: Array<{ pattern: RegExp; unit: string }> = [
   { pattern: /קג\/דונם/, unit: 'קג/דונם' },
   { pattern: /מ"ל\/דונם/, unit: 'מ"ל/דונם' },
   { pattern: /סמ"ק\/דונם/, unit: 'סמ"ק/דונם' },
+  { pattern: /סמק\/100 ליטר מים/, unit: 'סמ"ק/100 ליטר מים' },
+  { pattern: /סמק\/דונם/, unit: 'סמ"ק/דונם' },
   { pattern: /ליטר/, unit: 'ליטר' },
   { pattern: /גרם/, unit: 'גרם' },
+  { pattern: /קג/, unit: 'קג' },
+  { pattern: /סמק/, unit: 'סמ"ק' },
   { pattern: /אחוז/, unit: 'אחוז' },
   { pattern: /%/, unit: 'אחוז' },
+  { pattern: /יחידות/, unit: 'יחידות' },
+  { pattern: /טון/, unit: 'טון' },
 ];
 
 export interface ParsedDosage {
@@ -104,6 +110,11 @@ export function parseDosage(text: string): ParsedDosage {
       unit_name = unit;
       break;
     }
+  }
+
+  // Unit without a number: default to 1
+  if (value === null && (unit_name === 'אחוז' || unit_name === 'ליטר/דונם')) {
+    value = 1;
   }
 
   return { value, unit_name, raw_text };

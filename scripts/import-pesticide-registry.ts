@@ -16,7 +16,6 @@ import {
   filterRowsByCrops,
   parseDosage,
   buildRegistryRow,
-  type CsvRow,
 } from '../lib/pesticide-registry';
 
 // ============================================================
@@ -241,10 +240,9 @@ async function main() {
   const uniqueCrops = [...new Set(filteredRows.map((r) => r.crop_name).filter(Boolean))];
   const cropMap: Record<string, string> = {};
   for (const name of uniqueCrops) {
-    const enName = filteredRows.find((r) => r.crop_name === name)?.crop_name_en || '';
     cropMap[name] = await getOrCreate('crops', 'name', name, {
       name,
-      description: enName || name,
+      description: name,
       source: 'registry',
     });
   }
@@ -255,10 +253,9 @@ async function main() {
   const uniquePests = [...new Set(filteredRows.map((r) => r.pest_name).filter(Boolean))];
   const findingMap: Record<string, string> = {};
   for (const name of uniquePests) {
-    const enName = filteredRows.find((r) => r.pest_name === name)?.pest_name_en || '';
     findingMap[name] = await getOrCreate('findings', 'name', name, {
       name,
-      description: enName || name,
+      description: name,
       source: 'registry',
     });
   }
@@ -272,7 +269,7 @@ async function main() {
     const row = filteredRows.find((r) => r.material_name === name);
     materialMap[name] = await getOrCreate('materials', 'name', name, {
       name,
-      description: row?.material_name_en || name,
+      description: name,
       active_ingredient: row?.active_ingredient || null,
       source: 'registry',
     });

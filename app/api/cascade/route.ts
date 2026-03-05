@@ -96,23 +96,37 @@ export async function GET(request: Request) {
           }
         });
 
+        // If no recommendations found, fall back to all action types
+        if (actionTypesMap.size === 0) {
+          const { data: allActionTypes, error: atError } = await supabase
+            .from('action_types')
+            .select('*')
+            .order('name');
+          if (atError) throw atError;
+          return NextResponse.json(allActionTypes || []);
+        }
+
         return NextResponse.json(Array.from(actionTypesMap.values()));
       }
 
       case 'materials': {
-        // Get materials available for a specific crop + action_type (and optionally finding) via recommend_material
-        if (!cropId || !actionTypeId) {
+        // Get materials available for a specific crop (and optionally action_type/finding) via recommend_material
+        if (!cropId) {
           return NextResponse.json(
-            { error: 'cropId and actionTypeId are required for materials' },
+            { error: 'cropId is required for materials' },
             { status: 400 }
           );
         }
 
+        // Build query: match specific action_type OR null action_type (applies to all)
         let query = (supabase
           .from('recommend_material') as any)
           .select('material_id, materials(*)')
-          .eq('crop_id', cropId)
-          .eq('action_type_id', actionTypeId);
+          .eq('crop_id', cropId);
+
+        if (actionTypeId) {
+          query = query.or(`action_type_id.eq.${actionTypeId},action_type_id.is.null`);
+        }
 
         if (findingId) {
           query = query.eq('finding_id', findingId);
@@ -124,13 +138,17 @@ export async function GET(request: Request) {
 
         // Fallback to crop-level if no finding-specific results
         if (findingId && (!data || data.length === 0)) {
-          const fallbackResult = await (supabase
+          let fallbackQuery = (supabase
             .from('recommend_material') as any)
             .select('material_id, materials(*)')
             .eq('crop_id', cropId)
-            .eq('action_type_id', actionTypeId)
             .is('finding_id', null);
 
+          if (actionTypeId) {
+            fallbackQuery = fallbackQuery.or(`action_type_id.eq.${actionTypeId},action_type_id.is.null`);
+          }
+
+          const fallbackResult = await fallbackQuery;
           data = fallbackResult.data;
           error = fallbackResult.error;
         }
@@ -145,24 +163,37 @@ export async function GET(request: Request) {
           }
         });
 
+        // If no recommendations found, fall back to all materials
+        if (materialsMap.size === 0) {
+          const { data: allMaterials, error: mError } = await supabase
+            .from('materials')
+            .select('*')
+            .order('name');
+          if (mError) throw mError;
+          return NextResponse.json(allMaterials || []);
+        }
+
         return NextResponse.json(Array.from(materialsMap.values()));
       }
 
       case 'dosage': {
         // Get dosage and unit_type for a specific combination
-        if (!cropId || !actionTypeId || !materialId) {
+        if (!cropId || !materialId) {
           return NextResponse.json(
-            { error: 'cropId, actionTypeId, and materialId are required for dosage' },
+            { error: 'cropId and materialId are required for dosage' },
             { status: 400 }
           );
         }
 
         let query = (supabase
           .from('recommend_material') as any)
-          .select('dosage, unit_type_id, unit_types(*)')
-          .eq('crop_id', cropId)
-          .eq('action_type_id', actionTypeId)
-          .eq('material_id', materialId);
+          .select('dosage, unit_type_id, unit_types(*)');
+
+        if (actionTypeId) {
+          query = query.eq('crop_id', cropId).or(`action_type_id.eq.${actionTypeId},action_type_id.is.null`).eq('material_id', materialId);
+        } else {
+          query = query.eq('crop_id', cropId).eq('material_id', materialId);
+        }
 
         if (findingId) {
           query = query.eq('finding_id', findingId);
@@ -174,12 +205,17 @@ export async function GET(request: Request) {
 
         // Fallback to crop-level if no finding-specific result
         if (findingId && !data) {
-          const fallbackResult = await (supabase
+          let fallbackQuery = (supabase
             .from('recommend_material') as any)
-            .select('dosage, unit_type_id, unit_types(*)')
-            .eq('crop_id', cropId)
-            .eq('action_type_id', actionTypeId)
-            .eq('material_id', materialId)
+            .select('dosage, unit_type_id, unit_types(*)');
+
+          if (actionTypeId) {
+            fallbackQuery = fallbackQuery.eq('crop_id', cropId).or(`action_type_id.eq.${actionTypeId},action_type_id.is.null`).eq('material_id', materialId);
+          } else {
+            fallbackQuery = fallbackQuery.eq('crop_id', cropId).eq('material_id', materialId);
+          }
+
+          const fallbackResult = await fallbackQuery
             .is('finding_id', null)
             .maybeSingle();
 

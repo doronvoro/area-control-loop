@@ -29,6 +29,8 @@ import {
   Beaker,
   Link2,
   RotateCcw,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 
 type Stage = 'upload' | 'select' | 'impact' | 'results';
@@ -54,6 +56,7 @@ interface ImpactData {
     cropFindingPairs: number;
     parsableRecommendations: number;
     unparsableDosages: number;
+    unparsableRows: Array<{ row: number; crop: string; pest: string; material: string; dosage_text: string }>;
     registryRows: number;
   };
 }
@@ -89,6 +92,9 @@ export function PesticideRegistryImport() {
   // Stage 3: impact
   const [impactData, setImpactData] = useState<ImpactData | null>(null);
   const [replaceExisting, setReplaceExisting] = useState(false);
+
+  // Stage 3: unparsable rows toggle
+  const [showUnparsable, setShowUnparsable] = useState(false);
 
   // Stage 4: results
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
@@ -210,6 +216,7 @@ export function PesticideRegistryImport() {
     setSearchQuery('');
     setImpactData(null);
     setReplaceExisting(false);
+    setShowUnparsable(false);
     setImportResult(null);
     setError(null);
   };
@@ -436,14 +443,76 @@ export function PesticideRegistryImport() {
                     <span className="text-muted-foreground">ניתנות לייבוא</span>
                     <Badge variant="default">{impactData.impact.parsableRecommendations.toLocaleString()}</Badge>
                   </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">לא ניתנות לניתוח</span>
-                    <Badge variant="outline">{impactData.impact.unparsableDosages.toLocaleString()}</Badge>
-                  </div>
+                  {impactData.impact.unparsableDosages > 0 && (
+                    <button
+                      type="button"
+                      className="flex justify-between text-sm w-full hover:bg-muted/50 rounded px-1 -mx-1 py-0.5 transition-colors"
+                      onClick={() => setShowUnparsable(!showUnparsable)}
+                    >
+                      <span className="text-muted-foreground flex items-center gap-1">
+                        {showUnparsable ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                        לא ניתנות לניתוח
+                      </span>
+                      <Badge variant="outline">{impactData.impact.unparsableDosages.toLocaleString()}</Badge>
+                    </button>
+                  )}
+                  {impactData.impact.unparsableDosages === 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">לא ניתנות לניתוח</span>
+                      <Badge variant="outline">0</Badge>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
           </div>
+
+          {/* Unparsable rows table */}
+          {showUnparsable && impactData.impact.unparsableRows.length > 0 && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4 text-destructive" />
+                    שורות שלא ניתנות לניתוח ({impactData.impact.unparsableRows.length})
+                  </span>
+                  <Button variant="ghost" size="sm" onClick={() => setShowUnparsable(false)}>
+                    <EyeOff className="h-4 w-4" />
+                  </Button>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="rounded-md border max-h-[400px] overflow-y-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-16">שורה</TableHead>
+                        <TableHead>גידול</TableHead>
+                        <TableHead>ממצא</TableHead>
+                        <TableHead>חומר</TableHead>
+                        <TableHead>טקסט מינון (בעייתי)</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {impactData.impact.unparsableRows.map((row) => (
+                        <TableRow key={row.row}>
+                          <TableCell className="text-muted-foreground">{row.row}</TableCell>
+                          <TableCell>{row.crop}</TableCell>
+                          <TableCell>{row.pest}</TableCell>
+                          <TableCell>{row.material}</TableCell>
+                          <TableCell>
+                            <code className="text-xs bg-destructive/10 text-destructive px-2 py-0.5 rounded">
+                              {row.dosage_text || '(ריק)'}
+                            </code>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </>
       )}
 
