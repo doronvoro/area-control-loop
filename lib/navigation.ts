@@ -3,6 +3,7 @@ import {
   Search,
   Zap,
   FileText,
+  FileUp,
   Users,
   MapPin,
   Sprout,
@@ -51,6 +52,7 @@ export const managementGroup: NavGroup = {
     { href: '/admin/crops', label: 'ניהול גידולים', icon: Sprout },
     { href: '/admin/findings', label: 'ניהול ממצאים', icon: Bug },
     { href: '/admin/recommend-materials', label: 'המלצות חומרים', icon: FlaskConical },
+    { href: '/admin/pesticide-registry', label: 'ייבוא מרשם הדברה', icon: FileUp },
   ],
 };
 

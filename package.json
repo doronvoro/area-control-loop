@@ -19,7 +19,8 @@
     "apply-migration": "tsx scripts/apply-remote-migration.ts",
     "clean-reports": "tsx scripts/clean-reports.ts",
     "seed-customer-areas": "tsx scripts/seed-customer-areas.ts",
-    "seed-recommend-materials": "tsx scripts/seed-recommend-materials.ts"
+    "seed-recommend-materials": "tsx scripts/seed-recommend-materials.ts",
+    "import-registry": "tsx scripts/import-pesticide-registry.ts"
   },
   "dependencies": {
     "@geoman-io/leaflet-geoman-free": "^2.19.2",
@@ -63,6 +64,7 @@
     "@types/pg": "^8.16.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "csv-parse": "^6.1.0",
     "dotenv": "^17.2.3",
     "eslint": "^9",
     "eslint-config-next": "16.1.4",

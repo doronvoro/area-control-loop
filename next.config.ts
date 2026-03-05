@@ -1,7 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  experimental: {
+    // Allow large CSV uploads for pesticide registry import (up to 60MB)
+    proxyClientMaxBodySize: '60mb',
+  },
 };
 
 export default nextConfig;
