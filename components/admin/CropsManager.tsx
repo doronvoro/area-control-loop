@@ -29,6 +29,7 @@ import * as z from 'zod';
 const cropSchema = z.object({
   name: z.string().min(1, 'שם גידול נדרש'),
   description: z.string().optional(),
+  parent_crop_id: z.string().optional(),
 });
 
 type CropFormData = z.infer<typeof cropSchema>;
@@ -37,6 +38,7 @@ interface Crop {
   id: string;
   name: string;
   description: string | null;
+  parent_crop_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -58,6 +60,7 @@ export function CropsManager() {
     defaultValues: {
       name: '',
       description: '',
+      parent_crop_id: '',
     },
   });
 
@@ -116,12 +119,14 @@ export function CropsManager() {
       form.reset({
         name: crop.name,
         description: crop.description || '',
+        parent_crop_id: crop.parent_crop_id || '',
       });
     } else {
       setEditingCrop(null);
       form.reset({
         name: '',
         description: '',
+        parent_crop_id: '',
       });
     }
     setDialogOpen(true);
@@ -139,8 +144,8 @@ export function CropsManager() {
       const url = '/api/crops';
       const method = editingCrop ? 'PUT' : 'POST';
       const body = editingCrop
-        ? { id: editingCrop.id, ...data }
-        : data;
+        ? { id: editingCrop.id, ...data, parent_crop_id: data.parent_crop_id || null }
+        : { ...data, parent_crop_id: data.parent_crop_id || null };
 
       const response = await fetch(url, {
         method,
@@ -223,12 +228,13 @@ export function CropsManager() {
                   תיאור (עברית)
                 </Button>
               </TableHead>
+              <TableHead>גידול אב</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {sortedCrops.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={3} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
                   אין גידולים. לחץ על &quot;הוסף גידול חדש&quot; כדי להתחיל.
                 </TableCell>
               </TableRow>
@@ -255,6 +261,11 @@ export function CropsManager() {
                   </TableCell>
                   <TableCell className="font-medium">{crop.name}</TableCell>
                   <TableCell>{crop.description || '-'}</TableCell>
+                  <TableCell>
+                    {crop.parent_crop_id
+                      ? crops.find((c) => c.id === crop.parent_crop_id)?.name || '-'
+                      : '-'}
+                  </TableCell>
                 </TableRow>
               ))
             )}
@@ -296,6 +307,27 @@ export function CropsManager() {
                 placeholder="תיאור הגידול..."
                 rows={3}
               />
+            </div>
+
+            <div>
+              <Label htmlFor="parent_crop_id">גידול אב (אופציונלי)</Label>
+              <select
+                id="parent_crop_id"
+                {...form.register('parent_crop_id')}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <option value="">ללא גידול אב</option>
+                {crops
+                  .filter((c) => c.id !== editingCrop?.id)
+                  .map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}{c.description ? ` (${c.description})` : ''}
+                    </option>
+                  ))}
+              </select>
+              <p className="text-sm text-muted-foreground mt-1">
+                גידול אב מאפשר ירושת המלצות חומרים כאשר אין המלצות ספציפיות לגידול זה
+              </p>
             </div>
 
             <DialogFooter>

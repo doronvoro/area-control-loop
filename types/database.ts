@@ -34,6 +34,27 @@ export const SEVERITY_OPTIONS = [
   { value: ReportSeverity.CRITICAL, label: SEVERITY_LABELS[ReportSeverity.CRITICAL] },
 ];
 
+// Action type names
+export enum ActionTypeName {
+  SPRAY = 'spray',
+  DRENCH = 'drench',
+  SPREAD = 'spread',
+}
+
+// Hebrew labels for action type names (for UI display)
+export const ACTION_TYPE_LABELS: Record<ActionTypeName, string> = {
+  [ActionTypeName.SPRAY]: 'ריסוס',
+  [ActionTypeName.DRENCH]: 'הגמעה',
+  [ActionTypeName.SPREAD]: 'פיזור',
+};
+
+// Action type options for dropdowns/selects
+export const ACTION_TYPE_OPTIONS = [
+  { value: ActionTypeName.SPRAY, label: ACTION_TYPE_LABELS[ActionTypeName.SPRAY] },
+  { value: ActionTypeName.DRENCH, label: ACTION_TYPE_LABELS[ActionTypeName.DRENCH] },
+  { value: ActionTypeName.SPREAD, label: ACTION_TYPE_LABELS[ActionTypeName.SPREAD] },
+];
+
 // Size unit types for areas and sub-areas
 export const SIZE_UNIT_TYPES = [
   { name: 'dunam', description: 'דונם' },
@@ -596,6 +617,7 @@ export interface Database {
           id: string;
           name: string;
           description: string | null;
+          parent_crop_id: string | null;
           source: string;
           created_at: string;
           updated_at: string;
@@ -604,6 +626,7 @@ export interface Database {
           id?: string;
           name: string;
           description?: string | null;
+          parent_crop_id?: string | null;
           source?: string;
           created_at?: string;
           updated_at?: string;
@@ -612,6 +635,7 @@ export interface Database {
           id?: string;
           name?: string;
           description?: string | null;
+          parent_crop_id?: string | null;
           source?: string;
           created_at?: string;
           updated_at?: string;

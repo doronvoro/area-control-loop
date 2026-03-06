@@ -103,10 +103,13 @@ export function MonitoringForm({
   const [areas, setAreas] = useState<any[]>(initialAreas);
   const [subAreas, setSubAreas] = useState<any[]>([]);
 
+  // Global action types (loaded once on mount, not per crop/finding)
+  const [allActionTypes, setAllActionTypes] = useState<any[]>([]);
+  const [defaultActionTypeId, setDefaultActionTypeId] = useState<string>('');
+
   // Per-entry indexed state for cascade data
   const [entryFindings, setEntryFindings] = useState<Record<number, any[]>>({});
   const [entryLoadingFindings, setEntryLoadingFindings] = useState<Record<number, boolean>>({});
-  const [entryActionTypes, setEntryActionTypes] = useState<Record<number, any[]>>({});
   const [entryCropIds, setEntryCropIds] = useState<Record<number, string | null>>({});
 
   // Per-treatment indexed state: key is "entryIndex-treatmentIndex"
@@ -115,7 +118,6 @@ export function MonitoringForm({
   const [treatmentRecommendedUnitTypeId, setTreatmentRecommendedUnitTypeId] = useState<Record<string, string>>({});
 
   // Per-entry loading states
-  const [entryLoadingActionTypes, setEntryLoadingActionTypes] = useState<Record<number, boolean>>({});
   // Per-treatment loading states
   const [treatmentLoadingMaterials, setTreatmentLoadingMaterials] = useState<Record<string, boolean>>({});
 
@@ -155,6 +157,27 @@ export function MonitoringForm({
     if (!watchedAreaId) return 2;
     return 3;
   }, [watchedCustomerId, watchedInspectorId, watchedAreaId]);
+
+  // Load all action types once on mount (they're global, not per crop/finding)
+  useEffect(() => {
+    const loadActionTypes = async () => {
+      try {
+        const res = await fetch('/api/action-types');
+        if (res.ok) {
+          const data = await res.json();
+          setAllActionTypes(data);
+          const sprayType = data.find((at: any) => at.name === 'spray' || at.name === 'ריסוס' || at.description === 'ריסוס');
+          const defaultType = sprayType || data[0];
+          if (defaultType) {
+            setDefaultActionTypeId(defaultType.id);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching action types:', err);
+      }
+    };
+    loadActionTypes();
+  }, []);
 
   // Fetch inspectors and areas when customer changes (admin only)
   useEffect(() => {
@@ -197,11 +220,9 @@ export function MonitoringForm({
 
   const resetAllEntryState = () => {
     setEntryCropIds({});
-    setEntryActionTypes({});
     setTreatmentMaterials({});
     setTreatmentRecommendedDosage({});
     setTreatmentRecommendedUnitTypeId({});
-    setEntryLoadingActionTypes({});
     setTreatmentLoadingMaterials({});
     setCollapsedEntries({});
   };
@@ -263,21 +284,6 @@ export function MonitoringForm({
       setEntryFindings(prev => ({ ...prev, [index]: findings }));
     } finally {
       setEntryLoadingFindings(prev => ({ ...prev, [index]: false }));
-    }
-  };
-
-  const fetchActionTypesForEntry = async (cropId: string, findingId: string, index: number) => {
-    setEntryLoadingActionTypes(prev => ({ ...prev, [index]: true }));
-    try {
-      const res = await fetch(`/api/cascade?type=action_types&cropId=${cropId}&findingId=${findingId}`);
-      if (res.ok) {
-        const data = await res.json();
-        setEntryActionTypes(prev => ({ ...prev, [index]: data }));
-      }
-    } catch (err) {
-      console.error('Error fetching action types:', err);
-    } finally {
-      setEntryLoadingActionTypes(prev => ({ ...prev, [index]: false }));
     }
   };
 
@@ -375,7 +381,6 @@ export function MonitoringForm({
     form.setValue(`entries.${index}.finding_id`, '');
     form.setValue(`entries.${index}.treatments`, []);
 
-    setEntryActionTypes(prev => ({ ...prev, [index]: [] }));
     cleanupTreatmentStateForEntry(index);
   };
 
@@ -383,18 +388,15 @@ export function MonitoringForm({
     form.setValue(`entries.${index}.finding_id`, findingId);
     const cropId = entryCropIds[index];
 
-    // Reset treatments when finding changes and auto-add one
+    // Reset treatments when finding changes and auto-add one with default action type (ריסוס)
     form.setValue(`entries.${index}.treatments`, [
-      { action_type_id: '', material_id: '', dosage: '', unit_type_id: '', notes: '' }
+      { action_type_id: defaultActionTypeId, material_id: '', dosage: '', unit_type_id: '', notes: '' }
     ]);
     cleanupTreatmentStateForEntry(index);
 
     if (findingId && cropId) {
-      fetchActionTypesForEntry(cropId, findingId, index);
       // Preload materials for the auto-added treatment
-      fetchMaterialsForTreatment(cropId, findingId, '', index, 0);
-    } else {
-      setEntryActionTypes(prev => ({ ...prev, [index]: [] }));
+      fetchMaterialsForTreatment(cropId, findingId, defaultActionTypeId, index, 0);
     }
   };
 
@@ -447,16 +449,17 @@ export function MonitoringForm({
   const addTreatment = (entryIndex: number) => {
     const currentTreatments = form.getValues(`entries.${entryIndex}.treatments`) || [];
     const newTreatmentIndex = currentTreatments.length;
+
     form.setValue(`entries.${entryIndex}.treatments`, [
       ...currentTreatments,
-      { action_type_id: '', material_id: '', dosage: '', unit_type_id: '', notes: '' }
+      { action_type_id: defaultActionTypeId, material_id: '', dosage: '', unit_type_id: '', notes: '' }
     ]);
 
     // Preload materials for the new treatment
     const cropId = entryCropIds[entryIndex];
     const findingId = form.getValues(`entries.${entryIndex}.finding_id`);
     if (cropId && findingId) {
-      fetchMaterialsForTreatment(cropId, findingId, '', entryIndex, newTreatmentIndex);
+      fetchMaterialsForTreatment(cropId, findingId, defaultActionTypeId, entryIndex, newTreatmentIndex);
     }
   };
 
@@ -523,8 +526,6 @@ export function MonitoringForm({
     };
 
     setEntryCropIds(rebuildState);
-    setEntryActionTypes(rebuildState);
-    setEntryLoadingActionTypes(rebuildState);
     setTreatmentMaterials(rebuildTreatmentState);
     setTreatmentRecommendedDosage(rebuildTreatmentState);
     setTreatmentRecommendedUnitTypeId(rebuildTreatmentState);
@@ -1031,7 +1032,7 @@ export function MonitoringForm({
                                     type="button"
                                     className="add-button add-button-treatment"
                                     onClick={() => addTreatment(index)}
-                                    disabled={!cropId || entryLoadingActionTypes[index]}
+                                    disabled={!cropId}
                                   >
                                     <Plus className="h-3 w-3" />
                                     הוסף טיפול
@@ -1117,22 +1118,18 @@ export function MonitoringForm({
                                               <FormItem>
                                                 <FormLabel className="font-semibold text-xs">
                                                   סוג פעולה
-                                                  {entryLoadingActionTypes[index] && <LoadingSpinner />}
                                                 </FormLabel>
                                                 <Select
                                                   onValueChange={(v) => handleTreatmentActionTypeChange(v, index, tIndex)}
                                                   value={actionField.value}
-                                                  disabled={!cropId || entryLoadingActionTypes[index]}
                                                 >
                                                   <FormControl>
                                                     <SelectTrigger className="h-10 monitoring-select-trigger">
-                                                      <SelectValue placeholder={
-                                                        !cropId ? 'אין גידול מוגדר' : 'בחר סוג פעולה'
-                                                      } />
+                                                      <SelectValue placeholder="בחר סוג פעולה" />
                                                     </SelectTrigger>
                                                   </FormControl>
                                                   <SelectContent>
-                                                    {(entryActionTypes[index] || []).map((actionType) => (
+                                                    {allActionTypes.map((actionType) => (
                                                       <SelectItem key={actionType.id} value={actionType.id}>
                                                         {actionType.description || actionType.name}
                                                       </SelectItem>

@@ -39,7 +39,7 @@ export function UnifiedAreasLayout({
   crops,
   permissions,
 }: UnifiedAreasLayoutProps) {
-  const [mode, setMode] = useState<PageMode>('edit');
+  const [mode, setMode] = useState<PageMode>('live');
 
   // Hierarchy state (from AreaManagementLayout)
   const [customers, setCustomers] = useState<Customer[]>(initialCustomers);

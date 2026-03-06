@@ -48,7 +48,6 @@ export const managementGroup: NavGroup = {
   requiredRole: 'customer_owner',
   items: [
     { href: '/admin/workers', label: 'ניהול עובדים', icon: Users },
-    { href: '/areas', label: 'ניהול שטחים', icon: MapPin },
     { href: '/admin/crops', label: 'ניהול גידולים', icon: Sprout },
     { href: '/admin/findings', label: 'ניהול ממצאים', icon: Bug },
     { href: '/admin/recommend-materials', label: 'המלצות חומרים', icon: FlaskConical },

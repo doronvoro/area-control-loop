@@ -4,6 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:docker": "cp .env.local.docker .env.local && next dev",
+    "dev:remote": "cp .env.local.remote .env.local && next dev",
+    "env:docker": "cp .env.local.docker .env.local && echo 'Switched to DOCKER Supabase'",
+    "env:remote": "cp .env.local.remote .env.local && echo 'Switched to REMOTE Supabase'",
+    "env:which": "grep NEXT_PUBLIC_SUPABASE_URL .env.local",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",

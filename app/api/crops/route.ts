@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, description } = body;
+    const { name, description, parent_crop_id } = body;
 
     if (!name || typeof name !== 'string' || name.trim() === '') {
       return NextResponse.json({ error: 'שם גידול נדרש' }, { status: 400 });
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
 
     const adminClient = createAdminClient();
     const { data, error } = await (adminClient.from('crops') as any)
-      .insert({ name: name.trim(), description: description?.trim() || null })
+      .insert({ name: name.trim(), description: description?.trim() || null, parent_crop_id: parent_crop_id || null })
       .select()
       .single();
 
@@ -68,7 +68,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { id, name, description } = body;
+    const { id, name, description, parent_crop_id } = body;
 
     if (!id) {
       return NextResponse.json({ error: 'מזהה גידול נדרש' }, { status: 400 });
@@ -80,7 +80,7 @@ export async function PUT(request: NextRequest) {
 
     const adminClient = createAdminClient();
     const { data, error } = await (adminClient.from('crops') as any)
-      .update({ name: name.trim(), description: description?.trim() || null })
+      .update({ name: name.trim(), description: description?.trim() || null, parent_crop_id: parent_crop_id || null })
       .eq('id', id)
       .select()
       .single();
