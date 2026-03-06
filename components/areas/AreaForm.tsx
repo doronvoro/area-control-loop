@@ -39,6 +39,8 @@ import type { GeoJSONPolygon } from '@/components/map/types';
 const areaSchema = z.object({
   name: z.string().min(1, 'שם השטח נדרש'),
   description: z.string().optional(),
+  variety: z.string().optional(),
+  planting_time: z.string().optional(),
   customer_id: z.string().optional(),
   crop_id: z.string().optional(),
   size: z.string().optional(),
@@ -64,6 +66,8 @@ interface AreaFormProps {
     name: string;
     description?: string | null;
     crop_id?: string | null;
+    variety?: string | null;
+    planting_time?: string | null;
     size?: number | null;
     size_unit_type?: string | null;
     geometry?: GeoJSONPolygon | null;
@@ -110,6 +114,8 @@ export function AreaForm({ area, customerId, customers = [], crops = [], isAdmin
     defaultValues: {
       name: area?.name || '',
       description: area?.description || '',
+      variety: area?.variety || '',
+      planting_time: area?.planting_time || '',
       customer_id: customerId || '',
       crop_id: area?.crop_id || '',
       size: area?.size?.toString() || '',
@@ -127,6 +133,8 @@ export function AreaForm({ area, customerId, customers = [], crops = [], isAdmin
       form.reset({
         name: area?.name || '',
         description: area?.description || '',
+        variety: area?.variety || '',
+        planting_time: area?.planting_time || '',
         customer_id: customerId || '',
         crop_id: area?.crop_id || '',
         size: area?.size?.toString() || '',
@@ -169,6 +177,8 @@ export function AreaForm({ area, customerId, customers = [], crops = [], isAdmin
           ...(area ? { id: area.id } : {}),
           name: data.name,
           description: data.description,
+          variety: data.variety || null,
+          planting_time: data.planting_time || null,
           crop_id: data.crop_id || null,
           size: size || null,
           size_unit_type: sizeUnitType,
@@ -246,6 +256,36 @@ export function AreaForm({ area, customerId, customers = [], crops = [], isAdmin
                 </FormItem>
               )}
             />
+
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="variety"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>זן</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="זן (אופציונלי)" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="planting_time"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>זמן שתילה</FormLabel>
+                    <FormControl>
+                      <Input {...field} type="date" placeholder="זמן שתילה (אופציונלי)" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
 
             <FormField
               control={form.control}

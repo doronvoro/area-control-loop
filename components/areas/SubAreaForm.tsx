@@ -38,6 +38,7 @@ import type { GeoJSONPolygon } from '@/components/map/types';
 const subAreaSchema = z.object({
   name: z.string().min(1, 'שם התת-שטח נדרש'),
   variety: z.string().optional(),
+  planting_time: z.string().optional(),
   rows: z.string().optional(),
   parent_sub_area_id: z.string().optional(),
   level: z.number().min(1).optional(),
@@ -59,6 +60,7 @@ interface SubAreaFormProps {
     id: string;
     name: string;
     variety?: string | null;
+    planting_time?: string | null;
     rows?: string | null;
     parent_sub_area_id?: string | null;
     level?: number;
@@ -117,6 +119,7 @@ export function SubAreaForm({
     defaultValues: {
       name: subArea?.name || '',
       variety: subArea?.variety || '',
+      planting_time: subArea?.planting_time || '',
       rows: subArea?.rows || '',
       parent_sub_area_id: subArea?.parent_sub_area_id || createSubArea?.parentId || '',
       level: subArea?.level || 1,
@@ -215,7 +218,7 @@ export function SubAreaForm({
               )}
             />
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <FormField
                 control={form.control}
                 name="variety"
@@ -224,6 +227,20 @@ export function SubAreaForm({
                     <FormLabel>זן</FormLabel>
                     <FormControl>
                       <Input {...field} placeholder="זן (אופציונלי)" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="planting_time"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>זמן שתילה</FormLabel>
+                    <FormControl>
+                      <Input {...field} type="date" placeholder="זמן שתילה (אופציונלי)" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

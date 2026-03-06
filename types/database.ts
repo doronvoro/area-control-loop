@@ -166,6 +166,8 @@ export interface Database {
           size_unit_type: string | null;
           geometry: Json | null;
           area_type: string | null;
+          variety: string | null;
+          planting_time: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -178,6 +180,8 @@ export interface Database {
           size_unit_type?: string | null;
           geometry?: Json | null;
           area_type?: string | null;
+          variety?: string | null;
+          planting_time?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -190,6 +194,8 @@ export interface Database {
           size_unit_type?: string | null;
           geometry?: Json | null;
           area_type?: string | null;
+          variety?: string | null;
+          planting_time?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -202,6 +208,7 @@ export interface Database {
           level: number;
           name: string;
           variety: string | null;
+          planting_time: string | null;
           rows: string | null;
           display: string | null;
           crop_id: string | null;
@@ -218,6 +225,7 @@ export interface Database {
           level?: number;
           name: string;
           variety?: string | null;
+          planting_time?: string | null;
           rows?: string | null;
           display?: string | null;
           crop_id?: string | null;
@@ -234,6 +242,7 @@ export interface Database {
           level?: number;
           name?: string;
           variety?: string | null;
+          planting_time?: string | null;
           rows?: string | null;
           display?: string | null;
           crop_id?: string | null;

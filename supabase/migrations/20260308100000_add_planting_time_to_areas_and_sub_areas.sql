@@ -1,0 +1,2 @@
+ALTER TABLE areas ADD COLUMN IF NOT EXISTS planting_time DATE;
+ALTER TABLE sub_areas ADD COLUMN IF NOT EXISTS planting_time DATE;

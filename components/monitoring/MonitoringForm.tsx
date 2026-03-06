@@ -104,6 +104,8 @@ export function MonitoringForm({
   const [subAreas, setSubAreas] = useState<any[]>([]);
 
   // Per-entry indexed state for cascade data
+  const [entryFindings, setEntryFindings] = useState<Record<number, any[]>>({});
+  const [entryLoadingFindings, setEntryLoadingFindings] = useState<Record<number, boolean>>({});
   const [entryActionTypes, setEntryActionTypes] = useState<Record<number, any[]>>({});
   const [entryCropIds, setEntryCropIds] = useState<Record<number, string | null>>({});
 
@@ -245,6 +247,25 @@ export function MonitoringForm({
     }
   };
 
+  const fetchFindingsForEntry = async (cropId: string, index: number) => {
+    setEntryLoadingFindings(prev => ({ ...prev, [index]: true }));
+    try {
+      const res = await fetch(`/api/cascade?type=findings&cropId=${cropId}`);
+      if (res.ok) {
+        const data = await res.json();
+        // If crop has specific findings use them, otherwise fall back to all findings
+        setEntryFindings(prev => ({ ...prev, [index]: data.length > 0 ? data : findings }));
+      } else {
+        setEntryFindings(prev => ({ ...prev, [index]: findings }));
+      }
+    } catch (err) {
+      console.error('Error fetching findings:', err);
+      setEntryFindings(prev => ({ ...prev, [index]: findings }));
+    } finally {
+      setEntryLoadingFindings(prev => ({ ...prev, [index]: false }));
+    }
+  };
+
   const fetchActionTypesForEntry = async (cropId: string, findingId: string, index: number) => {
     setEntryLoadingActionTypes(prev => ({ ...prev, [index]: true }));
     try {
@@ -342,6 +363,13 @@ export function MonitoringForm({
     }
 
     setEntryCropIds(prev => ({ ...prev, [index]: effectiveCropId }));
+
+    // Fetch crop-specific findings
+    if (effectiveCropId) {
+      fetchFindingsForEntry(effectiveCropId, index);
+    } else {
+      setEntryFindings(prev => ({ ...prev, [index]: findings }));
+    }
 
     // Reset dependent fields for this entry
     form.setValue(`entries.${index}.finding_id`, '');
@@ -934,7 +962,11 @@ export function MonitoringForm({
                                         </SelectTrigger>
                                       </FormControl>
                                       <SelectContent>
-                                        {findings.map((finding) => (
+                                        {entryLoadingFindings[index] ? (
+                                          <div className="flex items-center justify-center py-2">
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                          </div>
+                                        ) : (entryFindings[index] || findings).map((finding) => (
                                           <SelectItem key={finding.id} value={finding.id}>
                                             {finding.description || finding.name}
                                           </SelectItem>
