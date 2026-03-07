@@ -20,7 +20,6 @@ export async function GET() {
           *,
           material:materials(*),
           unit_type:unit_types(*),
-          action_type:action_types(*)
         )`
       )
       .order('created_at', { ascending: false });

@@ -61,7 +61,6 @@ export function ActionsPageContent() {
       initialAreas={formData.initialAreas}
       initialWorkers={formData.initialWorkers}
       findings={formData.findings}
-      actionTypes={formData.actionTypes}
       unitTypes={formData.unitTypes}
       currentWorkerId={formData.currentWorkerId}
     />

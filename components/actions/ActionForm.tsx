@@ -27,7 +27,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { Plus, Trash2 } from 'lucide-react';
-import { ReportSeverity, SEVERITY_OPTIONS } from '@/types/database';
+import { ReportSeverity, SEVERITY_OPTIONS, ActionTypeName, ACTION_TYPE_OPTIONS } from '@/types/database';
 import { ENTIRE_AREA, ENTIRE_AREA_DISPLAY, ACTION_STATUS_OPTIONS } from '@/lib/constants';
 
 const treatmentSchema = z.object({
@@ -68,7 +68,6 @@ interface ActionFormProps {
   initialAreas: any[];
   initialWorkers: any[];
   findings: any[];
-  actionTypes: any[];
   unitTypes: any[];
   currentWorkerId?: string;
 }
@@ -81,7 +80,6 @@ export function ActionForm({
   initialAreas,
   initialWorkers,
   findings,
-  actionTypes,
   unitTypes,
   currentWorkerId,
 }: ActionFormProps) {
@@ -94,9 +92,6 @@ export function ActionForm({
   const [actionWorkers, setActionWorkers] = useState<any[]>(initialWorkers);
   const [areas, setAreas] = useState<any[]>(initialAreas);
   const [subAreas, setSubAreas] = useState<any[]>([]);
-
-  // Entry-specific cascade data (indexed by entry index)
-  const [entryActionTypes, setEntryActionTypes] = useState<Record<number, any[]>>({});
 
   // Treatment-specific cascade data (indexed by "entryIndex-treatmentIndex")
   const [treatmentMaterials, setTreatmentMaterials] = useState<Record<string, any[]>>({});
@@ -191,7 +186,6 @@ export function ActionForm({
         ],
       },
     ]);
-    setEntryActionTypes({});
     setTreatmentMaterials({});
     setTreatmentLoadingMaterials({});
   };
@@ -322,7 +316,6 @@ export function ActionForm({
       entries.forEach((entry: any, entryIndex: number) => {
         const primaryFindingId = entry.finding_ids?.[0];
         if (entry.crop_id && primaryFindingId) {
-          fetchActionTypes(entry.crop_id, primaryFindingId, entryIndex);
           // Pre-load materials for each treatment with an action type
           entry.treatments.forEach((treatment: any, treatmentIndex: number) => {
             if (treatment.action_type_id) {
@@ -335,18 +328,6 @@ export function ActionForm({
       resetAllEntries();
     }
   };
-
-  const fetchActionTypes = useCallback(async (cropId: string, findingId: string, entryIndex: number) => {
-    try {
-      const response = await fetch(`/api/cascade?type=action_types&cropId=${cropId}&findingId=${findingId}`);
-      if (response.ok) {
-        const data = await response.json();
-        setEntryActionTypes((prev) => ({ ...prev, [entryIndex]: data }));
-      }
-    } catch (err) {
-      console.error('Error fetching action types:', err);
-    }
-  }, []);
 
   const fetchMaterialsForTreatment = useCallback(async (cropId: string, findingId: string, actionTypeId: string, entryIndex: number, treatmentIndex: number) => {
     const key = `${entryIndex}-${treatmentIndex}`;
@@ -412,14 +393,11 @@ export function ActionForm({
       ]);
 
       // Clear cascade data
-      setEntryActionTypes((prev) => ({ ...prev, [entryIndex]: [] }));
       cleanupTreatmentStateForEntry(entryIndex);
     }
   };
 
   const handleFindingIdsChange = (findingIds: string[], entryIndex: number) => {
-    const cropId = form.getValues(`entries.${entryIndex}.crop_id`);
-
     form.setValue(`entries.${entryIndex}.finding_ids`, findingIds);
 
     // Reset treatments
@@ -429,12 +407,6 @@ export function ActionForm({
 
     // Clear cascade data
     cleanupTreatmentStateForEntry(entryIndex);
-
-    // Use first finding for cascade (same treatments will apply to all findings)
-    const primaryFindingId = findingIds[0];
-    if (cropId && primaryFindingId) {
-      fetchActionTypes(cropId, primaryFindingId, entryIndex);
-    }
   };
 
   const handleTreatmentActionTypeChange = (actionTypeId: string, entryIndex: number, treatmentIndex: number) => {
@@ -588,7 +560,6 @@ export function ActionForm({
         setAreas([]);
       }
       setSubAreas([]);
-      setEntryActionTypes({});
       setTreatmentMaterials({});
       setTreatmentLoadingMaterials({});
 
@@ -958,9 +929,9 @@ export function ActionForm({
                                           </SelectTrigger>
                                         </FormControl>
                                         <SelectContent>
-                                          {(entryActionTypes[entryIndex]?.length > 0 ? entryActionTypes[entryIndex] : actionTypes).map((actionType: any) => (
-                                            <SelectItem key={actionType.id} value={actionType.id}>
-                                              {actionType.description || actionType.name}
+                                          {ACTION_TYPE_OPTIONS.map((option) => (
+                                            <SelectItem key={option.value} value={option.value}>
+                                              {option.label}
                                             </SelectItem>
                                           ))}
                                         </SelectContent>

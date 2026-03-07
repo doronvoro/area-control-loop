@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { ACTION_TYPE_OPTIONS, ACTION_TYPE_LABELS, ActionTypeName } from '@/types/database';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -51,7 +52,6 @@ interface Recommendation {
     material_id: string;
     crop?: { id: string; name: string; description?: string };
     finding?: { id: string; name: string; description?: string };
-    action_type?: { id: string; name: string; description?: string } | null;
     material?: { id: string; name: string; description?: string };
   };
   values: Array<{
@@ -67,7 +67,6 @@ export function RecommendMaterialsManager() {
   const [crops, setCrops] = useState<any[]>([]);
   const [findings, setFindings] = useState<any[]>([]);
 
-  const [actionTypes, setActionTypes] = useState<any[]>([]);
   const [materials, setMaterials] = useState<any[]>([]);
   const [unitTypes, setUnitTypes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -124,11 +123,10 @@ export function RecommendMaterialsManager() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [recRes, cropsRes, findingsRes, actionTypesRes, materialsRes, unitTypesRes] = await Promise.all([
+      const [recRes, cropsRes, findingsRes, materialsRes, unitTypesRes] = await Promise.all([
         fetch('/api/recommend-materials'),
         fetch('/api/crops'),
         fetch('/api/findings'),
-        fetch('/api/action-types'),
         fetch('/api/materials'),
         fetch('/api/unit-types'),
       ]);
@@ -146,11 +144,6 @@ export function RecommendMaterialsManager() {
       if (findingsRes.ok) {
         const findingsData = await findingsRes.json();
         setFindings(findingsData);
-      }
-
-      if (actionTypesRes.ok) {
-        const actionTypesData = await actionTypesRes.json();
-        setActionTypes(actionTypesData);
       }
 
       if (materialsRes.ok) {
@@ -378,9 +371,9 @@ export function RecommendMaterialsManager() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__all__">כל סוגי הפעולות</SelectItem>
-                  {actionTypes.map((at) => (
-                    <SelectItem key={at.id} value={at.id}>
-                      {at.description || at.name}
+                  {ACTION_TYPE_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -443,7 +436,7 @@ export function RecommendMaterialsManager() {
               <div className={rec.key.finding ? '' : 'text-muted-foreground'}>
                 {rec.key.finding?.description || rec.key.finding?.name || 'ברירת מחדל'}
               </div>
-              <div className={rec.key.action_type ? '' : 'text-muted-foreground'}>{rec.key.action_type?.description || rec.key.action_type?.name || 'כל סוגי הפעולות'}</div>
+              <div className={rec.key.action_type_id ? '' : 'text-muted-foreground'}>{rec.key.action_type_id ? (ACTION_TYPE_LABELS[rec.key.action_type_id as ActionTypeName] || rec.key.action_type_id) : 'כל סוגי הפעולות'}</div>
               <div>{rec.key.material?.name || 'חומר לא ידוע'}</div>
               <div className="space-y-1">
                 {rec.values.map((value) => (
@@ -558,9 +551,9 @@ export function RecommendMaterialsManager() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__null__">כל סוגי הפעולות</SelectItem>
-                    {actionTypes.map((at) => (
-                      <SelectItem key={at.id} value={at.id}>
-                        {at.description || at.name}
+                    {ACTION_TYPE_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
                       </SelectItem>
                     ))}
                   </SelectContent>

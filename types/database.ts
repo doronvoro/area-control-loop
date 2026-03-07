@@ -566,29 +566,6 @@ export interface Database {
           updated_at?: string;
         };
       };
-      action_types: {
-        Row: {
-          id: string;
-          name: string;
-          description: string | null;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id?: string;
-          name: string;
-          description?: string | null;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: {
-          id?: string;
-          name?: string;
-          description?: string | null;
-          created_at?: string;
-          updated_at?: string;
-        };
-      };
       unit_types: {
         Row: {
           id: string;

@@ -76,11 +76,6 @@ export async function GET(request: Request) {
             name,
             description
           ),
-          action_type:action_types (
-            id,
-            name,
-            description
-          ),
           unit_type:unit_types (
             id,
             name,

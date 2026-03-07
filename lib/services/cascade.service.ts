@@ -116,17 +116,6 @@ export async function getCascadeFindings(
   return findings;
 }
 
-export async function getCascadeActionTypes(
-  supabase: SupabaseClient
-): Promise<any[]> {
-  const { data, error } = await supabase
-    .from('action_types')
-    .select('*')
-    .order('name');
-  if (error) throw error;
-  return data || [];
-}
-
 export async function getCascadeMaterials(
   supabase: SupabaseClient,
   params: CascadeParams
@@ -134,17 +123,21 @@ export async function getCascadeMaterials(
   const { cropId, findingId, actionTypeId } = params;
 
   const { data, error } = await queryWithCropFallback(
-    supabase, cropId, 'material_id, materials(*)',
+    supabase, cropId, 'material_id, materials(*), dosage, unit_type_id, unit_types(*)',
     findingId || null, actionTypeId || null, null
   );
 
   if (error) throw error;
 
-  // Deduplicate materials
+  // Deduplicate materials, attaching recommended dosage/unit info
   const materialsMap = new Map();
   data?.forEach((rm: any) => {
     if (rm.materials && !materialsMap.has(rm.material_id)) {
-      materialsMap.set(rm.material_id, rm.materials);
+      materialsMap.set(rm.material_id, {
+        ...rm.materials,
+        recommended_dosage: rm.dosage,
+        recommended_unit_type: rm.unit_types?.name || null,
+      });
     }
   });
 

@@ -65,7 +65,7 @@ export async function GET() {
           treatments:monitoring_treatments(
             id, dosage, status, notes,
             material:materials(name),
-            action_type:action_types(name, description),
+            action_type_id,
             unit_type:unit_types(name)
           )`
         )

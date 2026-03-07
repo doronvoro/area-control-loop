@@ -3,7 +3,6 @@ import { getApiContext } from '@/lib/api/auth-context';
 import { handleApiError } from '@/lib/api-utils';
 import {
   getCascadeFindings,
-  getCascadeActionTypes,
   getCascadeMaterials,
   getCascadeDosage,
 } from '@/lib/services/cascade.service';
@@ -26,11 +25,6 @@ export async function GET(request: Request) {
         }
         const findings = await getCascadeFindings(ctx.supabase, { cropId });
         return NextResponse.json(findings);
-      }
-
-      case 'action_types': {
-        const actionTypes = await getCascadeActionTypes(ctx.supabase);
-        return NextResponse.json(actionTypes);
       }
 
       case 'materials': {

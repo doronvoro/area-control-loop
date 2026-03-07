@@ -102,11 +102,6 @@ export async function GET(request: Request) {
             name,
             description
           ),
-          action_type:action_types (
-            id,
-            name,
-            description
-          ),
           unit_type:unit_types (
             id,
             name,
@@ -154,7 +149,7 @@ export async function GET(request: Request) {
           },
           severity: report.severity,
           recommendation: {
-            action_type: treatment.action_type || null,
+            action_type_id: treatment.action_type_id || null,
             material: treatment.material || null,
             dosage: treatment.dosage,
             unit_type: treatment.unit_type || null,

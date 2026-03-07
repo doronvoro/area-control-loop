@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ENTIRE_AREA, ENTIRE_AREA_DISPLAY } from '@/lib/constants';
+import { ACTION_TYPE_OPTIONS } from '@/types/database';
 
 interface SubArea {
   id: string;
@@ -23,11 +24,6 @@ interface SubArea {
 }
 
 interface Finding {
-  id: string;
-  name: string;
-}
-
-interface ActionType {
   id: string;
   name: string;
 }
@@ -56,7 +52,6 @@ interface StandaloneActionFormProps {
   areaId: string;
   subAreas: SubArea[];
   findings: Finding[];
-  actionTypes: ActionType[];
   unitTypes: UnitType[];
   onSubmit: (data: StandaloneActionData) => void;
   onCancel: () => void;
@@ -67,7 +62,6 @@ export function StandaloneActionForm({
   areaId,
   subAreas,
   findings,
-  actionTypes,
   unitTypes,
   onSubmit,
   onCancel,
@@ -194,9 +188,9 @@ export function StandaloneActionForm({
                 <SelectValue placeholder="בחר סוג" />
               </SelectTrigger>
               <SelectContent>
-                {actionTypes.map((at) => (
-                  <SelectItem key={at.id} value={at.id}>
-                    {at.name}
+                {ACTION_TYPE_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
                   </SelectItem>
                 ))}
               </SelectContent>

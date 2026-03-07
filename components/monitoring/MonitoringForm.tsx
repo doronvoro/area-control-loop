@@ -41,10 +41,11 @@ import {
   X,
   RotateCcw,
 } from 'lucide-react';
-import { ReportSeverity, SEVERITY_OPTIONS } from '@/types/database';
+import { ReportSeverity, SEVERITY_OPTIONS, ActionTypeName, ACTION_TYPE_OPTIONS } from '@/types/database';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { ENTIRE_AREA, ENTIRE_AREA_DISPLAY, isEntireArea } from '@/lib/constants';
 import { ReportDetailSheet } from '@/components/reports/ReportDetailSheet';
+import { SearchableMaterialSelect } from '@/components/monitoring/SearchableMaterialSelect';
 
 const treatmentSchema = z.object({
   action_type_id: z.string().optional(),
@@ -112,9 +113,8 @@ export function MonitoringForm({
   const [areas, setAreas] = useState<any[]>(initialAreas);
   const [subAreas, setSubAreas] = useState<any[]>([]);
 
-  // Global action types (loaded once on mount, not per crop/finding)
-  const [allActionTypes, setAllActionTypes] = useState<any[]>([]);
-  const [defaultActionTypeId, setDefaultActionTypeId] = useState<string>('');
+  // Default action type is spray
+  const defaultActionTypeId = ActionTypeName.SPRAY;
 
   // Per-entry indexed state for cascade data
   const [entryFindings, setEntryFindings] = useState<Record<number, any[]>>({});
@@ -201,26 +201,6 @@ export function MonitoringForm({
     return 2;
   }, [isAdmin, watchedCustomerId, watchedInspectorId, watchedAreaId]);
 
-  // Load all action types once on mount (they're global, not per crop/finding)
-  useEffect(() => {
-    const loadActionTypes = async () => {
-      try {
-        const res = await fetch('/api/action-types');
-        if (res.ok) {
-          const data = await res.json();
-          setAllActionTypes(data);
-          const sprayType = data.find((at: any) => at.name === 'spray' || at.name === 'ריסוס' || at.description === 'ריסוס');
-          const defaultType = sprayType || data[0];
-          if (defaultType) {
-            setDefaultActionTypeId(defaultType.id);
-          }
-        }
-      } catch (err) {
-        console.error('Error fetching action types:', err);
-      }
-    };
-    loadActionTypes();
-  }, []);
 
   // Load last selections from localStorage on mount
   useEffect(() => {
@@ -1389,24 +1369,15 @@ export function MonitoringForm({
                                                   חומר מומלץ
                                                   {treatmentLoadingMaterials[treatmentKey] && <LoadingSpinner />}
                                                 </FormLabel>
-                                                <Select
-                                                  onValueChange={(v) => handleTreatmentMaterialChange(v, index, tIndex)}
-                                                  value={materialField.value}
-                                                  disabled={treatmentLoadingMaterials[treatmentKey]}
-                                                >
-                                                  <FormControl>
-                                                    <SelectTrigger className="h-10 w-full monitoring-select-trigger">
-                                                      <SelectValue placeholder="בחר חומר" />
-                                                    </SelectTrigger>
-                                                  </FormControl>
-                                                  <SelectContent position="popper" sideOffset={4}>
-                                                    {[...(treatmentMaterials[treatmentKey] || [])].sort((a, b) => (a.description || a.name || '').localeCompare(b.description || b.name || '', 'he')).map((material) => (
-                                                      <SelectItem key={material.id} value={material.id}>
-                                                        {material.description || material.name}
-                                                      </SelectItem>
-                                                    ))}
-                                                  </SelectContent>
-                                                </Select>
+                                                <FormControl>
+                                                  <SearchableMaterialSelect
+                                                    materials={treatmentMaterials[treatmentKey] || []}
+                                                    value={materialField.value}
+                                                    onValueChange={(v) => handleTreatmentMaterialChange(v, index, tIndex)}
+                                                    disabled={treatmentLoadingMaterials[treatmentKey]}
+                                                    placeholder="בחר חומר"
+                                                  />
+                                                </FormControl>
                                                 <FormMessage />
                                               </FormItem>
                                             )}
@@ -1431,9 +1402,9 @@ export function MonitoringForm({
                                                     </SelectTrigger>
                                                   </FormControl>
                                                   <SelectContent position="popper" sideOffset={4}>
-                                                    {[...allActionTypes].sort((a, b) => (a.description || a.name || '').localeCompare(b.description || b.name || '', 'he')).map((actionType) => (
-                                                      <SelectItem key={actionType.id} value={actionType.id}>
-                                                        {actionType.description || actionType.name}
+                                                    {ACTION_TYPE_OPTIONS.map((option) => (
+                                                      <SelectItem key={option.value} value={option.value}>
+                                                        {option.label}
                                                       </SelectItem>
                                                     ))}
                                                   </SelectContent>

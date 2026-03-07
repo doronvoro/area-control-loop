@@ -15,7 +15,7 @@ export async function GET(request: Request) {
 
     let query = ctx.supabase
       .from('recommend_material')
-      .select('*, crops(*), findings(*), action_types(*), materials(*), unit_types(*)');
+      .select('*, crops(*), findings(*), materials(*), unit_types(*)');
 
     if (cropId) query = query.eq('crop_id', cropId);
     if (findingId) {
@@ -49,11 +49,10 @@ export async function GET(request: Request) {
         key: {
           crop_id: first.crop_id,
           finding_id: first.finding_id || null,
-          action_type_id: first.action_type_id,
+          action_type_id: first.action_type_id || null,
           material_id: first.material_id,
           crop: first.crops || null,
           finding: first.findings || null,
-          action_type: first.action_types || null,
           material: first.materials || null,
         },
         values: items.map((item) => ({

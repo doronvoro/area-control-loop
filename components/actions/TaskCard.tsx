@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { ACTION_TYPE_OPTIONS, ACTION_TYPE_LABELS, ActionTypeName } from '@/types/database';
 import {
   Select,
   SelectContent,
@@ -33,7 +34,7 @@ export interface ActionTask {
   };
   severity: ReportSeverity | null;
   recommendation: {
-    action_type: { id: string; name: string; description: string | null } | null;
+    action_type_id: string | null;
     material: { id: string; name: string; description: string | null } | null;
     dosage: number | null;
     unit_type: { id: string; name: string; description: string | null } | null;
@@ -64,7 +65,6 @@ interface TaskCardProps {
   task: ActionTask;
   onComplete: (data: CompletedTaskData) => void;
   disabled?: boolean;
-  actionTypes?: RefItem[];
   materials?: RefItem[];
   unitTypes?: RefItem[];
 }
@@ -85,10 +85,10 @@ function formatDate(dateStr: string): string {
   });
 }
 
-export function TaskCard({ task, onComplete, disabled, actionTypes = [], materials = [], unitTypes = [] }: TaskCardProps) {
+export function TaskCard({ task, onComplete, disabled, materials = [], unitTypes = [] }: TaskCardProps) {
   const [showEdit, setShowEdit] = useState(false);
   const [editActionTypeId, setEditActionTypeId] = useState(
-    task.recommendation.action_type?.id || ''
+    task.recommendation.action_type_id || ''
   );
   const [editMaterialId, setEditMaterialId] = useState(
     task.recommendation.material?.id || ''
@@ -126,7 +126,7 @@ export function TaskCard({ task, onComplete, disabled, actionTypes = [], materia
       monitoring_report_id: task.monitoring_report_id,
       area_id: task.area_id,
       as_recommended: false,
-      action_type_id: editActionTypeId || rec.action_type?.id,
+      action_type_id: editActionTypeId || rec.action_type_id || undefined,
       material_id: editMaterialId || rec.material?.id,
       dosage: dosageNum,
       unit_type_id: editUnitTypeId || rec.unit_type?.id,
@@ -162,10 +162,10 @@ export function TaskCard({ task, onComplete, disabled, actionTypes = [], materia
 
         {/* Recommendation details */}
         <div className="bg-muted/50 rounded-lg p-3 space-y-1 text-sm">
-          {rec.action_type && (
+          {rec.action_type_id && (
             <div className="flex gap-2">
               <span className="text-muted-foreground">סוג פעולה:</span>
-              <span className="font-medium">{rec.action_type.name}</span>
+              <span className="font-medium">{ACTION_TYPE_LABELS[rec.action_type_id as ActionTypeName] || rec.action_type_id}</span>
             </div>
           )}
           {rec.material && (
@@ -222,12 +222,12 @@ export function TaskCard({ task, onComplete, disabled, actionTypes = [], materia
                 <Label className="text-xs">סוג פעולה</Label>
                 <Select value={editActionTypeId} onValueChange={setEditActionTypeId}>
                   <SelectTrigger>
-                    <SelectValue placeholder={rec.action_type?.name || 'בחר סוג פעולה'} />
+                    <SelectValue placeholder={rec.action_type_id ? (ACTION_TYPE_LABELS[rec.action_type_id as ActionTypeName] || rec.action_type_id) : 'בחר סוג פעולה'} />
                   </SelectTrigger>
                   <SelectContent>
-                    {actionTypes.map((at) => (
-                      <SelectItem key={at.id} value={at.id}>
-                        {at.name}
+                    {ACTION_TYPE_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
                       </SelectItem>
                     ))}
                   </SelectContent>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { ACTION_TYPE_LABELS, ActionTypeName } from '@/types/database';
 import {
   Sheet,
   SheetContent,
@@ -28,13 +29,13 @@ interface Treatment {
   action_time?: string | null;
   material: { id: string; name: string } | null;
   unit_type: { id: string; name: string } | null;
-  action_type: { id: string; name: string } | null;
+  action_type_id: string | null;
 }
 
 interface RecommendedTreatment {
   id: string;
   dosage: number;
-  action_type: { id: string; name: string } | null;
+  action_type_id: string | null;
   material: { id: string; name: string } | null;
   unit_type: { id: string; name: string } | null;
 }
@@ -234,7 +235,7 @@ export function ReportDetailSheet({
                               >
                                 <div className="flex justify-between">
                                   <span>
-                                    {treatment.action_type?.name || 'סוג פעולה לא ידוע'}
+                                    {treatment.action_type_id ? (ACTION_TYPE_LABELS[treatment.action_type_id as ActionTypeName] || treatment.action_type_id) : 'סוג פעולה לא ידוע'}
                                   </span>
                                   <Badge variant="outline" className="text-xs">
                                     {TREATMENT_STATUS_LABELS[treatment.status] || treatment.status}

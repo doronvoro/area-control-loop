@@ -33,7 +33,6 @@ interface FormData {
   currentWorkerId: string | null;
   initialWorkers: Worker[];
   findings: any[];
-  actionTypes: any[];
   unitTypes: any[];
 }
 
@@ -381,7 +380,6 @@ export function ActionTaskList() {
                   task={task}
                   onComplete={handleTaskComplete}
                   disabled={submitting}
-                  actionTypes={formData?.actionTypes || []}
                   materials={materials}
                   unitTypes={formData?.unitTypes || []}
                 />
@@ -399,7 +397,6 @@ export function ActionTaskList() {
           areaId={selectedAreaId}
           subAreas={subAreas}
           findings={formData.findings || []}
-          actionTypes={formData.actionTypes || []}
           unitTypes={formData.unitTypes || []}
           onSubmit={handleStandaloneSubmit}
           onCancel={() => setShowStandaloneForm(false)}

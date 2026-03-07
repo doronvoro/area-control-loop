@@ -27,6 +27,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Plus, Trash2 } from 'lucide-react';
 import { ENTIRE_AREA, ENTIRE_AREA_DISPLAY, ACTION_STATUS_OPTIONS } from '@/lib/constants';
+import { ACTION_TYPE_OPTIONS } from '@/types/database';
 
 const subAreaEntrySchema = z.object({
   source: z.enum(['monitoring', 'standalone']),
@@ -56,7 +57,6 @@ type ActionFormData = z.infer<typeof actionSchema>;
 interface AdminActionFormProps {
   customers: any[];
   findings: any[];
-  actionTypes: any[];
   unitTypes: any[];
 }
 
@@ -65,7 +65,6 @@ const statusOptions = ACTION_STATUS_OPTIONS;
 export function AdminActionForm({
   customers,
   findings,
-  actionTypes,
   unitTypes,
 }: AdminActionFormProps) {
   const router = useRouter();
@@ -79,7 +78,6 @@ export function AdminActionForm({
   const [subAreas, setSubAreas] = useState<any[]>([]);
 
   // Entry-specific cascade data (indexed by entry index)
-  const [entryActionTypes, setEntryActionTypes] = useState<Record<number, any[]>>({});
   const [entryMaterials, setEntryMaterials] = useState<Record<number, any[]>>({});
 
   // Loading states
@@ -157,7 +155,6 @@ export function AdminActionForm({
         status: 'planned',
       },
     ]);
-    setEntryActionTypes({});
     setEntryMaterials({});
   };
 
@@ -248,7 +245,6 @@ export function AdminActionForm({
       // Pre-load cascade data for each entry
       entries.forEach((entry: any, index: number) => {
         if (entry.crop_id && entry.finding_id) {
-          fetchActionTypes(entry.crop_id, entry.finding_id, index);
           if (entry.action_type_id) {
             fetchMaterials(entry.crop_id, entry.finding_id, entry.action_type_id, index);
           }
@@ -258,18 +254,6 @@ export function AdminActionForm({
       resetAllEntries();
     }
   };
-
-  const fetchActionTypes = useCallback(async (cropId: string, findingId: string, entryIndex: number) => {
-    try {
-      const response = await fetch(`/api/cascade?type=action_types&cropId=${cropId}&findingId=${findingId}`);
-      if (response.ok) {
-        const data = await response.json();
-        setEntryActionTypes((prev) => ({ ...prev, [entryIndex]: data }));
-      }
-    } catch (err) {
-      console.error('Error fetching action types:', err);
-    }
-  }, []);
 
   const fetchMaterials = useCallback(async (cropId: string, findingId: string, actionTypeId: string, entryIndex: number) => {
     try {
@@ -319,13 +303,11 @@ export function AdminActionForm({
       form.setValue(`entries.${entryIndex}.unit_type_id`, '');
 
       // Clear cascade data
-      setEntryActionTypes((prev) => ({ ...prev, [entryIndex]: [] }));
       setEntryMaterials((prev) => ({ ...prev, [entryIndex]: [] }));
     }
   };
 
   const handleFindingChange = (findingId: string, entryIndex: number) => {
-    const cropId = form.getValues(`entries.${entryIndex}.crop_id`);
     const finding = findings.find((f) => f.id === findingId);
 
     form.setValue(`entries.${entryIndex}.finding_id`, findingId);
@@ -340,10 +322,6 @@ export function AdminActionForm({
 
     // Clear cascade data
     setEntryMaterials((prev) => ({ ...prev, [entryIndex]: [] }));
-
-    if (cropId && findingId) {
-      fetchActionTypes(cropId, findingId, entryIndex);
-    }
   };
 
   const handleActionTypeChange = (actionTypeId: string, entryIndex: number) => {
@@ -429,7 +407,6 @@ export function AdminActionForm({
       setActionWorkers([]);
       setAreas([]);
       setSubAreas([]);
-      setEntryActionTypes({});
       setEntryMaterials({});
 
       setTimeout(() => {
@@ -736,9 +713,9 @@ export function AdminActionForm({
                                   </SelectTrigger>
                                 </FormControl>
                                 <SelectContent>
-                                  {(entryActionTypes[index]?.length > 0 ? entryActionTypes[index] : actionTypes).map((actionType: any) => (
-                                    <SelectItem key={actionType.id} value={actionType.id}>
-                                      {actionType.description || actionType.name}
+                                  {ACTION_TYPE_OPTIONS.map((option) => (
+                                    <SelectItem key={option.value} value={option.value}>
+                                      {option.label}
                                     </SelectItem>
                                   ))}
                                 </SelectContent>

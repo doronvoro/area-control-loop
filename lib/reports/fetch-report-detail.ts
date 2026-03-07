@@ -47,7 +47,7 @@ export async function fetchReportDetail(
           id, dosage, notes, status,
           material:materials(id, name),
           unit_type:unit_types(id, name),
-          action_type:action_types(id, name)
+          action_type_id
         )`
       )
       .eq('area_report_id', id);
@@ -66,7 +66,7 @@ export async function fetchReportDetail(
           .from('recommend_material') as any)
           .select(
             `id, dosage, finding_id,
-            action_type:action_types(id, name),
+            action_type_id,
             material:materials(id, name),
             unit_type:unit_types(id, name)`
           )
@@ -77,7 +77,7 @@ export async function fetchReportDetail(
           .from('recommend_material') as any)
           .select(
             `id, dosage, finding_id,
-            action_type:action_types(id, name),
+            action_type_id,
             material:materials(id, name),
             unit_type:unit_types(id, name)`
           )
@@ -114,7 +114,7 @@ export async function fetchReportDetail(
           id, dosage, notes, status, action_time,
           material:materials(id, name),
           unit_type:unit_types(id, name),
-          action_type:action_types(id, name)
+          action_type_id
         )`
       )
       .eq('area_report_id', id);

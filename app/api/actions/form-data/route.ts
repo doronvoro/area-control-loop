@@ -9,10 +9,9 @@ export async function GET() {
     const customerIdForData = resolveCustomerId(ctx);
 
     // Fetch common lookup data
-    const [customersResult, findingsResult, actionTypesResult, unitTypesResult] = await Promise.all([
+    const [customersResult, findingsResult, unitTypesResult] = await Promise.all([
       ctx.isAdmin ? ctx.supabase.from('customers').select('*').order('name') : { data: [] },
       ctx.supabase.from('findings').select('*').order('name'),
-      ctx.supabase.from('action_types').select('*').order('name'),
       ctx.supabase.from('unit_types').select('*').order('name'),
     ]);
 
@@ -56,7 +55,6 @@ export async function GET() {
       initialAreas,
       initialWorkers,
       findings: findingsResult.data || [],
-      actionTypes: actionTypesResult.data || [],
       unitTypes: unitTypesResult.data || [],
       currentWorkerId: ctx.worker?.id || null,
     });

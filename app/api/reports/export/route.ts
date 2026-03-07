@@ -131,7 +131,7 @@ export async function GET() {
               id, dosage, notes, status,
               material:materials(id, name),
               unit_type:unit_types(id, name),
-              action_type:action_types(id, name)
+              action_type_id
             )`
           )
           .in('actions_area_report_id', actionEntryIds);
@@ -185,7 +185,7 @@ export async function GET() {
             const row = worksheet.addRow([
               reportNumber, reportType, workerName, areaName,
               subAreaName, findingName, severityLabel,
-              treatment.action_type?.name || '-',
+              treatment.action_type_id || '-',
               treatment.material?.name || '-',
               treatment.dosage != null ? treatment.dosage : '',
               treatment.unit_type?.name || '-',
