@@ -22,6 +22,9 @@ import {
   RefreshCw,
   X,
   Loader2,
+  User,
+  MapPin,
+  Check,
 } from 'lucide-react';
 
 interface Area {
@@ -272,9 +275,6 @@ export function ActionTaskList() {
                   משימות פעולה
                 </h2>
               </div>
-              <p className="text-center text-white/70 text-sm">
-                ביצוע פעולות על סמך המלצות ניטור
-              </p>
             </div>
           </div>
           <div className="actions-loading">
@@ -301,60 +301,74 @@ export function ActionTaskList() {
                 משימות פעולה
               </h2>
             </div>
-            <p className="text-center text-white/70 text-sm">
-              ביצוע פעולות על סמך המלצות ניטור
-            </p>
+            {tasks.length > 0 && (
+              <div className="flex justify-center mt-3">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/15 backdrop-blur-sm text-white/90 text-xs font-semibold">
+                  {tasks.length} משימות ממתינות
+                </span>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Content area */}
         <div className="p-4 md:p-6 space-y-4">
-          {/* Filter Section */}
-          <div className="actions-section section-filter p-4">
-            <div className="actions-section-header">
-              <div className="actions-section-icon section-icon-filter">
-                <Filter className="h-4 w-4" />
+          {/* Worker Section (only for admin/customer who needs to pick a worker) */}
+          {needsWorkerSelection && workers.length > 0 && (
+            <div className="actions-section section-worker px-5 py-3.5">
+              <div className="actions-section-header-inline">
+                <div className="actions-section-icon section-icon-worker shrink-0">
+                  <User className="h-4 w-4" />
+                </div>
+                <h3 className="font-bold text-base shrink-0">מבצע</h3>
+                <div className="flex items-center shrink-0">
+                  <Select value={selectedWorkerId} onValueChange={setSelectedWorkerId}>
+                    <SelectTrigger className="h-11 w-56 actions-select-trigger">
+                      <SelectValue placeholder="בחר" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {workers.map((w) => (
+                        <SelectItem key={w.id} value={w.id}>
+                          {w.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {selectedWorkerId && (
+                    <span className="actions-field-check"><Check className="h-2.5 w-2.5" /></span>
+                  )}
+                </div>
               </div>
-              <h3 className="text-sm font-bold text-foreground">סינון וניהול</h3>
-              {tasks.length > 0 && (
-                <span className="area-group-badge mr-auto">
-                  {tasks.length} משימות ממתינות
-                </span>
-              )}
             </div>
+          )}
 
-            <div className="flex items-center gap-3 flex-wrap">
-              <Select value={selectedAreaId} onValueChange={setSelectedAreaId}>
-                <SelectTrigger className="w-[200px] actions-select-trigger">
-                  <SelectValue placeholder="כל השטחים" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">כל השטחים</SelectItem>
-                  {areaList.map((area) => (
-                    <SelectItem key={area.id} value={area.id}>
-                      {area.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {needsWorkerSelection && workers.length > 0 && (
-                <Select value={selectedWorkerId} onValueChange={setSelectedWorkerId}>
-                  <SelectTrigger className="w-[200px] actions-select-trigger">
-                    <SelectValue placeholder="בחר עובד מבצע" />
+          {/* Area Section */}
+          <div className="actions-section section-area-select px-5 py-3.5">
+            <div className="actions-section-header-inline">
+              <div className="actions-section-icon section-icon-area-select shrink-0">
+                <MapPin className="h-4 w-4" />
+              </div>
+              <h3 className="font-bold text-base shrink-0">שטח</h3>
+              <div className="flex items-center shrink-0">
+                <Select value={selectedAreaId} onValueChange={setSelectedAreaId}>
+                  <SelectTrigger className="h-11 w-56 actions-select-trigger">
+                    <SelectValue placeholder="כל השטחים" />
                   </SelectTrigger>
                   <SelectContent>
-                    {workers.map((w) => (
-                      <SelectItem key={w.id} value={w.id}>
-                        {w.name}
+                    <SelectItem value="all">כל השטחים</SelectItem>
+                    {areaList.map((area) => (
+                      <SelectItem key={area.id} value={area.id}>
+                        {area.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-              )}
-
+                {selectedAreaId !== 'all' && (
+                  <span className="actions-field-check"><Check className="h-2.5 w-2.5" /></span>
+                )}
+              </div>
               <button
-                className="action-btn-edit"
+                className="action-btn-edit mr-auto"
                 onClick={fetchTasks}
                 disabled={loading}
               >

@@ -87,6 +87,14 @@
   background: linear-gradient(180deg, oklch(0.55 0.15 250), oklch(0.45 0.12 260));
 }
 
+.section-worker::before {
+  background: linear-gradient(180deg, oklch(0.55 0.15 250), oklch(0.45 0.12 260));
+}
+
+.section-area-select::before {
+  background: linear-gradient(180deg, oklch(0.55 0.16 152), oklch(0.42 0.12 152));
+}
+
 .section-tasks::before {
   background: linear-gradient(180deg, oklch(0.60 0.16 55), oklch(0.50 0.14 45));
 }
@@ -105,6 +113,35 @@
   border-bottom: 1px solid oklch(0.912 0.02 55 / 50%);
 }
 
+/* Inline header: title + dropdown on same row (like monitoring) */
+.actions-section-header-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+/* --- Field Completion Check --- */
+.actions-field-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 50%;
+  background: oklch(0.55 0.16 152);
+  color: white;
+  animation: actionCheckPop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  flex-shrink: 0;
+  margin-inline-start: 0.25rem;
+}
+
+@keyframes actionCheckPop {
+  0% { transform: scale(0); opacity: 0; }
+  60% { transform: scale(1.2); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
 .actions-section-icon {
   display: flex;
   align-items: center;
@@ -118,6 +155,16 @@
 .section-icon-filter {
   background: oklch(0.94 0.04 250);
   color: oklch(0.45 0.15 250);
+}
+
+.section-icon-worker {
+  background: oklch(0.94 0.04 250);
+  color: oklch(0.45 0.15 250);
+}
+
+.section-icon-area-select {
+  background: oklch(0.935 0.025 152);
+  color: oklch(0.448 0.119 152);
 }
 
 .section-icon-tasks {
