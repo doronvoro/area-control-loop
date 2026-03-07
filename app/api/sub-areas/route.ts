@@ -24,7 +24,7 @@ export async function GET(request: Request) {
 
     const { data: area } = await supabase
       .from('areas')
-      .select('name, crop_id, crops(*)')
+      .select('name, crop_id, variety, crops(*)')
       .eq('id', areaId)
       .single();
 
@@ -49,7 +49,7 @@ export async function GET(request: Request) {
         display = `${areaName} | ${fullPath.join(' | ')}`;
       }
 
-      return { ...subArea, display, effective_crop_id: effectiveCropId, effective_crop: effectiveCrop };
+      return { ...subArea, display, effective_crop_id: effectiveCropId, effective_crop: effectiveCrop, area_crop_name: areaCrop?.name || null, area_variety: (area as any)?.variety || null };
     });
 
     return NextResponse.json(subAreasWithDisplay);

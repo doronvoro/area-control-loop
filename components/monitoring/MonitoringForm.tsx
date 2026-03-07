@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import { getSubAreaLabel } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -817,12 +818,18 @@ export function MonitoringForm({
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {areas.map((area) => (
-                          <SelectItem key={area.id} value={area.id}>
-                            {area.name}
-                            {area.crops?.name && ` (${area.crops.description || area.crops.name})`}
-                          </SelectItem>
-                        ))}
+                        {areas.map((area) => {
+                          const cropName = area.crops?.name;
+                          const variety = area.variety;
+                          const cropLabel = cropName
+                            ? variety ? `${cropName}, ${variety}` : cropName
+                            : 'ללא גידול';
+                          return (
+                            <SelectItem key={area.id} value={area.id}>
+                              {`${area.name} (${cropLabel})`}
+                            </SelectItem>
+                          );
+                        })}
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -923,11 +930,14 @@ export function MonitoringForm({
                                     </FormLabel>
                                     <FormControl>
                                       <MultiSelect
-                                        options={subAreas.map((sa) => ({
-                                          value: sa.id,
-                                          label: sa.display || sa.name,
-                                          shortLabel: sa.name,
-                                        }))}
+                                        options={subAreas.map((sa) => {
+                                          const selectedArea = areas.find(a => a.id === watchedAreaId);
+                                          return {
+                                            value: sa.id,
+                                            label: getSubAreaLabel(sa, selectedArea?.crops?.name, selectedArea?.variety),
+                                            shortLabel: sa.name,
+                                          };
+                                        })}
                                         value={subField.value}
                                         onValueChange={(ids) => handleSubAreaIdsChange(ids, index)}
                                         placeholder="בחר תתי-שטח"

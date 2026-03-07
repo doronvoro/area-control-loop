@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { getSubAreaLabel } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -521,12 +522,18 @@ export function AdminMonitoringForm({
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {areas.map((area) => (
-                        <SelectItem key={area.id} value={area.id}>
-                          {area.name}
-                          {area.crops && ` (${area.crops.description || area.crops.name})`}
-                        </SelectItem>
-                      ))}
+                      {areas.map((area) => {
+                        const cropName = area.crops?.name;
+                        const variety = area.variety;
+                        const cropLabel = cropName
+                          ? variety ? `${cropName}, ${variety}` : cropName
+                          : 'ללא גידול';
+                        return (
+                          <SelectItem key={area.id} value={area.id}>
+                            {`${area.name} (${cropLabel})`}
+                          </SelectItem>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
                   <FormMessage />
@@ -597,11 +604,14 @@ export function AdminMonitoringForm({
                                 <SelectItem value={ENTIRE_AREA}>
                                   {ENTIRE_AREA_DISPLAY}
                                 </SelectItem>
-                                {subAreas.map((subArea) => (
-                                  <SelectItem key={subArea.id} value={subArea.id}>
-                                    {subArea.display || subArea.name}
-                                  </SelectItem>
-                                ))}
+                                {subAreas.map((subArea) => {
+                                  const selectedArea = areas.find(a => a.id === watchAreaId);
+                                  return (
+                                    <SelectItem key={subArea.id} value={subArea.id}>
+                                      {getSubAreaLabel(subArea, selectedArea?.crops?.name, selectedArea?.variety)}
+                                    </SelectItem>
+                                  );
+                                })}
                               </SelectContent>
                             </Select>
                             <FormMessage />

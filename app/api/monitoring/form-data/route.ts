@@ -25,7 +25,7 @@ export async function GET() {
       const [areasRes, inspectorsRes] = await Promise.all([
         ctx.supabase
           .from('customer_areas')
-          .select('areas(*)')
+          .select('areas(*, crops(*))')
           .eq('customer_id', customerIdForData),
         inspectorTypeId
           ? ctx.supabase
