@@ -56,7 +56,7 @@ const treatmentSchema = z.object({
 
 const subAreaEntrySchema = z.object({
   sub_area_ids: z.array(z.string()).min(1, 'נדרש לבחור לפחות תת-שטח אחד'),
-  finding_id: z.string().min(1, 'נדרש לבחור ממצא'),
+  finding_ids: z.array(z.string()).min(1, 'נדרש לבחור לפחות ממצא אחד'),
   severity: z.nativeEnum(ReportSeverity).optional(),
   treatments: z.array(treatmentSchema),
 });
@@ -161,7 +161,7 @@ export function MonitoringForm({
       area_id: '',
       entries: [{
         sub_area_ids: [],
-        finding_id: '',
+        finding_ids: [],
         severity: ReportSeverity.LOW,
         treatments: [],
       }],
@@ -177,7 +177,7 @@ export function MonitoringForm({
   const watchedAreaId = form.watch('area_id');
   const watchedInspectorId = form.watch('inspector_id');
   const watchedEntries = form.watch('entries');
-  const allEntriesHaveFinding = watchedEntries?.length > 0 && watchedEntries.every((e: any) => e.finding_id);
+  const allEntriesHaveFinding = watchedEntries?.length > 0 && watchedEntries.every((e: any) => e.finding_ids?.length > 0);
 
   // Dismiss quick resume and success banner when user starts filling the form
   useEffect(() => {
@@ -294,7 +294,7 @@ export function MonitoringForm({
     const source = form.getValues(`entries.${index}`);
     append({
       sub_area_ids: [],
-      finding_id: source.finding_id,
+      finding_ids: source.finding_ids,
       severity: source.severity,
       treatments: source.treatments.map(t => ({ ...t })),
     });
@@ -326,7 +326,7 @@ export function MonitoringForm({
       form.setValue('area_id', '');
       form.setValue('entries', [{
         sub_area_ids: [],
-        finding_id: '',
+        finding_ids: [],
         severity: ReportSeverity.LOW,
         treatments: [],
       }]);
@@ -345,7 +345,7 @@ export function MonitoringForm({
       // Reset all entries when area changes
       form.setValue('entries', [{
         sub_area_ids: [],
-        finding_id: '',
+        finding_ids: [],
         severity: ReportSeverity.LOW,
         treatments: [],
       }]);
@@ -516,25 +516,26 @@ export function MonitoringForm({
     }
 
     // Reset dependent fields for this entry
-    form.setValue(`entries.${index}.finding_id`, '');
+    form.setValue(`entries.${index}.finding_ids`, []);
     form.setValue(`entries.${index}.treatments`, []);
 
     cleanupTreatmentStateForEntry(index);
   };
 
-  const handleFindingChange = (findingId: string, index: number) => {
-    form.setValue(`entries.${index}.finding_id`, findingId);
+  const handleFindingIdsChange = (findingIds: string[], index: number) => {
+    form.setValue(`entries.${index}.finding_ids`, findingIds);
     const cropId = entryCropIds[index];
+    const primaryFindingId = findingIds[0];
 
-    // Reset treatments when finding changes and auto-add one with default action type (ריסוס)
+    // Reset treatments when findings change and auto-add one with default action type (ריסוס)
     form.setValue(`entries.${index}.treatments`, [
       { action_type_id: defaultActionTypeId, material_id: '', dosage: '', unit_type_id: '', notes: '' }
     ]);
     cleanupTreatmentStateForEntry(index);
 
-    if (findingId && cropId) {
-      // Preload materials for the auto-added treatment
-      fetchMaterialsForTreatment(cropId, findingId, defaultActionTypeId, index, 0);
+    if (primaryFindingId && cropId) {
+      // Preload materials for the auto-added treatment using the first finding
+      fetchMaterialsForTreatment(cropId, primaryFindingId, defaultActionTypeId, index, 0);
     }
   };
 
@@ -557,7 +558,8 @@ export function MonitoringForm({
   const handleTreatmentActionTypeChange = (actionTypeId: string, entryIndex: number, treatmentIndex: number) => {
     form.setValue(`entries.${entryIndex}.treatments.${treatmentIndex}.action_type_id`, actionTypeId);
     const cropId = entryCropIds[entryIndex];
-    const findingId = form.getValues(`entries.${entryIndex}.finding_id`);
+    const findingIds = form.getValues(`entries.${entryIndex}.finding_ids`) || [];
+    const primaryFindingId = findingIds[0];
     const key = `${entryIndex}-${treatmentIndex}`;
 
     form.setValue(`entries.${entryIndex}.treatments.${treatmentIndex}.material_id`, '');
@@ -566,8 +568,8 @@ export function MonitoringForm({
     setTreatmentRecommendedDosage(prev => ({ ...prev, [key]: '' }));
     setTreatmentRecommendedUnitTypeId(prev => ({ ...prev, [key]: '' }));
 
-    if (cropId && findingId) {
-      fetchMaterialsForTreatment(cropId, findingId, actionTypeId || '', entryIndex, treatmentIndex);
+    if (cropId && primaryFindingId) {
+      fetchMaterialsForTreatment(cropId, primaryFindingId, actionTypeId || '', entryIndex, treatmentIndex);
     } else {
       setTreatmentMaterials(prev => ({ ...prev, [key]: [] }));
     }
@@ -576,11 +578,12 @@ export function MonitoringForm({
   const handleTreatmentMaterialChange = (materialId: string, entryIndex: number, treatmentIndex: number) => {
     form.setValue(`entries.${entryIndex}.treatments.${treatmentIndex}.material_id`, materialId);
     const cropId = entryCropIds[entryIndex];
-    const findingId = form.getValues(`entries.${entryIndex}.finding_id`);
+    const findingIds = form.getValues(`entries.${entryIndex}.finding_ids`) || [];
+    const primaryFindingId = findingIds[0];
     const actionTypeId = form.getValues(`entries.${entryIndex}.treatments.${treatmentIndex}.action_type_id`);
 
-    if (cropId && findingId && materialId) {
-      fetchDosageForTreatment(cropId, findingId, actionTypeId || '', materialId, entryIndex, treatmentIndex);
+    if (cropId && primaryFindingId && materialId) {
+      fetchDosageForTreatment(cropId, primaryFindingId, actionTypeId || '', materialId, entryIndex, treatmentIndex);
     }
   };
 
@@ -595,9 +598,10 @@ export function MonitoringForm({
 
     // Preload materials for the new treatment
     const cropId = entryCropIds[entryIndex];
-    const findingId = form.getValues(`entries.${entryIndex}.finding_id`);
-    if (cropId && findingId) {
-      fetchMaterialsForTreatment(cropId, findingId, defaultActionTypeId, entryIndex, newTreatmentIndex);
+    const findingIds = form.getValues(`entries.${entryIndex}.finding_ids`) || [];
+    const primaryFindingId = findingIds[0];
+    if (cropId && primaryFindingId) {
+      fetchMaterialsForTreatment(cropId, primaryFindingId, defaultActionTypeId, entryIndex, newTreatmentIndex);
     }
   };
 
@@ -629,7 +633,7 @@ export function MonitoringForm({
   const addEntry = () => {
     append({
       sub_area_ids: [],
-      finding_id: '',
+      finding_ids: [],
       severity: ReportSeverity.LOW,
       treatments: [],
     });
@@ -690,7 +694,7 @@ export function MonitoringForm({
 
   const getEntrySummary = (index: number) => {
     const subAreaIds = form.watch(`entries.${index}.sub_area_ids`) || [];
-    const findingId = form.watch(`entries.${index}.finding_id`);
+    const findingIds = form.watch(`entries.${index}.finding_ids`) || [];
     const severity = form.watch(`entries.${index}.severity`);
     const treatments = form.watch(`entries.${index}.treatments`) || [];
 
@@ -710,11 +714,18 @@ export function MonitoringForm({
           ? (selectedSubAreas[0]?.display || selectedSubAreas[0]?.name || '')
           : `${selectedSubAreas.length} תתי-שטח`;
 
-    const finding = findings.find(f => f.id === findingId);
+    const selectedFindings = findingIds
+      .map((id: string) => findings.find(f => f.id === id))
+      .filter(Boolean);
+    const findingName = selectedFindings.length === 0
+      ? ''
+      : selectedFindings.length === 1
+        ? (selectedFindings[0]?.description || selectedFindings[0]?.name || '')
+        : `${selectedFindings.length} ממצאים`;
 
     return {
       subAreaName,
-      findingName: finding?.description || finding?.name || '',
+      findingName,
       severity,
       treatmentCount: treatments.length,
     };
@@ -726,13 +737,18 @@ export function MonitoringForm({
     setSuccess(false);
 
     try {
-      // Convert ENTIRE_AREA sentinel to null before sending to API
-      const entries = data.entries.map(entry => ({
-        ...entry,
-        sub_area_ids: entry.sub_area_ids.includes(ENTIRE_AREA)
+      // Expand finding_ids into separate entries (one per finding) and convert ENTIRE_AREA sentinel
+      const entries = data.entries.flatMap(entry => {
+        const subAreaIds = entry.sub_area_ids.includes(ENTIRE_AREA)
           ? [null]
-          : entry.sub_area_ids,
-      }));
+          : entry.sub_area_ids;
+        return entry.finding_ids.map(findingId => ({
+          ...entry,
+          sub_area_ids: subAreaIds,
+          finding_id: findingId,
+          finding_ids: undefined,
+        }));
+      });
 
       const response = await fetch('/api/monitoring', {
         method: 'POST',
@@ -1124,7 +1140,7 @@ export function MonitoringForm({
                 <div className="space-y-4">
                   {fields.map((field, index) => {
                     const entrySubAreaIds = form.watch(`entries.${index}.sub_area_ids`) || [];
-                    const entryFindingId = form.watch(`entries.${index}.finding_id`);
+                    const entryFindingIds = form.watch(`entries.${index}.finding_ids`) || [];
                     const treatments = form.watch(`entries.${index}.treatments`) || [];
                     const cropId = entryCropIds[index];
                     const isCollapsed = collapsedEntries[index] && entrySubAreaIds.length > 0;
@@ -1164,7 +1180,7 @@ export function MonitoringForm({
                           </div>
                           <div className="flex items-center gap-1">
                             {/* Duplicate button */}
-                            {entryFindingId && (
+                            {entryFindingIds?.length > 0 && (
                               <button
                                 type="button"
                                 className="duplicate-button"
@@ -1234,37 +1250,32 @@ export function MonitoringForm({
                                 )}
                               />
 
-                              {/* Finding select */}
+                              {/* Finding multi-select */}
                               <FormField
                                 control={form.control}
-                                name={`entries.${index}.finding_id`}
+                                name={`entries.${index}.finding_ids`}
                                 render={({ field: findingField }) => (
                                   <FormItem className="md:col-span-2">
-                                    <FormLabel className="font-semibold text-sm">ממצא *</FormLabel>
-                                    <Select
-                                      onValueChange={(v) => handleFindingChange(v, index)}
-                                      value={findingField.value}
-                                      disabled={entrySubAreaIds.length === 0}
-                                    >
-                                      <FormControl>
-                                        <SelectTrigger className="h-11 w-full monitoring-select-trigger">
-                                          <SelectValue placeholder={
-                                            entrySubAreaIds.length === 0 ? 'בחר תתי-שטח תחילה' : 'בחר ממצא'
-                                          } />
-                                        </SelectTrigger>
-                                      </FormControl>
-                                      <SelectContent position="popper" sideOffset={4}>
-                                        {entryLoadingFindings[index] ? (
-                                          <div className="flex items-center justify-center py-2">
-                                            <Loader2 className="h-4 w-4 animate-spin" />
-                                          </div>
-                                        ) : [...(entryFindings[index] || findings)].sort((a, b) => (a.description || a.name || '').localeCompare(b.description || b.name || '', 'he')).map((finding) => (
-                                          <SelectItem key={finding.id} value={finding.id}>
-                                            {finding.description || finding.name}
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
+                                    <FormLabel className="font-semibold text-sm">
+                                      ממצא *
+                                      {entryLoadingFindings[index] && <LoadingSpinner />}
+                                    </FormLabel>
+                                    <FormControl>
+                                      <MultiSelect
+                                        options={[...(entryFindings[index] || findings)]
+                                          .sort((a, b) => (a.description || a.name || '').localeCompare(b.description || b.name || '', 'he'))
+                                          .map((finding) => ({
+                                            value: finding.id,
+                                            label: finding.description || finding.name,
+                                          }))}
+                                        value={findingField.value}
+                                        onValueChange={(ids) => handleFindingIdsChange(ids, index)}
+                                        placeholder={entrySubAreaIds.length === 0 ? 'בחר תתי-שטח תחילה' : 'בחר ממצאים'}
+                                        showSelectAll={false}
+                                        disabled={entrySubAreaIds.length === 0 || entryLoadingFindings[index]}
+                                        className="monitoring-select-trigger"
+                                      />
+                                    </FormControl>
                                     <FormMessage />
                                   </FormItem>
                                 )}
@@ -1307,7 +1318,7 @@ export function MonitoringForm({
                             />
 
                             {/* Treatments Section */}
-                            {entryFindingId && (
+                            {entryFindingIds?.length > 0 && (
                               <div className="treatments-divider">
                                 <div className="flex items-center justify-between w-full pt-3">
                                   <div className="flex items-center gap-2">

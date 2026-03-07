@@ -22,6 +22,7 @@ interface MultiSelectProps {
   onValueChange: (value: string[]) => void
   placeholder?: string
   selectAllLabel?: string
+  showSelectAll?: boolean
   disabled?: boolean
   className?: string
   /** Maps option value → parent option value. null/undefined = root level. */
@@ -36,6 +37,7 @@ function MultiSelect({
   onValueChange,
   placeholder = "Select...",
   selectAllLabel = "בחר את כל השטח",
+  showSelectAll = true,
   disabled = false,
   className,
   parentMap,
@@ -43,6 +45,16 @@ function MultiSelect({
 }: MultiSelectProps) {
   const [open, setOpen] = React.useState(false)
   const [expandedNodes, setExpandedNodes] = React.useState<Set<string>>(new Set())
+  const [searchQuery, setSearchQuery] = React.useState("")
+  const searchInputRef = React.useRef<HTMLInputElement>(null)
+
+  // Focus search input when popover opens
+  React.useEffect(() => {
+    if (open) {
+      setSearchQuery("")
+      setTimeout(() => searchInputRef.current?.focus(), 0)
+    }
+  }, [open])
 
   const isEntireAreaSelected = value.includes(ENTIRE_AREA)
   const isTreeMode = !!parentMap
@@ -320,29 +332,48 @@ function MultiSelect({
       </PopoverTrigger>
       <PopoverContent className="p-0">
         <div className="multi-select-popover">
-          {/* Select Entire Area */}
-          <label className="multi-select-item multi-select-item-all">
-            <CheckboxPrimitive.Root
-              className={cn(checkboxClassName)}
-              checked={isEntireAreaSelected ? true : someIndividualSelected ? "indeterminate" : false}
-              onCheckedChange={handleEntireArea}
-            >
-              <CheckboxPrimitive.Indicator className="grid place-content-center text-current transition-none">
-                {someIndividualSelected && !isEntireAreaSelected ? (
-                  <MinusIcon className="size-3.5" />
-                ) : (
-                  <CheckIcon className="size-3.5" />
-                )}
-              </CheckboxPrimitive.Indicator>
-            </CheckboxPrimitive.Root>
-            <span className="font-semibold text-sm">{selectAllLabel}</span>
-          </label>
+          {/* Search input */}
+          <div className="px-2 pt-2 pb-1">
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="חיפוש..."
+              className="w-full px-2.5 py-1.5 text-sm border rounded-md outline-none focus:ring-1 focus:ring-ring bg-background"
+            />
+          </div>
 
-          {/* Divider */}
-          <div className="bg-border -mx-0 my-1 h-px" />
+          {/* Select Entire Area */}
+          {showSelectAll && !searchQuery && (
+            <>
+              <label className="multi-select-item multi-select-item-all">
+                <CheckboxPrimitive.Root
+                  className={cn(checkboxClassName)}
+                  checked={isEntireAreaSelected ? true : someIndividualSelected ? "indeterminate" : false}
+                  onCheckedChange={handleEntireArea}
+                >
+                  <CheckboxPrimitive.Indicator className="grid place-content-center text-current transition-none">
+                    {someIndividualSelected && !isEntireAreaSelected ? (
+                      <MinusIcon className="size-3.5" />
+                    ) : (
+                      <CheckIcon className="size-3.5" />
+                    )}
+                  </CheckboxPrimitive.Indicator>
+                </CheckboxPrimitive.Root>
+                <span className="font-semibold text-sm">{selectAllLabel}</span>
+              </label>
+
+              {/* Divider */}
+              <div className="bg-border -mx-0 my-1 h-px" />
+            </>
+          )}
 
           {/* Options — tree or flat */}
-          {treeOrderedOptions.map((option) => {
+          {treeOrderedOptions.filter((option) => {
+            if (!searchQuery) return true
+            return option.label.toLowerCase().includes(searchQuery.toLowerCase())
+          }).map((option) => {
             const checked = isVisuallyChecked(option.value)
             const indeterminate = isIndeterminate(option.value)
             const isParent = hasChildren(option.value)

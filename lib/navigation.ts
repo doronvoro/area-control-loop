@@ -12,7 +12,6 @@ import {
   Shield,
   ClipboardList,
   ListChecks,
-  Map,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -37,7 +36,6 @@ export const workflowGroup: NavGroup = {
     { href: '/monitoring', label: 'ניטור', icon: Search },
     { href: '/actions', label: 'פעולות', icon: Zap },
     { href: '/areas', label: 'שטחים', icon: MapPin },
-    { href: '/area-map', label: 'מפת שטחים', icon: Map },
     { href: '/reports', label: 'דוחות', icon: FileText },
   ],
 };

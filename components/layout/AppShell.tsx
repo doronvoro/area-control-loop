@@ -11,16 +11,20 @@ interface AppShellProps {
 }
 
 export function AppShell({ children }: AppShellProps) {
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('sidebar-collapsed') === 'true';
-    }
-    return false;
-  });
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    localStorage.setItem('sidebar-collapsed', String(sidebarCollapsed));
-  }, [sidebarCollapsed]);
+    const saved = localStorage.getItem('sidebar-collapsed') === 'true';
+    setSidebarCollapsed(saved);
+    setHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (hydrated) {
+      localStorage.setItem('sidebar-collapsed', String(sidebarCollapsed));
+    }
+  }, [sidebarCollapsed, hydrated]);
 
   return (
     <UserProvider>

@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/form';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { MultiSelect } from '@/components/ui/multi-select';
 import { Plus, Trash2 } from 'lucide-react';
 import { ReportSeverity, SEVERITY_OPTIONS } from '@/types/database';
 import { ENTIRE_AREA, ENTIRE_AREA_DISPLAY, ACTION_STATUS_OPTIONS } from '@/lib/constants';
@@ -45,7 +46,7 @@ const subAreaEntrySchema = z.object({
   monitoring_report_id: z.string().optional(),
   sub_area_id: z.string().min(1, 'נדרש לבחור תת-שטח'),
   sub_area_display: z.string().optional(),
-  finding_id: z.string().min(1, 'נדרש לבחור ממצא'),
+  finding_ids: z.array(z.string()).min(1, 'נדרש לבחור לפחות ממצא אחד'),
   finding_name: z.string().optional(),
   severity: z.nativeEnum(ReportSeverity).optional(),
   crop_id: z.string().optional(),
@@ -117,7 +118,7 @@ export function ActionForm({
           source: 'standalone',
           sub_area_id: '',
           sub_area_display: '',
-          finding_id: '',
+          finding_ids: [],
           finding_name: '',
           severity: undefined,
           crop_id: '',
@@ -172,7 +173,7 @@ export function ActionForm({
         source: 'standalone',
         sub_area_id: '',
         sub_area_display: '',
-        finding_id: '',
+        finding_ids: [],
         finding_name: '',
         severity: undefined,
         crop_id: '',
@@ -307,7 +308,7 @@ export function ActionForm({
           monitoring_report_id: report.monitoring_report_id,
           sub_area_id: report.sub_area_id || ENTIRE_AREA,
           sub_area_display: report.sub_area_display || report.sub_area_name || ENTIRE_AREA_DISPLAY,
-          finding_id: report.finding_id,
+          finding_ids: report.finding_id ? [report.finding_id] : [],
           finding_name: report.finding_name,
           severity: report.severity || undefined,
           crop_id: report.effective_crop_id || '',
@@ -319,12 +320,13 @@ export function ActionForm({
       form.setValue('entries', entries);
       // Pre-load cascade data for each entry
       entries.forEach((entry: any, entryIndex: number) => {
-        if (entry.crop_id && entry.finding_id) {
-          fetchActionTypes(entry.crop_id, entry.finding_id, entryIndex);
+        const primaryFindingId = entry.finding_ids?.[0];
+        if (entry.crop_id && primaryFindingId) {
+          fetchActionTypes(entry.crop_id, primaryFindingId, entryIndex);
           // Pre-load materials for each treatment with an action type
           entry.treatments.forEach((treatment: any, treatmentIndex: number) => {
             if (treatment.action_type_id) {
-              fetchMaterialsForTreatment(entry.crop_id, entry.finding_id, treatment.action_type_id, entryIndex, treatmentIndex);
+              fetchMaterialsForTreatment(entry.crop_id, primaryFindingId, treatment.action_type_id, entryIndex, treatmentIndex);
             }
           });
         }
@@ -403,7 +405,7 @@ export function ActionForm({
       form.setValue(`entries.${entryIndex}.crop_id`, cropId || '');
 
       // Reset dependent fields
-      form.setValue(`entries.${entryIndex}.finding_id`, '');
+      form.setValue(`entries.${entryIndex}.finding_ids`, []);
       form.setValue(`entries.${entryIndex}.finding_name`, '');
       form.setValue(`entries.${entryIndex}.treatments`, [
         { action_type_id: '', material_id: '', material: '', dosage: '', unit_type_id: '', status: 'planned', notes: '', monitoring_treatment_id: '' }
@@ -415,12 +417,10 @@ export function ActionForm({
     }
   };
 
-  const handleFindingChange = (findingId: string, entryIndex: number) => {
+  const handleFindingIdsChange = (findingIds: string[], entryIndex: number) => {
     const cropId = form.getValues(`entries.${entryIndex}.crop_id`);
-    const finding = findings.find((f) => f.id === findingId);
 
-    form.setValue(`entries.${entryIndex}.finding_id`, findingId);
-    form.setValue(`entries.${entryIndex}.finding_name`, finding?.name || '');
+    form.setValue(`entries.${entryIndex}.finding_ids`, findingIds);
 
     // Reset treatments
     form.setValue(`entries.${entryIndex}.treatments`, [
@@ -430,14 +430,17 @@ export function ActionForm({
     // Clear cascade data
     cleanupTreatmentStateForEntry(entryIndex);
 
-    if (cropId && findingId) {
-      fetchActionTypes(cropId, findingId, entryIndex);
+    // Use first finding for cascade (same treatments will apply to all findings)
+    const primaryFindingId = findingIds[0];
+    if (cropId && primaryFindingId) {
+      fetchActionTypes(cropId, primaryFindingId, entryIndex);
     }
   };
 
   const handleTreatmentActionTypeChange = (actionTypeId: string, entryIndex: number, treatmentIndex: number) => {
     const cropId = form.getValues(`entries.${entryIndex}.crop_id`);
-    const findingId = form.getValues(`entries.${entryIndex}.finding_id`);
+    const findingIds = form.getValues(`entries.${entryIndex}.finding_ids`) || [];
+    const primaryFindingId = findingIds[0];
     const key = `${entryIndex}-${treatmentIndex}`;
 
     form.setValue(`entries.${entryIndex}.treatments.${treatmentIndex}.action_type_id`, actionTypeId);
@@ -448,8 +451,8 @@ export function ActionForm({
     form.setValue(`entries.${entryIndex}.treatments.${treatmentIndex}.dosage`, '');
     form.setValue(`entries.${entryIndex}.treatments.${treatmentIndex}.unit_type_id`, '');
 
-    if (cropId && findingId && actionTypeId) {
-      fetchMaterialsForTreatment(cropId, findingId, actionTypeId, entryIndex, treatmentIndex);
+    if (cropId && primaryFindingId && actionTypeId) {
+      fetchMaterialsForTreatment(cropId, primaryFindingId, actionTypeId, entryIndex, treatmentIndex);
     } else {
       setTreatmentMaterials((prev) => ({ ...prev, [key]: [] }));
     }
@@ -457,7 +460,8 @@ export function ActionForm({
 
   const handleTreatmentMaterialChange = (materialId: string, entryIndex: number, treatmentIndex: number) => {
     const cropId = form.getValues(`entries.${entryIndex}.crop_id`);
-    const findingId = form.getValues(`entries.${entryIndex}.finding_id`);
+    const findingIds = form.getValues(`entries.${entryIndex}.finding_ids`) || [];
+    const primaryFindingId = findingIds[0];
     const actionTypeId = form.getValues(`entries.${entryIndex}.treatments.${treatmentIndex}.action_type_id`);
     const key = `${entryIndex}-${treatmentIndex}`;
     const materials = treatmentMaterials[key] || [];
@@ -466,8 +470,8 @@ export function ActionForm({
     form.setValue(`entries.${entryIndex}.treatments.${treatmentIndex}.material_id`, materialId);
     form.setValue(`entries.${entryIndex}.treatments.${treatmentIndex}.material`, material?.description || material?.name || '');
 
-    if (cropId && findingId && actionTypeId && materialId) {
-      fetchDosageForTreatment(cropId, findingId, actionTypeId, materialId, entryIndex, treatmentIndex);
+    if (cropId && primaryFindingId && actionTypeId && materialId) {
+      fetchDosageForTreatment(cropId, primaryFindingId, actionTypeId, materialId, entryIndex, treatmentIndex);
     }
   };
 
@@ -510,7 +514,7 @@ export function ActionForm({
       source: 'standalone',
       sub_area_id: '',
       sub_area_display: '',
-      finding_id: '',
+      finding_ids: [],
       finding_name: '',
       severity: undefined,
       crop_id: '',
@@ -532,20 +536,25 @@ export function ActionForm({
         body: JSON.stringify({
           area_id: data.area_id,
           worker_id: data.worker_id,
-          entries: data.entries.map((entry) => ({
-            sub_area_id: entry.sub_area_id === ENTIRE_AREA ? null : entry.sub_area_id,
-            finding_id: entry.finding_id,
-            monitoring_report_id: entry.monitoring_report_id || null,
-            treatments: entry.treatments.map((t) => ({
+          entries: data.entries.flatMap((entry) => {
+            const subAreaId = entry.sub_area_id === ENTIRE_AREA ? null : entry.sub_area_id;
+            const treatments = entry.treatments.map((t) => ({
               action_type_id: t.action_type_id,
               material_id: t.material_id || null,
               dosage: t.dosage,
               unit_type_id: t.unit_type_id,
               status: t.status,
               notes: t.notes || null,
-              monitoring_treatment_id: t.monitoring_treatment_id || null, // Link to source monitoring treatment
-            })),
-          })),
+              monitoring_treatment_id: t.monitoring_treatment_id || null,
+            }));
+            // Expand each finding_id into a separate entry for the API
+            return entry.finding_ids.map((fid) => ({
+              sub_area_id: subAreaId,
+              finding_id: fid,
+              monitoring_report_id: entry.monitoring_report_id || null,
+              treatments,
+            }));
+          }),
         }),
       });
 
@@ -564,7 +573,7 @@ export function ActionForm({
             source: 'standalone',
             sub_area_id: '',
             sub_area_display: '',
-            finding_id: '',
+            finding_ids: [],
             finding_name: '',
             severity: undefined,
             crop_id: '',
@@ -832,34 +841,27 @@ export function ActionForm({
                         ) : (
                           <FormField
                             control={form.control}
-                            name={`entries.${entryIndex}.finding_id`}
+                            name={`entries.${entryIndex}.finding_ids`}
                             render={({ field: findingField }) => (
                               <FormItem>
-                                <FormLabel>ממצא</FormLabel>
-                                <Select
-                                  onValueChange={(value) => handleFindingChange(value, entryIndex)}
+                                <FormLabel>ממצאים</FormLabel>
+                                <MultiSelect
+                                  options={[...findings]
+                                    .sort((a, b) => (a.description || a.name || '').localeCompare(b.description || b.name || '', 'he'))
+                                    .map((finding) => ({
+                                      value: finding.id,
+                                      label: finding.description || finding.name,
+                                    }))}
                                   value={findingField.value}
+                                  onValueChange={(ids) => handleFindingIdsChange(ids, entryIndex)}
+                                  placeholder={
+                                    !form.watch(`entries.${entryIndex}.sub_area_id`)
+                                      ? 'בחר תחילה תת-שטח'
+                                      : 'בחר ממצאים'
+                                  }
+                                  showSelectAll={false}
                                   disabled={!form.watch(`entries.${entryIndex}.sub_area_id`)}
-                                >
-                                  <FormControl>
-                                    <SelectTrigger>
-                                      <SelectValue
-                                        placeholder={
-                                          !form.watch(`entries.${entryIndex}.sub_area_id`)
-                                            ? 'בחר תחילה תת-שטח'
-                                            : 'בחר ממצא'
-                                        }
-                                      />
-                                    </SelectTrigger>
-                                  </FormControl>
-                                  <SelectContent>
-                                    {[...findings].sort((a, b) => (a.description || a.name || '').localeCompare(b.description || b.name || '', 'he')).map((finding) => (
-                                      <SelectItem key={finding.id} value={finding.id}>
-                                        {finding.description || finding.name}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
+                                />
                                 <FormMessage />
                               </FormItem>
                             )}
@@ -942,13 +944,13 @@ export function ActionForm({
                                       <Select
                                         onValueChange={(value) => handleTreatmentActionTypeChange(value, entryIndex, treatmentIndex)}
                                         value={actionField.value}
-                                        disabled={!isFromMonitoring && !form.watch(`entries.${entryIndex}.finding_id`)}
+                                        disabled={!isFromMonitoring && !(form.watch(`entries.${entryIndex}.finding_ids`)?.length > 0)}
                                       >
                                         <FormControl>
                                           <SelectTrigger>
                                             <SelectValue
                                               placeholder={
-                                                !isFromMonitoring && !form.watch(`entries.${entryIndex}.finding_id`)
+                                                !isFromMonitoring && !(form.watch(`entries.${entryIndex}.finding_ids`)?.length > 0)
                                                   ? 'בחר תחילה ממצא'
                                                   : 'בחר סוג פעולה'
                                               }
