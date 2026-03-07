@@ -70,7 +70,7 @@ export async function createMonitoringBatch(
   supabase: SupabaseClient,
   adminClient: SupabaseClient,
   params: CreateMonitoringBatchParams
-): Promise<any[]> {
+): Promise<{ results: any[]; report_number: number | null }> {
   const { areaId, workerId, entries } = params;
 
   const reportAreaId = await findOrCreateReportArea(
@@ -90,7 +90,14 @@ export async function createMonitoringBatch(
     results.push(monitoringReport);
   }
 
-  return results;
+  // Fetch report_number from report_areas
+  const { data: reportArea } = await adminClient
+    .from('report_areas')
+    .select('report_number')
+    .eq('id', reportAreaId)
+    .single();
+
+  return { results, report_number: reportArea?.report_number };
 }
 
 export async function createMonitoringSingle(

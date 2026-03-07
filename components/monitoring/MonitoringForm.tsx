@@ -98,6 +98,7 @@ export function MonitoringForm({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [savedReportNumber, setSavedReportNumber] = useState<number | null>(null);
   const router = useRouter();
 
   // Collapsed state for entries
@@ -175,12 +176,13 @@ export function MonitoringForm({
   const watchedEntries = form.watch('entries');
   const allEntriesHaveFinding = watchedEntries?.length > 0 && watchedEntries.every((e: any) => e.finding_id);
 
-  // Dismiss quick resume when user starts filling the form
+  // Dismiss quick resume and success banner when user starts filling the form
   useEffect(() => {
-    if (showQuickResume && (watchedInspectorId || watchedAreaId)) {
-      setShowQuickResume(false);
+    if (watchedInspectorId || watchedAreaId) {
+      if (showQuickResume) setShowQuickResume(false);
+      if (success) setSuccess(false);
     }
-  }, [watchedInspectorId, watchedAreaId, showQuickResume]);
+  }, [watchedInspectorId, watchedAreaId, showQuickResume, success]);
 
   // Progress step calculation
   const currentStep = useMemo(() => {
@@ -745,6 +747,9 @@ export function MonitoringForm({
         throw new Error(errorData.error || 'שגיאה בשמירת הדוח');
       }
 
+      const responseData = await response.json();
+      setSavedReportNumber(responseData?.report_number ?? null);
+
       // Save selections to localStorage for quick-resume
       try {
         const selectedInspector = inspectors.find(i => i.id === data.inspector_id);
@@ -770,10 +775,7 @@ export function MonitoringForm({
       setSubAreas([]);
       resetAllEntryState();
 
-      setTimeout(() => {
-        setSuccess(false);
-        router.refresh();
-      }, 2000);
+      router.refresh();
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -876,7 +878,17 @@ export function MonitoringForm({
                 <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-green-200/60 flex-shrink-0">
                   <Check className="h-4 w-4" />
                 </div>
-                <p className="text-sm font-bold">הדוח נשמר בהצלחה!</p>
+                <p className="text-sm font-bold flex-1">
+                  הדוח נשמר בהצלחה!
+                  {savedReportNumber && <span> (דוח מס׳ {savedReportNumber})</span>}
+                </p>
+                <button
+                  type="button"
+                  className="flex-shrink-0 p-1 rounded-full hover:bg-green-200/60 transition-colors"
+                  onClick={() => setSuccess(false)}
+                >
+                  <X className="h-4 w-4" />
+                </button>
               </div>
             )}
 
