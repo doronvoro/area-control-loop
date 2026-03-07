@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/select';
 import { TaskCard, ActionTask, CompletedTaskData } from './TaskCard';
 import { StandaloneActionForm, StandaloneActionData } from './StandaloneActionForm';
+import { ReportDetailSheet } from '@/components/reports/ReportDetailSheet';
 import {
   Zap,
   Filter,
@@ -54,6 +55,8 @@ export function ActionTaskList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [savedReportAreaId, setSavedReportAreaId] = useState<string | null>(null);
+  const [showReportDetail, setShowReportDetail] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [showStandaloneForm, setShowStandaloneForm] = useState(false);
   const [completedTasks, setCompletedTasks] = useState<CompletedTaskData[]>([]);
@@ -134,6 +137,17 @@ export function ActionTaskList() {
     fetchFormData();
   }, [fetchTasks, fetchFormData]);
 
+  // Clear success banner and report detail state
+  const clearSuccessBanner = () => {
+    setSuccess(null);
+    setSavedReportAreaId(null);
+  };
+
+  // Dismiss success banner when area or worker changes
+  useEffect(() => {
+    if (success) clearSuccessBanner();
+  }, [selectedAreaId, selectedWorkerId]);
+
   // Group tasks by area
   const tasksByArea = tasks.reduce<Record<string, ActionTask[]>>((acc, task) => {
     const key = task.area_id;
@@ -155,14 +169,14 @@ export function ActionTaskList() {
     setTasks((prev) =>
       prev.filter((t) => t.monitoring_treatment_id !== data.monitoring_treatment_id)
     );
-    setSuccess(null);
+    clearSuccessBanner();
   };
 
   // Handle adding a standalone action (add to batch)
   const handleStandaloneSubmit = (data: StandaloneActionData) => {
     setStandaloneActions((prev) => [...prev, data]);
     setShowStandaloneForm(false);
-    setSuccess(null);
+    clearSuccessBanner();
   };
 
   // Whether worker selection is required (customer owner or admin, not a worker)
@@ -203,6 +217,8 @@ export function ActionTaskList() {
       }
 
       let totalCompleted = 0;
+      const reportNumbers: number[] = [];
+      let lastReportAreaId: string | null = null;
 
       // Submit per area_id (the API expects a single area_id per request)
       for (const aId of areaIdsFromTasks) {
@@ -229,9 +245,19 @@ export function ActionTaskList() {
         }
 
         totalCompleted += data.results?.length || 0;
+        if (data.report_number) {
+          reportNumbers.push(data.report_number);
+        }
+        if (data.report_area_id) {
+          lastReportAreaId = data.report_area_id;
+        }
       }
 
-      setSuccess(`${totalCompleted} פעולות נשמרו בהצלחה`);
+      const reportLabel = reportNumbers.length > 0
+        ? ` (דוח מס׳ ${reportNumbers.join(', ')})`
+        : '';
+      setSuccess(`דוח פעולה נשמר בהצלחה — ${totalCompleted} פעולות${reportLabel}`);
+      setSavedReportAreaId(lastReportAreaId);
       setCompletedTasks([]);
       setStandaloneActions([]);
 
@@ -391,12 +417,27 @@ export function ActionTaskList() {
           {success && (
             <div className="actions-success-banner flex items-center gap-3 p-4">
               <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
-              <p className="text-sm font-medium flex-1">{success}</p>
+              <p className="text-sm font-bold flex-1">{success}</p>
+              {savedReportAreaId && (
+                <button
+                  className="flex-shrink-0 text-sm font-semibold underline underline-offset-2 hover:opacity-80 transition-opacity"
+                  onClick={() => setShowReportDetail(true)}
+                >
+                  צפה בדוח
+                </button>
+              )}
               <button onClick={() => setSuccess(null)} className="opacity-60 hover:opacity-100 transition-opacity">
                 <X className="h-4 w-4" />
               </button>
             </div>
           )}
+
+          {/* Report Detail Sheet */}
+          <ReportDetailSheet
+            reportId={savedReportAreaId}
+            open={showReportDetail}
+            onOpenChange={setShowReportDetail}
+          />
 
           {/* Pending actions bar */}
           {pendingCount > 0 && (
@@ -433,7 +474,7 @@ export function ActionTaskList() {
                         שומר...
                       </span>
                     ) : (
-                      'שמור הכל'
+                      'שמור דוח פעולה'
                     )}
                   </button>
                   <button

@@ -3,6 +3,7 @@ import { getApiContext, requireWorkerAdminOrCustomer } from '@/lib/api/auth-cont
 import { handleApiError } from '@/lib/api-utils';
 import { AreaTypeId } from '@/types/database';
 import { updateReportStatuses } from '@/lib/report-status';
+import { findOrCreateReportArea } from '@/lib/api/utils';
 
 interface CompletedTask {
   monitoring_treatment_id: string;
@@ -58,46 +59,19 @@ export async function POST(request: Request) {
 
     const effectiveWorkerId = worker_id || ctx.worker?.id || null;
 
-    // Step 1: Get or create report_areas for actions
-    const { data: existingReportAreas } = await (ctx.supabase
-      .from('report_areas') as any)
-      .select('id')
-      .eq('area_id', area_id)
-      .eq('area_type_id', AreaTypeId.ACTION) as { data: { id: string }[] | null };
-
-    let reportAreaId: string;
-
-    if (existingReportAreas && existingReportAreas.length > 0) {
-      reportAreaId = existingReportAreas[0].id;
-      // Update worker_id on existing report_areas if provided
-      if (effectiveWorkerId) {
-        await (ctx.adminClient
-          .from('report_areas') as any)
-          .update({ worker_id: effectiveWorkerId })
-          .eq('id', reportAreaId);
+    // Step 1: Always create a new report_areas for this action submission
+    const reportAreaId = await findOrCreateReportArea(
+      ctx.supabase,
+      ctx.adminClient,
+      area_id,
+      AreaTypeId.ACTION,
+      {
+        reuseExisting: false,
+        workerId: effectiveWorkerId || undefined,
+        namePrefix: 'דוח פעולה',
+        description: 'דוח פעולה',
       }
-    } else {
-      const { data: areaData } = await ctx.supabase
-        .from('areas')
-        .select('name')
-        .eq('id', area_id)
-        .single() as { data: { name: string } | null };
-
-      const { data: newReportArea, error: createError } = await (ctx.adminClient
-        .from('report_areas') as any)
-        .insert({
-          area_id,
-          area_type_id: AreaTypeId.ACTION,
-          name: `דוח פעולה - ${areaData?.name || 'שטח'}`,
-          description: 'דוח פעולה',
-          worker_id: effectiveWorkerId,
-        })
-        .select('id')
-        .single();
-
-      if (createError) throw createError;
-      reportAreaId = newReportArea.id;
-    }
+    );
 
     const results: any[] = [];
     const errors: string[] = [];
@@ -343,9 +317,18 @@ export async function POST(request: Request) {
       actionReportAreaId: reportAreaId,
     });
 
+    // Fetch report_number from the new report_areas
+    const { data: reportArea } = await ctx.adminClient
+      .from('report_areas')
+      .select('report_number')
+      .eq('id', reportAreaId)
+      .single();
+
     return NextResponse.json({
       success: true,
       results,
+      report_number: (reportArea as any)?.report_number ?? null,
+      report_area_id: reportAreaId,
       errors: errors.length > 0 ? errors : undefined,
     }, { status: 201 });
   } catch (error) {
