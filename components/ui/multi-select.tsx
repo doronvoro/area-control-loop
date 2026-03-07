@@ -417,6 +417,16 @@ function MultiSelect({
               </label>
             )
           })}
+
+          {/* Done button */}
+          <div className="bg-border -mx-0 my-1 h-px" />
+          <button
+            type="button"
+            className="w-full py-2 text-sm font-semibold text-primary hover:bg-accent transition-colors cursor-pointer"
+            onClick={() => setOpen(false)}
+          >
+            סגור
+          </button>
         </div>
       </PopoverContent>
     </Popover>
