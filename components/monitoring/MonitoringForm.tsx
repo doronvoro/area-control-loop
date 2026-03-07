@@ -44,6 +44,7 @@ import {
 import { ReportSeverity, SEVERITY_OPTIONS } from '@/types/database';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { ENTIRE_AREA, ENTIRE_AREA_DISPLAY, isEntireArea } from '@/lib/constants';
+import { ReportDetailSheet } from '@/components/reports/ReportDetailSheet';
 
 const treatmentSchema = z.object({
   action_type_id: z.string().optional(),
@@ -99,6 +100,8 @@ export function MonitoringForm({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [savedReportNumber, setSavedReportNumber] = useState<number | null>(null);
+  const [savedReportAreaId, setSavedReportAreaId] = useState<string | null>(null);
+  const [showReportDetail, setShowReportDetail] = useState(false);
   const router = useRouter();
 
   // Collapsed state for entries
@@ -749,6 +752,7 @@ export function MonitoringForm({
 
       const responseData = await response.json();
       setSavedReportNumber(responseData?.report_number ?? null);
+      setSavedReportAreaId(responseData?.report_area_id ?? null);
 
       // Save selections to localStorage for quick-resume
       try {
@@ -882,6 +886,15 @@ export function MonitoringForm({
                   הדוח נשמר בהצלחה!
                   {savedReportNumber && <span> (דוח מס׳ {savedReportNumber})</span>}
                 </p>
+                {savedReportAreaId && (
+                  <button
+                    type="button"
+                    className="flex-shrink-0 text-sm font-semibold text-green-700 underline underline-offset-2 hover:text-green-900 transition-colors"
+                    onClick={() => setShowReportDetail(true)}
+                  >
+                    צפה בדוח
+                  </button>
+                )}
                 <button
                   type="button"
                   className="flex-shrink-0 p-1 rounded-full hover:bg-green-200/60 transition-colors"
@@ -891,6 +904,13 @@ export function MonitoringForm({
                 </button>
               </div>
             )}
+
+            {/* Report Detail Sheet */}
+            <ReportDetailSheet
+              reportId={savedReportAreaId}
+              open={showReportDetail}
+              onOpenChange={setShowReportDetail}
+            />
 
             {/* Section 1: Customer & Inspector Selection */}
             <div id="customer-section" className={`monitoring-section section-customer px-5 py-3.5 ${
