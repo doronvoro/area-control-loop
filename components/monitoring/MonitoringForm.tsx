@@ -137,6 +137,14 @@ export function MonitoringForm({
   } | null>(null);
   const [showQuickResume, setShowQuickResume] = useState(false);
 
+  // Auto-dismiss quick resume toast after 10 seconds
+  useEffect(() => {
+    if (showQuickResume) {
+      const timer = setTimeout(() => setShowQuickResume(false), 10000);
+      return () => clearTimeout(timer);
+    }
+  }, [showQuickResume]);
+
   // Step completion pulse tracking
   const prevStepRef = useRef(0);
   const [justCompletedSteps, setJustCompletedSteps] = useState<Set<number>>(new Set());
@@ -150,7 +158,7 @@ export function MonitoringForm({
       entries: [{
         sub_area_ids: [],
         finding_id: '',
-        severity: undefined,
+        severity: ReportSeverity.LOW,
         treatments: [],
       }],
     },
@@ -164,6 +172,15 @@ export function MonitoringForm({
   const watchedCustomerId = form.watch('customer_id');
   const watchedAreaId = form.watch('area_id');
   const watchedInspectorId = form.watch('inspector_id');
+  const watchedEntries = form.watch('entries');
+  const allEntriesHaveFinding = watchedEntries?.length > 0 && watchedEntries.every((e: any) => e.finding_id);
+
+  // Dismiss quick resume when user starts filling the form
+  useEffect(() => {
+    if (showQuickResume && (watchedInspectorId || watchedAreaId)) {
+      setShowQuickResume(false);
+    }
+  }, [watchedInspectorId, watchedAreaId, showQuickResume]);
 
   // Progress step calculation
   const currentStep = useMemo(() => {
@@ -305,7 +322,7 @@ export function MonitoringForm({
       form.setValue('entries', [{
         sub_area_ids: [],
         finding_id: '',
-        severity: undefined,
+        severity: ReportSeverity.LOW,
         treatments: [],
       }]);
       setSubAreas([]);
@@ -324,7 +341,7 @@ export function MonitoringForm({
       form.setValue('entries', [{
         sub_area_ids: [],
         finding_id: '',
-        severity: undefined,
+        severity: ReportSeverity.LOW,
         treatments: [],
       }]);
       resetAllEntryState();
@@ -608,7 +625,7 @@ export function MonitoringForm({
     append({
       sub_area_ids: [],
       finding_id: '',
-      severity: undefined,
+      severity: ReportSeverity.LOW,
       treatments: [],
     });
   };
@@ -820,27 +837,25 @@ export function MonitoringForm({
         ))}
       </div>
 
-      {/* Quick Resume Chip */}
+      {/* Quick Resume Toast */}
       {showQuickResume && lastSelections && (
-        <div className="flex justify-center py-3">
-          <button
-            type="button"
-            className="quick-resume-chip"
-            onClick={handleQuickResume}
+        <button
+          type="button"
+          className="quick-resume-toast"
+          onClick={handleQuickResume}
+        >
+          <RotateCcw className="h-3.5 w-3.5" />
+          <span>המשך מהניטור הקודם?</span>
+          {lastSelections.area_name && (
+            <span className="font-bold">{lastSelections.area_name}</span>
+          )}
+          <span
+            className="quick-resume-close"
+            onClick={(e) => { e.stopPropagation(); setShowQuickResume(false); }}
           >
-            <RotateCcw className="h-3.5 w-3.5" />
-            <span>המשך מהניטור הקודם?</span>
-            {lastSelections.area_name && (
-              <span className="font-bold">{lastSelections.area_name}</span>
-            )}
-            <span
-              className="quick-resume-close"
-              onClick={(e) => { e.stopPropagation(); setShowQuickResume(false); }}
-            >
-              <X className="h-3 w-3" />
-            </span>
-          </button>
-        </div>
+            <X className="h-3 w-3" />
+          </span>
+        </button>
       )}
 
       {/* Form Body */}
@@ -1192,7 +1207,7 @@ export function MonitoringForm({
                                 control={form.control}
                                 name={`entries.${index}.finding_id`}
                                 render={({ field: findingField }) => (
-                                  <FormItem>
+                                  <FormItem className="md:col-span-2">
                                     <FormLabel className="font-semibold text-sm">ממצא *</FormLabel>
                                     <Select
                                       onValueChange={(v) => handleFindingChange(v, index)}
@@ -1200,13 +1215,13 @@ export function MonitoringForm({
                                       disabled={entrySubAreaIds.length === 0}
                                     >
                                       <FormControl>
-                                        <SelectTrigger className="h-11 monitoring-select-trigger">
+                                        <SelectTrigger className="h-11 w-full monitoring-select-trigger">
                                           <SelectValue placeholder={
                                             entrySubAreaIds.length === 0 ? 'בחר תתי-שטח תחילה' : 'בחר ממצא'
                                           } />
                                         </SelectTrigger>
                                       </FormControl>
-                                      <SelectContent>
+                                      <SelectContent position="popper" sideOffset={4}>
                                         {entryLoadingFindings[index] ? (
                                           <div className="flex items-center justify-center py-2">
                                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -1337,7 +1352,7 @@ export function MonitoringForm({
                                                   disabled={treatmentLoadingMaterials[treatmentKey]}
                                                 >
                                                   <FormControl>
-                                                    <SelectTrigger className="h-10 monitoring-select-trigger">
+                                                    <SelectTrigger className="h-10 w-full monitoring-select-trigger">
                                                       <SelectValue placeholder="בחר חומר" />
                                                     </SelectTrigger>
                                                   </FormControl>
@@ -1368,7 +1383,7 @@ export function MonitoringForm({
                                                   value={actionField.value}
                                                 >
                                                   <FormControl>
-                                                    <SelectTrigger className="h-10 monitoring-select-trigger">
+                                                    <SelectTrigger className="h-10 w-full monitoring-select-trigger">
                                                       <SelectValue placeholder="בחר סוג פעולה" />
                                                     </SelectTrigger>
                                                   </FormControl>
@@ -1418,7 +1433,7 @@ export function MonitoringForm({
                                                 <FormLabel className="font-semibold text-xs">יחידת מידה</FormLabel>
                                                 <Select onValueChange={unitField.onChange} value={unitField.value}>
                                                   <FormControl>
-                                                    <SelectTrigger className="h-10 monitoring-select-trigger">
+                                                    <SelectTrigger className="h-10 w-full monitoring-select-trigger">
                                                       <SelectValue placeholder="בחר יחידת מידה" />
                                                     </SelectTrigger>
                                                   </FormControl>
@@ -1478,9 +1493,9 @@ export function MonitoringForm({
 
                 <button
                   type="submit"
-                  disabled={loading || !watchedInspectorId || !watchedAreaId || fields.length === 0}
+                  disabled={loading || !watchedInspectorId || !watchedAreaId || !allEntriesHaveFinding}
                   className={`monitoring-submit flex items-center justify-center gap-2 h-12 px-8 w-full md:w-auto min-w-[200px] ${
-                    !loading && watchedInspectorId && watchedAreaId && fields.length > 0 ? 'monitoring-submit-ready' : ''
+                    !loading && watchedInspectorId && watchedAreaId && allEntriesHaveFinding ? 'monitoring-submit-ready' : ''
                   }`}
                 >
                   {loading ? (

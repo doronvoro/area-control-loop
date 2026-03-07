@@ -764,27 +764,34 @@
   background: oklch(0.92 0.02 152);
 }
 
-/* --- Quick Resume Chip --- */
-.quick-resume-chip {
+/* --- Quick Resume Toast --- */
+.quick-resume-toast {
+  position: fixed;
+  bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.5rem 1rem;
+  padding: 0.625rem 1.25rem;
   border-radius: 9999px;
-  background: oklch(0.94 0.04 85 / 80%);
+  background: oklch(0.94 0.04 85 / 95%);
   border: 1px solid oklch(0.85 0.06 85 / 50%);
   font-size: 0.8rem;
   font-weight: 600;
   color: oklch(0.35 0.10 85);
   cursor: pointer;
   transition: all 0.2s ease;
-  animation: fadeSlideIn 0.3s ease;
+  animation: toastSlideUp 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+  box-shadow: 0 4px 20px oklch(0.2 0 0 / 15%), 0 2px 8px oklch(0.2 0 0 / 10%);
+  backdrop-filter: blur(8px);
 }
-.quick-resume-chip:hover {
-  background: oklch(0.92 0.06 85 / 90%);
-  box-shadow: 0 2px 8px oklch(0.55 0.15 85 / 15%);
+.quick-resume-toast:hover {
+  background: oklch(0.92 0.06 85 / 98%);
+  box-shadow: 0 6px 24px oklch(0.2 0 0 / 20%), 0 2px 8px oklch(0.2 0 0 / 12%);
 }
-.quick-resume-chip .quick-resume-close {
+.quick-resume-toast .quick-resume-close {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -793,8 +800,13 @@
   border-radius: 50%;
   transition: background 0.15s ease;
 }
-.quick-resume-chip .quick-resume-close:hover {
+.quick-resume-toast .quick-resume-close:hover {
   background: oklch(0.55 0.22 25 / 15%);
+}
+
+@keyframes toastSlideUp {
+  0% { opacity: 0; transform: translateX(-50%) translateY(1rem); }
+  100% { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
 /* --- Field Completion Check --- */
