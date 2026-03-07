@@ -44,7 +44,7 @@ export async function GET(request: Request) {
     // Get area details (all accessible areas for dropdown)
     const { data: areas } = await (ctx.supabase
       .from('areas') as any)
-      .select('id, name, crop_id')
+      .select('id, name, crop_id, variety, crops(id, name)')
       .in('id', allAccessibleAreaIds) as { data: any[] | null };
 
     // Get report_areas for task areas (monitoring type only)

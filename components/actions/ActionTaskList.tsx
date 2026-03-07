@@ -31,6 +31,8 @@ import {
 interface Area {
   id: string;
   name: string;
+  variety?: string;
+  crops?: { id: string; name: string } | null;
 }
 
 interface Worker {
@@ -278,10 +280,16 @@ export function ActionTaskList() {
   };
 
   const pendingCount = completedTasks.length + standaloneActions.length;
-  const areaList = areas.length > 0 ? areas : Object.keys(tasksByArea).map((id) => ({
+  const areaList: Area[] = areas.length > 0 ? areas : Object.keys(tasksByArea).map((id) => ({
     id,
     name: tasksByArea[id][0]?.area_name || id,
   }));
+
+  // Count open tasks per area
+  const taskCountByArea: Record<string, number> = {};
+  for (const task of tasks) {
+    taskCountByArea[task.area_id] = (taskCountByArea[task.area_id] || 0) + 1;
+  }
 
   const workers = formData?.initialWorkers || [];
 
@@ -349,10 +357,10 @@ export function ActionTaskList() {
                 <h3 className="font-bold text-base shrink-0">מבצע</h3>
                 <div className="flex items-center shrink-0">
                   <Select value={selectedWorkerId} onValueChange={setSelectedWorkerId}>
-                    <SelectTrigger className="h-11 w-56 actions-select-trigger">
+                    <SelectTrigger className="h-11 w-64 actions-select-trigger">
                       <SelectValue placeholder="בחר" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent position="popper" sideOffset={4}>
                       {workers.map((w) => (
                         <SelectItem key={w.id} value={w.id}>
                           {w.name}
@@ -377,16 +385,36 @@ export function ActionTaskList() {
               <h3 className="font-bold text-base shrink-0">שטח</h3>
               <div className="flex items-center shrink-0">
                 <Select value={selectedAreaId} onValueChange={setSelectedAreaId}>
-                  <SelectTrigger className="h-11 w-56 actions-select-trigger">
+                  <SelectTrigger className="h-11 w-64 actions-select-trigger">
                     <SelectValue placeholder="כל השטחים" />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">כל השטחים</SelectItem>
-                    {areaList.map((area) => (
-                      <SelectItem key={area.id} value={area.id}>
-                        {area.name}
-                      </SelectItem>
-                    ))}
+                  <SelectContent position="popper" sideOffset={4}>
+                    <SelectItem value="all">
+                      <span className="flex items-center justify-between gap-3 w-full">
+                        <span>כל השטחים</span>
+                        {tasks.length > 0 && (
+                          <span className="area-task-count-badge">{tasks.length}</span>
+                        )}
+                      </span>
+                    </SelectItem>
+                    {areaList.map((area) => {
+                      const cropName = area.crops?.name;
+                      const variety = area.variety;
+                      const cropLabel = cropName
+                        ? variety ? `${cropName}, ${variety}` : cropName
+                        : 'ללא גידול';
+                      const count = taskCountByArea[area.id] || 0;
+                      return (
+                        <SelectItem key={area.id} value={area.id}>
+                          <span className="flex items-center justify-between gap-3 w-full">
+                            <span>{`${area.name} (${cropLabel})`}</span>
+                            {count > 0 && (
+                              <span className="area-task-count-badge">{count}</span>
+                            )}
+                          </span>
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
                 {selectedAreaId !== 'all' && (
