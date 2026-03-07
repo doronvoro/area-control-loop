@@ -2,10 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { getSubAreaLabel } from '@/lib/utils';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
@@ -16,6 +13,7 @@ import {
 } from '@/components/ui/select';
 import { ENTIRE_AREA, ENTIRE_AREA_DISPLAY } from '@/lib/constants';
 import { ACTION_TYPE_OPTIONS } from '@/types/database';
+import { Plus, Check, X, Sparkles } from 'lucide-react';
 
 interface SubArea {
   id: string;
@@ -87,12 +85,9 @@ export function StandaloneActionForm({
     const fetchMaterials = async () => {
       setLoadingMaterials(true);
       try {
-        // Find the crop_id from the selected sub-area
-        const subArea = subAreas.find(sa => sa.id === subAreaId);
-        // Use cascade API
         const params = new URLSearchParams({
           type: 'materials',
-          cropId: '', // Will need crop from area
+          cropId: '',
           findingId,
           actionTypeId,
         });
@@ -138,145 +133,150 @@ export function StandaloneActionForm({
   const isValid = subAreaId && findingId;
 
   return (
-    <Card className="border-dashed py-4">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base">פעולה נוספת</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <Label className="text-xs">תת-שטח *</Label>
-            <Select value={subAreaId} onValueChange={setSubAreaId} disabled={disabled}>
-              <SelectTrigger>
-                <SelectValue placeholder="בחר תת-שטח" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ENTIRE_AREA}>
-                  {ENTIRE_AREA_DISPLAY}
+    <div className="standalone-form-card p-4 space-y-4">
+      <div className="flex items-center gap-2">
+        <div className="actions-section-icon section-icon-standalone">
+          <Sparkles className="h-4 w-4" />
+        </div>
+        <h3 className="text-sm font-bold text-foreground">פעולה נוספת</h3>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-muted-foreground">תת-שטח *</label>
+          <Select value={subAreaId} onValueChange={setSubAreaId} disabled={disabled}>
+            <SelectTrigger className="actions-select-trigger">
+              <SelectValue placeholder="בחר תת-שטח" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ENTIRE_AREA}>
+                {ENTIRE_AREA_DISPLAY}
+              </SelectItem>
+              {subAreas.map((sa) => (
+                <SelectItem key={sa.id} value={sa.id}>
+                  {getSubAreaLabel(sa)}
                 </SelectItem>
-                {subAreas.map((sa) => (
-                  <SelectItem key={sa.id} value={sa.id}>
-                    {getSubAreaLabel(sa)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-1">
-            <Label className="text-xs">ממצא *</Label>
-            <Select value={findingId} onValueChange={setFindingId} disabled={disabled}>
-              <SelectTrigger>
-                <SelectValue placeholder="בחר ממצא" />
-              </SelectTrigger>
-              <SelectContent>
-                {[...findings].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'he')).map((f) => (
-                  <SelectItem key={f.id} value={f.id}>
-                    {f.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <Label className="text-xs">סוג פעולה</Label>
-            <Select value={actionTypeId} onValueChange={setActionTypeId} disabled={disabled}>
-              <SelectTrigger>
-                <SelectValue placeholder="בחר סוג" />
-              </SelectTrigger>
-              <SelectContent>
-                {ACTION_TYPE_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-1">
-            <Label className="text-xs">חומר</Label>
-            <Select
-              value={materialId}
-              onValueChange={setMaterialId}
-              disabled={disabled || loadingMaterials}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder={loadingMaterials ? 'טוען...' : 'בחר חומר'} />
-              </SelectTrigger>
-              <SelectContent>
-                {materials.map((m) => (
-                  <SelectItem key={m.id} value={m.id}>
-                    {m.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <Label className="text-xs">מינון</Label>
-            <Input
-              type="number"
-              step="any"
-              value={dosage}
-              onChange={(e) => setDosage(e.target.value)}
-              placeholder="כמות"
-              disabled={disabled}
-            />
-          </div>
-
-          <div className="space-y-1">
-            <Label className="text-xs">יחידה</Label>
-            <Select value={unitTypeId} onValueChange={setUnitTypeId} disabled={disabled}>
-              <SelectTrigger>
-                <SelectValue placeholder="בחר יחידה" />
-              </SelectTrigger>
-              <SelectContent>
-                {unitTypes.map((ut) => (
-                  <SelectItem key={ut.id} value={ut.id}>
-                    {ut.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="space-y-1">
-          <Label className="text-xs">הערות</Label>
-          <Textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="הערות נוספות..."
-            rows={2}
+          <label className="text-xs font-medium text-muted-foreground">ממצא *</label>
+          <Select value={findingId} onValueChange={setFindingId} disabled={disabled}>
+            <SelectTrigger className="actions-select-trigger">
+              <SelectValue placeholder="בחר ממצא" />
+            </SelectTrigger>
+            <SelectContent>
+              {[...findings].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'he')).map((f) => (
+                <SelectItem key={f.id} value={f.id}>
+                  {f.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-muted-foreground">סוג פעולה</label>
+          <Select value={actionTypeId} onValueChange={setActionTypeId} disabled={disabled}>
+            <SelectTrigger className="actions-select-trigger">
+              <SelectValue placeholder="בחר סוג" />
+            </SelectTrigger>
+            <SelectContent>
+              {ACTION_TYPE_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-muted-foreground">חומר</label>
+          <Select
+            value={materialId}
+            onValueChange={setMaterialId}
+            disabled={disabled || loadingMaterials}
+          >
+            <SelectTrigger className="actions-select-trigger">
+              <SelectValue placeholder={loadingMaterials ? 'טוען...' : 'בחר חומר'} />
+            </SelectTrigger>
+            <SelectContent>
+              {materials.map((m) => (
+                <SelectItem key={m.id} value={m.id}>
+                  {m.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-muted-foreground">מינון</label>
+          <Input
+            type="number"
+            step="any"
+            value={dosage}
+            onChange={(e) => setDosage(e.target.value)}
+            placeholder="כמות"
             disabled={disabled}
+            className="actions-select-trigger"
           />
         </div>
 
-        <div className="flex gap-2">
-          <Button
-            size="sm"
-            onClick={handleSubmit}
-            disabled={disabled || !isValid}
-          >
-            הוסף
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onCancel}
-            disabled={disabled}
-          >
-            ביטול
-          </Button>
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-muted-foreground">יחידה</label>
+          <Select value={unitTypeId} onValueChange={setUnitTypeId} disabled={disabled}>
+            <SelectTrigger className="actions-select-trigger">
+              <SelectValue placeholder="בחר יחידה" />
+            </SelectTrigger>
+            <SelectContent>
+              {unitTypes.map((ut) => (
+                <SelectItem key={ut.id} value={ut.id}>
+                  {ut.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+
+      <div className="space-y-1">
+        <label className="text-xs font-medium text-muted-foreground">הערות</label>
+        <Textarea
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="הערות נוספות..."
+          rows={2}
+          disabled={disabled}
+        />
+      </div>
+
+      <div className="flex gap-2">
+        <button
+          className="action-btn-done"
+          onClick={handleSubmit}
+          disabled={disabled || !isValid}
+        >
+          <span className="flex items-center gap-1.5">
+            <Check className="h-3.5 w-3.5" />
+            הוסף
+          </span>
+        </button>
+        <button
+          className="action-btn-edit"
+          onClick={onCancel}
+          disabled={disabled}
+        >
+          ביטול
+        </button>
+      </div>
+    </div>
   );
 }

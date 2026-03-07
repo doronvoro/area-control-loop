@@ -2,10 +2,6 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   Select,
   SelectContent,
@@ -13,9 +9,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Separator } from '@/components/ui/separator';
 import { TaskCard, ActionTask, CompletedTaskData } from './TaskCard';
 import { StandaloneActionForm, StandaloneActionData } from './StandaloneActionForm';
+import {
+  Zap,
+  Filter,
+  ClipboardCheck,
+  Plus,
+  AlertTriangle,
+  CheckCircle2,
+  PackageCheck,
+  RefreshCw,
+  X,
+  Loader2,
+} from 'lucide-react';
 
 interface Area {
   id: string;
@@ -249,177 +256,259 @@ export function ActionTaskList() {
 
   const workers = formData?.initialWorkers || [];
 
-  return (
-    <div className="space-y-6">
-      {/* Header with area filter */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-3">
-          <Select value={selectedAreaId} onValueChange={setSelectedAreaId}>
-            <SelectTrigger className="w-[200px]">
-              <SelectValue placeholder="כל השטחים" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">כל השטחים</SelectItem>
-              {areaList.map((area) => (
-                <SelectItem key={area.id} value={area.id}>
-                  {area.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+  // Loading state with hero
+  if (loading && tasks.length === 0) {
+    return (
+      <div className="max-w-4xl mx-auto">
+        <div className="actions-form-container">
+          <div className="actions-hero px-6 py-8 md:px-8 md:py-10">
+            <div className="hero-pattern" />
+            <div className="relative z-10">
+              <div className="flex items-center justify-center gap-3 mb-3">
+                <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-white/15 backdrop-blur-sm">
+                  <Zap className="h-5 w-5 text-white" />
+                </div>
+                <h2 className="text-2xl md:text-3xl font-bold text-white tracking-tight">
+                  משימות פעולה
+                </h2>
+              </div>
+              <p className="text-center text-white/70 text-sm">
+                ביצוע פעולות על סמך המלצות ניטור
+              </p>
+            </div>
+          </div>
+          <div className="actions-loading">
+            <div className="actions-loading-spinner" />
+            <span className="text-sm text-muted-foreground font-medium">טוען משימות...</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
-          {needsWorkerSelection && workers.length > 0 && (
-            <Select value={selectedWorkerId} onValueChange={setSelectedWorkerId}>
-              <SelectTrigger className="w-[200px]">
-                <SelectValue placeholder="בחר עובד מבצע" />
-              </SelectTrigger>
-              <SelectContent>
-                {workers.map((w) => (
-                  <SelectItem key={w.id} value={w.id}>
-                    {w.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+  return (
+    <div className="max-w-4xl mx-auto">
+      <div className="actions-form-container">
+        {/* Hero Header */}
+        <div className="actions-hero px-6 py-8 md:px-8 md:py-10">
+          <div className="hero-pattern" />
+          <div className="relative z-10">
+            <div className="flex items-center justify-center gap-3 mb-3">
+              <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-white/15 backdrop-blur-sm">
+                <Zap className="h-5 w-5 text-white" />
+              </div>
+              <h2 className="text-2xl md:text-3xl font-bold text-white tracking-tight">
+                משימות פעולה
+              </h2>
+            </div>
+            <p className="text-center text-white/70 text-sm">
+              ביצוע פעולות על סמך המלצות ניטור
+            </p>
+          </div>
+        </div>
+
+        {/* Content area */}
+        <div className="p-4 md:p-6 space-y-4">
+          {/* Filter Section */}
+          <div className="actions-section section-filter p-4">
+            <div className="actions-section-header">
+              <div className="actions-section-icon section-icon-filter">
+                <Filter className="h-4 w-4" />
+              </div>
+              <h3 className="text-sm font-bold text-foreground">סינון וניהול</h3>
+              {tasks.length > 0 && (
+                <span className="area-group-badge mr-auto">
+                  {tasks.length} משימות ממתינות
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-3 flex-wrap">
+              <Select value={selectedAreaId} onValueChange={setSelectedAreaId}>
+                <SelectTrigger className="w-[200px] actions-select-trigger">
+                  <SelectValue placeholder="כל השטחים" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">כל השטחים</SelectItem>
+                  {areaList.map((area) => (
+                    <SelectItem key={area.id} value={area.id}>
+                      {area.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {needsWorkerSelection && workers.length > 0 && (
+                <Select value={selectedWorkerId} onValueChange={setSelectedWorkerId}>
+                  <SelectTrigger className="w-[200px] actions-select-trigger">
+                    <SelectValue placeholder="בחר עובד מבצע" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {workers.map((w) => (
+                      <SelectItem key={w.id} value={w.id}>
+                        {w.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+
+              <button
+                className="action-btn-edit"
+                onClick={fetchTasks}
+                disabled={loading}
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+                {loading ? 'טוען...' : 'רענן'}
+              </button>
+            </div>
+          </div>
+
+          {/* Error/Success messages */}
+          {error && (
+            <div className="actions-error-banner flex items-center gap-3 p-4">
+              <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+              <p className="text-sm font-medium flex-1">{error}</p>
+              <button onClick={() => setError(null)} className="opacity-60 hover:opacity-100 transition-opacity">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+          {success && (
+            <div className="actions-success-banner flex items-center gap-3 p-4">
+              <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
+              <p className="text-sm font-medium flex-1">{success}</p>
+              <button onClick={() => setSuccess(null)} className="opacity-60 hover:opacity-100 transition-opacity">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
           )}
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={fetchTasks}
-            disabled={loading}
-          >
-            {loading ? 'טוען...' : 'רענן'}
-          </Button>
-        </div>
-
-        {tasks.length > 0 && (
-          <Badge variant="secondary" className="text-sm">
-            {tasks.length} משימות ממתינות
-          </Badge>
-        )}
-      </div>
-
-      {/* Error/Success messages */}
-      {error && (
-        <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-      {success && (
-        <Alert>
-          <AlertDescription>{success}</AlertDescription>
-        </Alert>
-      )}
-
-      {/* Pending actions bar */}
-      {pendingCount > 0 && (
-        <Card className="border-primary/50 bg-primary/5 py-3">
-          <CardContent className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Badge>{pendingCount}</Badge>
-              <span className="text-sm font-medium">
-                פעולות מוכנות לשמירה
-                {completedTasks.length > 0 && (
-                  <span className="text-muted-foreground">
-                    {' '}({completedTasks.length} מניטור)
-                  </span>
-                )}
-                {standaloneActions.length > 0 && (
-                  <span className="text-muted-foreground">
-                    {' '}({standaloneActions.length} עצמאיות)
-                  </span>
-                )}
-              </span>
+          {/* Pending actions bar */}
+          {pendingCount > 0 && (
+            <div className="pending-bar p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="pending-count-badge">{pendingCount}</div>
+                  <div>
+                    <span className="text-sm font-semibold">
+                      פעולות מוכנות לשמירה
+                    </span>
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      {completedTasks.length > 0 && (
+                        <span>{completedTasks.length} מניטור</span>
+                      )}
+                      {completedTasks.length > 0 && standaloneActions.length > 0 && (
+                        <span> / </span>
+                      )}
+                      {standaloneActions.length > 0 && (
+                        <span>{standaloneActions.length} עצמאיות</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    className="actions-submit px-5 py-2.5 text-sm"
+                    onClick={handleSubmitAll}
+                    disabled={submitting}
+                  >
+                    {submitting ? (
+                      <span className="flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        שומר...
+                      </span>
+                    ) : (
+                      'שמור הכל'
+                    )}
+                  </button>
+                  <button
+                    className="action-btn-edit"
+                    onClick={handleCancelAll}
+                    disabled={submitting}
+                  >
+                    ביטול
+                  </button>
+                </div>
+              </div>
             </div>
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                onClick={handleSubmitAll}
-                disabled={submitting}
-              >
-                {submitting ? 'שומר...' : 'שמור הכל'}
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleCancelAll}
-                disabled={submitting}
-              >
-                ביטול
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+          )}
 
-      {/* Task lists grouped by area */}
-      {loading ? (
-        <div className="text-center py-12 text-muted-foreground">טוען משימות...</div>
-      ) : tasks.length === 0 && pendingCount === 0 ? (
-        <div className="text-center py-12">
-          <div className="text-muted-foreground text-lg mb-2">אין משימות ממתינות</div>
-          <div className="text-sm text-muted-foreground">
-            כל המלצות הניטור טופלו, או שאין דוחות ניטור פעילים
-          </div>
-        </div>
-      ) : (
-        Object.entries(tasksByArea).map(([areaId, areaTasks]) => (
-          <div key={areaId} className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold">
-                {areaTasks[0]?.area_name || 'שטח'}
-              </h3>
-              <Badge variant="outline">{areaTasks.length} משימות</Badge>
+          {/* Task lists grouped by area */}
+          {tasks.length === 0 && pendingCount === 0 ? (
+            <div className="actions-empty-state">
+              <div className="actions-empty-icon">
+                <PackageCheck className="h-6 w-6" />
+              </div>
+              <div className="text-base font-semibold text-foreground">אין משימות ממתינות</div>
+              <div className="text-sm text-muted-foreground max-w-sm">
+                כל המלצות הניטור טופלו, או שאין דוחות ניטור פעילים
+              </div>
             </div>
+          ) : (
+            <div className="space-y-4">
+              {Object.entries(tasksByArea).map(([areaId, areaTasks]) => (
+                <div key={areaId} className="actions-section section-tasks p-4">
+                  <div className="area-group-header mb-3">
+                    <div className="actions-section-icon section-icon-tasks">
+                      <ClipboardCheck className="h-4 w-4" />
+                    </div>
+                    <h3 className="text-sm font-bold text-foreground">
+                      {areaTasks[0]?.area_name || 'שטח'}
+                    </h3>
+                    <span className="area-group-badge">
+                      {areaTasks.length} משימות
+                    </span>
+                  </div>
 
-            <div className="space-y-2">
-              {areaTasks.map((task) => (
-                <TaskCard
-                  key={task.monitoring_treatment_id}
-                  task={task}
-                  onComplete={handleTaskComplete}
-                  disabled={submitting}
-                  materials={materials}
-                  unitTypes={formData?.unitTypes || []}
-                />
+                  <div className="space-y-3">
+                    {areaTasks.map((task) => (
+                      <TaskCard
+                        key={task.monitoring_treatment_id}
+                        task={task}
+                        onComplete={handleTaskComplete}
+                        disabled={submitting}
+                        materials={materials}
+                        unitTypes={formData?.unitTypes || []}
+                      />
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
+          )}
 
-            <Separator />
-          </div>
-        ))
-      )}
+          {/* Standalone action */}
+          {showStandaloneForm && selectedAreaId !== 'all' && formData ? (
+            <StandaloneActionForm
+              areaId={selectedAreaId}
+              subAreas={subAreas}
+              findings={formData.findings || []}
+              unitTypes={formData.unitTypes || []}
+              onSubmit={handleStandaloneSubmit}
+              onCancel={() => setShowStandaloneForm(false)}
+              disabled={submitting}
+            />
+          ) : null}
 
-      {/* Standalone action */}
-      {showStandaloneForm && selectedAreaId !== 'all' && formData ? (
-        <StandaloneActionForm
-          areaId={selectedAreaId}
-          subAreas={subAreas}
-          findings={formData.findings || []}
-          unitTypes={formData.unitTypes || []}
-          onSubmit={handleStandaloneSubmit}
-          onCancel={() => setShowStandaloneForm(false)}
-          disabled={submitting}
-        />
-      ) : null}
-
-      {/* Add standalone action button */}
-      {!showStandaloneForm && (
-        <Button
-          variant="outline"
-          className="w-full border-dashed"
-          onClick={() => {
-            if (selectedAreaId === 'all') {
-              setError('יש לבחור שטח ספציפי כדי להוסיף פעולה עצמאית');
-              return;
-            }
-            setShowStandaloneForm(true);
-          }}
-        >
-          + הוסף פעולה שאינה קשורה לניטור
-        </Button>
-      )}
+          {/* Add standalone action button */}
+          {!showStandaloneForm && (
+            <button
+              className="actions-add-button w-full justify-center py-3"
+              onClick={() => {
+                if (selectedAreaId === 'all') {
+                  setError('יש לבחור שטח ספציפי כדי להוסיף פעולה עצמאית');
+                  return;
+                }
+                setShowStandaloneForm(true);
+              }}
+            >
+              <Plus className="h-4 w-4" />
+              הוסף פעולה שאינה קשורה לניטור
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

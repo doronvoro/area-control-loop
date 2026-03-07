@@ -1,11 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { ACTION_TYPE_OPTIONS, ACTION_TYPE_LABELS, ActionTypeName } from '@/types/database';
 import {
@@ -16,6 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { SEVERITY_LABELS, ReportSeverity } from '@/types/database';
+import { Check, Edit3, Calendar } from 'lucide-react';
 
 export interface ActionTask {
   monitoring_treatment_id: string;
@@ -69,11 +66,18 @@ interface TaskCardProps {
   unitTypes?: RefItem[];
 }
 
-const severityColors: Record<string, string> = {
-  low: 'bg-[oklch(0.94_0.06_155)] text-[oklch(0.35_0.12_155)]',
-  medium: 'bg-[oklch(0.95_0.06_85)] text-[oklch(0.45_0.12_85)]',
-  high: 'bg-[oklch(0.94_0.05_55)] text-[oklch(0.50_0.15_45)]',
-  critical: 'bg-[oklch(0.94_0.04_25)] text-[oklch(0.50_0.18_25)]',
+const severityClasses: Record<string, string> = {
+  low: 'action-severity-low',
+  medium: 'action-severity-medium',
+  high: 'action-severity-high',
+  critical: 'action-severity-critical',
+};
+
+const severityDotClasses: Record<string, string> = {
+  low: 'action-severity-dot-low',
+  medium: 'action-severity-dot-medium',
+  high: 'action-severity-dot-high',
+  critical: 'action-severity-dot-critical',
 };
 
 function formatDate(dateStr: string): string {
@@ -136,173 +140,176 @@ export function TaskCard({ task, onComplete, disabled, materials = [], unitTypes
   };
 
   return (
-    <Card className="py-4">
-      <CardContent className="space-y-3">
-        {/* Header: sub-area + finding + severity */}
-        <div className="flex items-start justify-between gap-2">
-          <div className="space-y-1">
-            <div className="font-medium text-base">
-              {subAreaDisplay} / {task.finding.name}
-            </div>
-            {task.finding.description && (
-              <div className="text-sm text-muted-foreground">
-                {task.finding.description}
-              </div>
-            )}
+    <div className="task-card p-4">
+      {/* Header: sub-area + finding + severity */}
+      <div className="flex items-start justify-between gap-2 mb-3">
+        <div className="space-y-1">
+          <div className="font-semibold text-base text-foreground">
+            {subAreaDisplay} / {task.finding.name}
           </div>
-          {task.severity && (
-            <Badge
-              className={severityColors[task.severity] || ''}
-              variant="outline"
-            >
-              {SEVERITY_LABELS[task.severity] || task.severity}
-            </Badge>
+          {task.finding.description && (
+            <div className="text-sm text-muted-foreground">
+              {task.finding.description}
+            </div>
           )}
         </div>
+        {task.severity && (
+          <span className={`action-severity-chip ${severityClasses[task.severity] || ''}`}>
+            <span className={`action-severity-dot ${severityDotClasses[task.severity] || ''}`} />
+            {SEVERITY_LABELS[task.severity] || task.severity}
+          </span>
+        )}
+      </div>
 
-        {/* Recommendation details */}
-        <div className="bg-muted/50 rounded-lg p-3 space-y-1 text-sm">
-          {rec.action_type_id && (
-            <div className="flex gap-2">
-              <span className="text-muted-foreground">סוג פעולה:</span>
-              <span className="font-medium">{ACTION_TYPE_LABELS[rec.action_type_id as ActionTypeName] || rec.action_type_id}</span>
-            </div>
-          )}
-          {rec.material && (
-            <div className="flex gap-2">
-              <span className="text-muted-foreground">חומר:</span>
-              <span className="font-medium">{rec.material.name}</span>
-            </div>
-          )}
-          {rec.dosage != null && (
-            <div className="flex gap-2">
-              <span className="text-muted-foreground">מינון:</span>
-              <span className="font-medium">
-                {rec.dosage} {rec.unit_type?.name || ''}
-              </span>
-            </div>
-          )}
-          {task.notes && (
-            <div className="flex gap-2">
-              <span className="text-muted-foreground">הערות:</span>
-              <span>{task.notes}</span>
-            </div>
-          )}
-          <div className="flex gap-2 text-muted-foreground text-xs pt-1">
-            <span>ניטור: {formatDate(task.monitoring_date)}</span>
-          </div>
-        </div>
-
-        {/* Action buttons */}
-        {!showEdit ? (
+      {/* Recommendation details */}
+      <div className="recommendation-block p-3 space-y-1.5 text-sm mb-3">
+        {rec.action_type_id && (
           <div className="flex gap-2">
-            <Button
-              onClick={handleDone}
-              disabled={disabled || isCompleting}
-              size="sm"
-            >
-              {isCompleting ? '...' : 'בוצע'}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowEdit(true)}
-              disabled={disabled}
-            >
-              בוצע עם שינויים
-            </Button>
-          </div>
-        ) : (
-          /* Edit form for "done with changes" */
-          <div className="border rounded-lg p-3 space-y-3 bg-background">
-            <div className="text-sm font-medium">שינויים מהמלצה</div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs">סוג פעולה</Label>
-                <Select value={editActionTypeId} onValueChange={setEditActionTypeId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder={rec.action_type_id ? (ACTION_TYPE_LABELS[rec.action_type_id as ActionTypeName] || rec.action_type_id) : 'בחר סוג פעולה'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {ACTION_TYPE_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">חומר</Label>
-                <Select value={editMaterialId} onValueChange={setEditMaterialId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder={rec.material?.name || 'בחר חומר'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {materials.map((m) => (
-                      <SelectItem key={m.id} value={m.id}>
-                        {m.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs">מינון</Label>
-                <Input
-                  type="number"
-                  step="any"
-                  value={editDosage}
-                  onChange={(e) => setEditDosage(e.target.value)}
-                  placeholder={rec.dosage?.toString() || ''}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">יחידה</Label>
-                <Select value={editUnitTypeId} onValueChange={setEditUnitTypeId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder={rec.unit_type?.name || 'בחר יחידה'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {unitTypes.map((ut) => (
-                      <SelectItem key={ut.id} value={ut.id}>
-                        {ut.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <Label className="text-xs">הערות</Label>
-              <Textarea
-                value={editNotes}
-                onChange={(e) => setEditNotes(e.target.value)}
-                placeholder="סיבת השינוי..."
-                rows={2}
-              />
-            </div>
-
-            <div className="flex gap-2">
-              <Button size="sm" onClick={handleDoneWithChanges} disabled={disabled}>
-                אישור
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowEdit(false)}
-              >
-                ביטול
-              </Button>
-            </div>
+            <span className="text-muted-foreground">סוג פעולה:</span>
+            <span className="font-medium">{ACTION_TYPE_LABELS[rec.action_type_id as ActionTypeName] || rec.action_type_id}</span>
           </div>
         )}
-      </CardContent>
-    </Card>
+        {rec.material && (
+          <div className="flex gap-2">
+            <span className="text-muted-foreground">חומר:</span>
+            <span className="font-medium">{rec.material.name}</span>
+          </div>
+        )}
+        {rec.dosage != null && (
+          <div className="flex gap-2">
+            <span className="text-muted-foreground">מינון:</span>
+            <span className="font-medium">
+              {rec.dosage} {rec.unit_type?.name || ''}
+            </span>
+          </div>
+        )}
+        {task.notes && (
+          <div className="flex gap-2">
+            <span className="text-muted-foreground">הערות:</span>
+            <span>{task.notes}</span>
+          </div>
+        )}
+        <div className="flex items-center gap-1.5 text-muted-foreground text-xs pt-1">
+          <Calendar className="h-3 w-3" />
+          <span>ניטור: {formatDate(task.monitoring_date)}</span>
+        </div>
+      </div>
+
+      {/* Action buttons or Edit form */}
+      {!showEdit ? (
+        <div className="flex gap-2">
+          <button
+            className="action-btn-done"
+            onClick={handleDone}
+            disabled={disabled || isCompleting}
+          >
+            <span className="flex items-center gap-1.5">
+              <Check className="h-3.5 w-3.5" />
+              {isCompleting ? '...' : 'בוצע'}
+            </span>
+          </button>
+          <button
+            className="action-btn-edit"
+            onClick={() => setShowEdit(true)}
+            disabled={disabled}
+          >
+            <Edit3 className="h-3.5 w-3.5" />
+            בוצע עם שינויים
+          </button>
+        </div>
+      ) : (
+        /* Edit form for "done with changes" */
+        <div className="edit-form-block p-3 space-y-3">
+          <div className="text-sm font-semibold text-foreground">שינויים מהמלצה</div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">סוג פעולה</label>
+              <Select value={editActionTypeId} onValueChange={setEditActionTypeId}>
+                <SelectTrigger className="actions-select-trigger">
+                  <SelectValue placeholder={rec.action_type_id ? (ACTION_TYPE_LABELS[rec.action_type_id as ActionTypeName] || rec.action_type_id) : 'בחר סוג פעולה'} />
+                </SelectTrigger>
+                <SelectContent>
+                  {ACTION_TYPE_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">חומר</label>
+              <Select value={editMaterialId} onValueChange={setEditMaterialId}>
+                <SelectTrigger className="actions-select-trigger">
+                  <SelectValue placeholder={rec.material?.name || 'בחר חומר'} />
+                </SelectTrigger>
+                <SelectContent>
+                  {materials.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      {m.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">מינון</label>
+              <Input
+                type="number"
+                step="any"
+                value={editDosage}
+                onChange={(e) => setEditDosage(e.target.value)}
+                placeholder={rec.dosage?.toString() || ''}
+                className="actions-select-trigger"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">יחידה</label>
+              <Select value={editUnitTypeId} onValueChange={setEditUnitTypeId}>
+                <SelectTrigger className="actions-select-trigger">
+                  <SelectValue placeholder={rec.unit_type?.name || 'בחר יחידה'} />
+                </SelectTrigger>
+                <SelectContent>
+                  {unitTypes.map((ut) => (
+                    <SelectItem key={ut.id} value={ut.id}>
+                      {ut.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">הערות</label>
+            <Textarea
+              value={editNotes}
+              onChange={(e) => setEditNotes(e.target.value)}
+              placeholder="סיבת השינוי..."
+              rows={2}
+            />
+          </div>
+
+          <div className="flex gap-2">
+            <button className="action-btn-done" onClick={handleDoneWithChanges} disabled={disabled}>
+              <span className="flex items-center gap-1.5">
+                <Check className="h-3.5 w-3.5" />
+                אישור
+              </span>
+            </button>
+            <button
+              className="action-btn-edit"
+              onClick={() => setShowEdit(false)}
+            >
+              ביטול
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
