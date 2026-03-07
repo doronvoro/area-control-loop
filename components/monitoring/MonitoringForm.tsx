@@ -1356,8 +1356,8 @@ export function MonitoringForm({
                                                       <SelectValue placeholder="בחר חומר" />
                                                     </SelectTrigger>
                                                   </FormControl>
-                                                  <SelectContent>
-                                                    {(treatmentMaterials[treatmentKey] || []).map((material) => (
+                                                  <SelectContent position="popper" sideOffset={4}>
+                                                    {[...(treatmentMaterials[treatmentKey] || [])].sort((a, b) => (a.description || a.name || '').localeCompare(b.description || b.name || '', 'he')).map((material) => (
                                                       <SelectItem key={material.id} value={material.id}>
                                                         {material.description || material.name}
                                                       </SelectItem>
@@ -1387,8 +1387,8 @@ export function MonitoringForm({
                                                       <SelectValue placeholder="בחר סוג פעולה" />
                                                     </SelectTrigger>
                                                   </FormControl>
-                                                  <SelectContent>
-                                                    {allActionTypes.map((actionType) => (
+                                                  <SelectContent position="popper" sideOffset={4}>
+                                                    {[...allActionTypes].sort((a, b) => (a.description || a.name || '').localeCompare(b.description || b.name || '', 'he')).map((actionType) => (
                                                       <SelectItem key={actionType.id} value={actionType.id}>
                                                         {actionType.description || actionType.name}
                                                       </SelectItem>
@@ -1437,8 +1437,8 @@ export function MonitoringForm({
                                                       <SelectValue placeholder="בחר יחידת מידה" />
                                                     </SelectTrigger>
                                                   </FormControl>
-                                                  <SelectContent>
-                                                    {unitTypes.map((unit) => (
+                                                  <SelectContent position="popper" sideOffset={4}>
+                                                    {[...unitTypes].sort((a, b) => (a.description || a.name || '').localeCompare(b.description || b.name || '', 'he')).map((unit) => (
                                                       <SelectItem key={unit.id} value={unit.id}>
                                                         {unit.description || unit.name}
                                                       </SelectItem>
