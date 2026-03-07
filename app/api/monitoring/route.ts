@@ -1,7 +1,7 @@
-import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
-import { getCurrentWorker, getCurrentCustomer, requireAuth } from '@/lib/auth';
-import { hasRole } from '@/lib/permissions';
+import { getApiContext, requireWorkerAdminOrCustomer } from '@/lib/api/auth-context';
+import { handleApiError } from '@/lib/api-utils';
+import { findOrCreateReportArea, parseDosage } from '@/lib/api/utils';
 import { AreaTypeId, ReportSeverity } from '@/types/database';
 import { SupabaseClient } from '@supabase/supabase-js';
 
@@ -32,8 +32,6 @@ interface MonitoringEntryInput {
   recommend_action_type_id?: string | null;
 }
 
-// Expand multi-select entries into individual sub-area entries
-// null sub_area_id means "entire area" - stored as a single row
 function expandEntries(entries: MonitoringEntryInput[]): (MonitoringEntryInput & { sub_area_id: string | null })[] {
   const expanded: (MonitoringEntryInput & { sub_area_id: string | null })[] = [];
   for (const entry of entries) {
@@ -54,7 +52,7 @@ function expandEntries(entries: MonitoringEntryInput[]): (MonitoringEntryInput &
 interface BatchRequestBody {
   area_id: string;
   worker_id?: string;
-  inspector_id?: string; // Alias for worker_id from monitoring form
+  inspector_id?: string;
   entries: MonitoringEntryInput[];
 }
 
@@ -65,37 +63,6 @@ interface SingleRequestBody extends MonitoringEntryInput {
 }
 
 type RequestBody = BatchRequestBody | SingleRequestBody;
-
-// Helper functions
-function parseDosage(value: string | number | null | undefined): number | null {
-  if (value == null) return null;
-  return typeof value === 'string' ? parseFloat(value) : value;
-}
-
-async function createReportArea(
-  supabase: SupabaseClient,
-  adminClient: SupabaseClient,
-  areaId: string,
-  workerId?: string
-): Promise<string> {
-  // Get area name for the new report_area
-  const { data: areaData } = await supabase.from('areas').select('name').eq('id', areaId).single();
-
-  const { data: newReportArea, error: createError } = await adminClient
-    .from('report_areas')
-    .insert({
-      area_id: areaId,
-      area_type_id: AreaTypeId.MONITORING,
-      name: `דוח ניטור - ${areaData?.name || 'אזור'}`,
-      description: 'דוח ניטור',
-      worker_id: workerId || null,
-    })
-    .select('id')
-    .single();
-
-  if (createError) throw createError;
-  return newReportArea.id;
-}
 
 async function createTreatment(
   adminClient: SupabaseClient,
@@ -127,7 +94,6 @@ async function createTreatmentsFromEntry(
     return;
   }
 
-  // Legacy format - create single treatment from entry fields
   const materialId = entry.material_id || entry.recommend_material_id;
   const actionTypeId = entry.action_type_id || entry.recommend_action_type_id;
 
@@ -168,23 +134,17 @@ function isBatchRequest(body: RequestBody): body is BatchRequestBody {
 
 export async function GET() {
   try {
-    await requireAuth();
-    const supabase = await createClient();
-    const worker = await getCurrentWorker();
-    const isAdmin = await hasRole('admin');
-    const customer = await getCurrentCustomer();
+    const ctx = await getApiContext();
+    const unauthorized = requireWorkerAdminOrCustomer(ctx);
+    if (unauthorized) return unauthorized;
 
     console.log('[Monitoring GET] Fetching monitoring reports', {
-      workerId: (worker as any)?.id,
-      isAdmin,
-      customerId: (customer as any)?.id,
+      workerId: ctx.worker?.id,
+      isAdmin: ctx.isAdmin,
+      customerId: ctx.customer?.id,
     });
 
-    if (!worker && !isAdmin && !customer) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const { data, error } = await supabase
+    const { data, error } = await ctx.supabase
       .from('monitoring_area_report')
       .select(
         `*,
@@ -205,32 +165,21 @@ export async function GET() {
     console.log('[Monitoring GET] Fetched monitoring reports:', data?.length ?? 0);
 
     return NextResponse.json(data);
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[Monitoring GET] Error:', message);
-    return NextResponse.json({ error: message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }
 
 export async function POST(request: Request) {
   try {
-    await requireAuth();
-    const supabase = await createClient();
-    const worker = await getCurrentWorker();
-    const isAdmin = await hasRole('admin');
-    const customer = await getCurrentCustomer();
-
-    if (!worker && !isAdmin && !customer) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const ctx = await getApiContext();
+    const unauthorized = requireWorkerAdminOrCustomer(ctx);
+    if (unauthorized) return unauthorized;
 
     const body: RequestBody = await request.json();
-    const adminClient = createAdminClient();
 
-    // Handle batch request
     if (isBatchRequest(body)) {
       const { area_id, worker_id, inspector_id, entries } = body;
-      // Use worker_id if provided, otherwise use inspector_id (from monitoring form)
       const effectiveWorkerId = worker_id || inspector_id;
 
       console.log('[Monitoring POST] Batch request', {
@@ -247,9 +196,14 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'At least one entry is required' }, { status: 400 });
       }
 
-      const reportAreaId = await createReportArea(supabase, adminClient, area_id, effectiveWorkerId);
+      const reportAreaId = await findOrCreateReportArea(
+        ctx.supabase,
+        ctx.adminClient,
+        area_id,
+        AreaTypeId.MONITORING,
+        { workerId: effectiveWorkerId }
+      );
 
-      // Expand multi-select entries into individual sub-area rows
       const expandedEntries = expandEntries(entries);
 
       console.log('[Monitoring POST] Expanded entries:', {
@@ -259,8 +213,8 @@ export async function POST(request: Request) {
 
       const results = [];
       for (const entry of expandedEntries) {
-        const monitoringReport = await createMonitoringReport(adminClient, reportAreaId, entry);
-        await createTreatmentsFromEntry(adminClient, monitoringReport.id, entry);
+        const monitoringReport = await createMonitoringReport(ctx.adminClient, reportAreaId, entry);
+        await createTreatmentsFromEntry(ctx.adminClient, monitoringReport.id, entry);
         results.push(monitoringReport);
       }
 
@@ -288,7 +242,13 @@ export async function POST(request: Request) {
     let finalAreaReportId = providedAreaReportId;
 
     if (!finalAreaReportId && area_id) {
-      finalAreaReportId = await createReportArea(supabase, adminClient, area_id, worker_id);
+      finalAreaReportId = await findOrCreateReportArea(
+        ctx.supabase,
+        ctx.adminClient,
+        area_id,
+        AreaTypeId.MONITORING,
+        { workerId: worker_id }
+      );
     }
 
     if (!finalAreaReportId) {
@@ -296,18 +256,16 @@ export async function POST(request: Request) {
     }
 
     const monitoringReport = await createMonitoringReport(
-      adminClient,
+      ctx.adminClient,
       finalAreaReportId,
       entryData
     );
-    await createTreatmentsFromEntry(adminClient, monitoringReport.id, entryData);
+    await createTreatmentsFromEntry(ctx.adminClient, monitoringReport.id, entryData);
 
     console.log('[Monitoring POST] Created monitoring report:', monitoringReport.id);
 
     return NextResponse.json(monitoringReport, { status: 201 });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[Monitoring POST] Error:', message);
-    return NextResponse.json({ error: message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }

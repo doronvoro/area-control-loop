@@ -1,29 +1,26 @@
-import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth';
-import { hasRole } from '@/lib/permissions';
+import { getApiContext } from '@/lib/api/auth-context';
+import { handleApiError } from '@/lib/api-utils';
+
+function requireAdmin(ctx: { isAdmin: boolean }) {
+  if (!ctx.isAdmin) {
+    return NextResponse.json({ error: 'אין הרשאה' }, { status: 403 });
+  }
+  return null;
+}
 
 export async function GET() {
   try {
-    await requireAuth();
+    const ctx = await getApiContext();
+    const forbidden = requireAdmin(ctx);
+    if (forbidden) return forbidden;
 
-    const isAdmin = await hasRole('admin');
-    if (!isAdmin) {
-      return NextResponse.json({ error: 'אין הרשאה לצפות בהקצאות תפקידים' }, { status: 403 });
-    }
-
-    const supabase = await createClient();
-    const { data, error } = await supabase
-      .from('user_roles')
-      .select('*, roles(*)');
-
+    const { data, error } = await ctx.supabase.from('user_roles').select('*, roles(*)');
     if (error) throw error;
 
-    // Fetch user emails using admin client
-    const adminClient = createAdminClient();
     const userRolesWithEmail = await Promise.all(
       (data || []).map(async (userRole: any) => {
-        const { data: userData } = await adminClient.auth.admin.getUserById(userRole.user_id);
+        const { data: userData } = await ctx.adminClient.auth.admin.getUserById(userRole.user_id);
         return {
           ...userRole,
           email: userData?.user?.email || null,
@@ -33,19 +30,16 @@ export async function GET() {
     );
 
     return NextResponse.json(userRolesWithEmail);
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }
 
 export async function POST(request: Request) {
   try {
-    await requireAuth();
-
-    const isAdmin = await hasRole('admin');
-    if (!isAdmin) {
-      return NextResponse.json({ error: 'אין הרשאה להקצות תפקיד' }, { status: 403 });
-    }
+    const ctx = await getApiContext();
+    const forbidden = requireAdmin(ctx);
+    if (forbidden) return forbidden;
 
     const body = await request.json();
     const { user_id, role_id } = body;
@@ -54,12 +48,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'משתמש ותפקיד נדרשים' }, { status: 400 });
     }
 
-    const adminClient = createAdminClient();
-    const { data, error } = await (adminClient.from('user_roles') as any)
-      .insert({
-        user_id,
-        role_id,
-      })
+    const { data, error } = await (ctx.adminClient.from('user_roles') as any)
+      .insert({ user_id, role_id })
       .select('*, roles(*)')
       .single();
 
@@ -70,42 +60,34 @@ export async function POST(request: Request) {
       throw error;
     }
 
-    // Get user email
-    const { data: userData } = await adminClient.auth.admin.getUserById(user_id);
+    const { data: userData } = await ctx.adminClient.auth.admin.getUserById(user_id);
 
     return NextResponse.json({
       ...data,
       email: userData?.user?.email || null,
       user_name: userData?.user?.user_metadata?.name || userData?.user?.email || null,
     }, { status: 201 });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }
 
 export async function DELETE(request: Request) {
   try {
-    await requireAuth();
-
-    const isAdmin = await hasRole('admin');
-    if (!isAdmin) {
-      return NextResponse.json({ error: 'אין הרשאה להסיר תפקיד ממשתמש' }, { status: 403 });
-    }
+    const ctx = await getApiContext();
+    const forbidden = requireAdmin(ctx);
+    if (forbidden) return forbidden;
 
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 
-    if (!id) {
-      return NextResponse.json({ error: 'id נדרש' }, { status: 400 });
-    }
+    if (!id) return NextResponse.json({ error: 'id נדרש' }, { status: 400 });
 
-    const adminClient = createAdminClient();
-    const { error } = await (adminClient.from('user_roles') as any).delete().eq('id', id);
-
+    const { error } = await (ctx.adminClient.from('user_roles') as any).delete().eq('id', id);
     if (error) throw error;
 
     return NextResponse.json({ success: true });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }

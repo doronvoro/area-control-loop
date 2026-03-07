@@ -1,7 +1,6 @@
-import { createAdminClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
-import { getCurrentCustomer, getCurrentWorker, requireAuth } from '@/lib/auth';
-import { hasPermission } from '@/lib/permissions';
+import { getApiContext, checkPermission, resolveCustomerId } from '@/lib/api/auth-context';
+import { handleApiError } from '@/lib/api-utils';
 
 interface SubAreaInput {
   temp_id: string;
@@ -16,12 +15,12 @@ interface SubAreaInput {
 
 export async function POST(request: Request) {
   try {
-    await requireAuth();
+    const ctx = await getApiContext();
 
     // Check permissions
     const [canCreateArea, canCreateSubArea] = await Promise.all([
-      hasPermission('create_area'),
-      hasPermission('create_sub_area'),
+      checkPermission(ctx, 'create_area'),
+      checkPermission(ctx, 'create_sub_area'),
     ]);
 
     if (!canCreateArea) {
@@ -76,9 +75,7 @@ export async function POST(request: Request) {
     }
 
     // Get current customer
-    const customer = await getCurrentCustomer();
-    const worker = await getCurrentWorker();
-    const customerId = (customer as any)?.id || (worker as any)?.customer_id;
+    const customerId = resolveCustomerId(ctx);
 
     if (!customerId) {
       return NextResponse.json(
@@ -99,7 +96,7 @@ export async function POST(request: Request) {
     // Run the inserts in the background, writing progress to the stream
     (async () => {
       try {
-        const adminClient = createAdminClient();
+        const adminClient = ctx.adminClient;
         const isUpdate = !!area.id;
 
         let areaId: string;
@@ -271,12 +268,12 @@ export async function POST(request: Request) {
             total_created: createdSubAreas.length,
           },
         });
-      } catch (error: any) {
+      } catch (error) {
         console.error('Bulk create error:', error);
         await send({
           step: 'error',
           progress: 0,
-          error: error.message || 'שגיאה בשמירת השטח',
+          error: error instanceof Error ? error.message : 'שגיאה בשמירת השטח',
         });
       } finally {
         await writer.close();
@@ -289,8 +286,8 @@ export async function POST(request: Request) {
         'Transfer-Encoding': 'chunked',
       },
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Bulk create error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return handleApiError(error);
   }
 }

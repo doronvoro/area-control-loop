@@ -1,7 +1,7 @@
-import { createClient, createAdminClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth';
-import { hasPermission } from '@/lib/permissions';
+import { getApiContext, checkPermission } from '@/lib/api/auth-context';
+import { handleApiError } from '@/lib/api-utils';
 
 export async function GET(request: Request) {
   try {
@@ -9,10 +9,7 @@ export async function GET(request: Request) {
     const areaId = searchParams.get('areaId');
 
     if (!areaId) {
-      return NextResponse.json(
-        { error: 'areaId is required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'areaId is required' }, { status: 400 });
     }
 
     const supabase = createAdminClient();
@@ -25,7 +22,6 @@ export async function GET(request: Request) {
 
     if (error) throw error;
 
-    // Build display names with area name and get area's crop for inheritance
     const { data: area } = await supabase
       .from('areas')
       .select('name, crop_id, crops(*)')
@@ -36,24 +32,16 @@ export async function GET(request: Request) {
     const areaCropId = (area as any)?.crop_id || null;
     const areaCrop = (area as any)?.crops || null;
 
-    // Build hierarchical paths for display and add effective crop
     const subAreasWithDisplay = (data || []).map((subArea: any) => {
-      // Determine effective crop (sub-area's own crop or inherited from area)
       const effectiveCropId = subArea.crop_id || areaCropId;
       const effectiveCrop = subArea.crops || areaCrop;
 
-      // Build display if needed
       let display = subArea.display;
       if (!display || !display.includes(areaName)) {
-        // Traverse up the hierarchy to build full path
         const buildPath = (sa: any, allSubAreas: any[]): string[] => {
-          if (!sa.parent_sub_area_id) {
-            return [sa.name];
-          }
+          if (!sa.parent_sub_area_id) return [sa.name];
           const parent = allSubAreas.find((s: any) => s.id === sa.parent_sub_area_id);
-          if (parent) {
-            return [...buildPath(parent, allSubAreas), sa.name];
-          }
+          if (parent) return [...buildPath(parent, allSubAreas), sa.name];
           return [sa.name];
         };
 
@@ -61,58 +49,37 @@ export async function GET(request: Request) {
         display = `${areaName} | ${fullPath.join(' | ')}`;
       }
 
-      return {
-        ...subArea,
-        display,
-        effective_crop_id: effectiveCropId,
-        effective_crop: effectiveCrop,
-      };
+      return { ...subArea, display, effective_crop_id: effectiveCropId, effective_crop: effectiveCrop };
     });
 
     return NextResponse.json(subAreasWithDisplay);
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }
 
 export async function PUT(request: Request) {
   try {
-    await requireAuth();
-    
-    // Check permission
-    const canUpdate = await hasPermission('update_sub_area');
-    if (!canUpdate) {
-      return NextResponse.json(
-        { error: 'אין הרשאה לעדכן תת-שטח' },
-        { status: 403 }
-      );
+    const ctx = await getApiContext();
+    if (!(await checkPermission(ctx, 'update_sub_area'))) {
+      return NextResponse.json({ error: 'אין הרשאה לעדכן תת-שטח' }, { status: 403 });
     }
 
     const body = await request.json();
     const { id, name, variety, planting_time, rows, parent_sub_area_id, level, crop_id, size, size_unit_type } = body;
 
     if (!id || !name) {
-      return NextResponse.json(
-        { error: 'id ו-name נדרשים' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'id ו-name נדרשים' }, { status: 400 });
     }
 
-    const supabase = await createClient();
-    const adminClient = createAdminClient();
-
-    // Get current sub-area to check area_id
-    const { data: currentSubArea } = await supabase
+    const { data: currentSubArea } = await ctx.supabase
       .from('sub_areas')
       .select('area_id')
       .eq('id', id)
       .single();
 
     if (!currentSubArea) {
-      return NextResponse.json(
-        { error: 'תת-שטח לא נמצא' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'תת-שטח לא נמצא' }, { status: 404 });
     }
 
     const updateData: any = {
@@ -123,28 +90,13 @@ export async function PUT(request: Request) {
       updated_at: new Date().toISOString(),
     };
 
-    if (parent_sub_area_id !== undefined) {
-      updateData.parent_sub_area_id = parent_sub_area_id || null;
-    }
+    if (parent_sub_area_id !== undefined) updateData.parent_sub_area_id = parent_sub_area_id || null;
+    if (level !== undefined) updateData.level = level;
+    if (crop_id !== undefined) updateData.crop_id = crop_id || null;
+    if (size !== undefined) updateData.size = size ?? null;
+    if (size_unit_type !== undefined) updateData.size_unit_type = size_unit_type || null;
 
-    if (level !== undefined) {
-      updateData.level = level;
-    }
-
-    if (crop_id !== undefined) {
-      updateData.crop_id = crop_id || null;
-    }
-
-    if (size !== undefined) {
-      updateData.size = size ?? null;
-    }
-
-    if (size_unit_type !== undefined) {
-      updateData.size_unit_type = size_unit_type || null;
-    }
-
-    // Use admin client to bypass RLS
-    const { data, error } = await (adminClient.from('sub_areas') as any)
+    const { data, error } = await (ctx.adminClient.from('sub_areas') as any)
       .update(updateData)
       .eq('id', id)
       .select()
@@ -153,52 +105,36 @@ export async function PUT(request: Request) {
     if (error) throw error;
 
     return NextResponse.json(data);
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }
 
 export async function POST(request: Request) {
   try {
-    await requireAuth();
-    
-    // Check permission
-    const canCreate = await hasPermission('create_sub_area');
-    if (!canCreate) {
-      return NextResponse.json(
-        { error: 'אין הרשאה ליצור תת-שטח' },
-        { status: 403 }
-      );
+    const ctx = await getApiContext();
+    if (!(await checkPermission(ctx, 'create_sub_area'))) {
+      return NextResponse.json({ error: 'אין הרשאה ליצור תת-שטח' }, { status: 403 });
     }
 
     const body = await request.json();
     const { area_id, name, variety, planting_time, rows, parent_sub_area_id, level, crop_id, size, size_unit_type, geometry } = body;
 
     if (!area_id || !name) {
-      return NextResponse.json(
-        { error: 'area_id ו-name נדרשים' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'area_id ו-name נדרשים' }, { status: 400 });
     }
 
-    const supabase = await createClient();
-    const adminClient = createAdminClient();
-
-    // Calculate level if not provided
     let calculatedLevel = level || 1;
     if (parent_sub_area_id) {
-      const { data: parent } = await supabase
+      const { data: parent } = await ctx.supabase
         .from('sub_areas')
         .select('level')
         .eq('id', parent_sub_area_id)
         .single();
-      if (parent) {
-        calculatedLevel = (parent as any).level + 1;
-      }
+      if (parent) calculatedLevel = (parent as any).level + 1;
     }
 
-    // Build display name
-    const { data: area } = await supabase
+    const { data: area } = await ctx.supabase
       .from('areas')
       .select('name')
       .eq('id', area_id)
@@ -208,7 +144,7 @@ export async function POST(request: Request) {
     let display = `${areaName} | ${name}`;
 
     if (parent_sub_area_id) {
-      const { data: parent } = await supabase
+      const { data: parent } = await ctx.supabase
         .from('sub_areas')
         .select('display, name')
         .eq('id', parent_sub_area_id)
@@ -234,8 +170,7 @@ export async function POST(request: Request) {
       ...(geometry !== undefined ? { geometry: geometry || null } : {}),
     };
 
-    // Use admin client to bypass RLS
-    const { data, error } = await (adminClient.from('sub_areas') as any)
+    const { data, error } = await (ctx.adminClient.from('sub_areas') as any)
       .insert(insertData)
       .select()
       .single();
@@ -243,42 +178,28 @@ export async function POST(request: Request) {
     if (error) throw error;
 
     return NextResponse.json(data, { status: 201 });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }
 
 export async function DELETE(request: Request) {
   try {
-    await requireAuth();
-    
-    // Check permission
-    const canDelete = await hasPermission('delete_sub_area');
-    if (!canDelete) {
-      return NextResponse.json(
-        { error: 'אין הרשאה למחוק תת-שטח' },
-        { status: 403 }
-      );
+    const ctx = await getApiContext();
+    if (!(await checkPermission(ctx, 'delete_sub_area'))) {
+      return NextResponse.json({ error: 'אין הרשאה למחוק תת-שטח' }, { status: 403 });
     }
 
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 
-    if (!id) {
-      return NextResponse.json(
-        { error: 'id נדרש' },
-        { status: 400 }
-      );
-    }
+    if (!id) return NextResponse.json({ error: 'id נדרש' }, { status: 400 });
 
-    const adminClient = createAdminClient();
-    // Use admin client to bypass RLS
-    const { error } = await (adminClient.from('sub_areas') as any).delete().eq('id', id);
-
+    const { error } = await (ctx.adminClient.from('sub_areas') as any).delete().eq('id', id);
     if (error) throw error;
 
     return NextResponse.json({ success: true });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }

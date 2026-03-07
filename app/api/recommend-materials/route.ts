@@ -1,21 +1,19 @@
-import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth';
-import { hasPermission } from '@/lib/permissions';
+import { getApiContext, checkPermission } from '@/lib/api/auth-context';
+import { handleApiError } from '@/lib/api-utils';
 
 // GET - Fetch recommendations
 // Query params: cropId, findingId, actionTypeId, materialId
 export async function GET(request: Request) {
   try {
-    await requireAuth();
+    const ctx = await getApiContext();
     const { searchParams } = new URL(request.url);
     const cropId = searchParams.get('cropId');
     const findingId = searchParams.get('findingId');
     const actionTypeId = searchParams.get('actionTypeId');
     const materialId = searchParams.get('materialId');
 
-    const supabase = await createClient();
-    let query = supabase
+    let query = ctx.supabase
       .from('recommend_material')
       .select('*, crops(*), findings(*), action_types(*), materials(*), unit_types(*)');
 
@@ -68,17 +66,17 @@ export async function GET(request: Request) {
     });
 
     return NextResponse.json(result);
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }
 
 // POST - Create recommendation
 export async function POST(request: Request) {
   try {
-    await requireAuth();
+    const ctx = await getApiContext();
 
-    const canManage = await hasPermission('create_area'); // Using create_area as proxy for admin
+    const canManage = await checkPermission(ctx, 'create_area'); // Using create_area as proxy for admin
     if (!canManage) {
       return NextResponse.json(
         { error: 'אין הרשאה ליצור המלצות' },
@@ -96,7 +94,6 @@ export async function POST(request: Request) {
       );
     }
 
-    const supabase = await createClient();
     const recommendations = dosages.map((d: any) => ({
       crop_id,
       finding_id: finding_id || null,
@@ -106,7 +103,7 @@ export async function POST(request: Request) {
       dosage: d.dosage,
     }));
 
-    const { data, error } = await (supabase
+    const { data, error } = await (ctx.supabase
       .from('recommend_material') as any)
       .insert(recommendations)
       .select();
@@ -114,17 +111,17 @@ export async function POST(request: Request) {
     if (error) throw error;
 
     return NextResponse.json(data, { status: 201 });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }
 
 // PUT - Update recommendation
 export async function PUT(request: Request) {
   try {
-    await requireAuth();
+    const ctx = await getApiContext();
 
-    const canManage = await hasPermission('update_area');
+    const canManage = await checkPermission(ctx, 'update_area');
     if (!canManage) {
       return NextResponse.json(
         { error: 'אין הרשאה לעדכן המלצות' },
@@ -142,8 +139,7 @@ export async function PUT(request: Request) {
       );
     }
 
-    const supabase = await createClient();
-    const query = supabase.from('recommend_material') as any;
+    const query = ctx.supabase.from('recommend_material') as any;
     const { data, error } = await query
       .update({
         unit_type_id,
@@ -157,17 +153,17 @@ export async function PUT(request: Request) {
     if (error) throw error;
 
     return NextResponse.json(data);
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }
 
 // DELETE - Delete recommendation
 export async function DELETE(request: Request) {
   try {
-    await requireAuth();
+    const ctx = await getApiContext();
 
-    const canManage = await hasPermission('delete_area');
+    const canManage = await checkPermission(ctx, 'delete_area');
     if (!canManage) {
       return NextResponse.json(
         { error: 'אין הרשאה למחוק המלצות' },
@@ -186,8 +182,7 @@ export async function DELETE(request: Request) {
       );
     }
 
-    const supabase = await createClient();
-    const query = supabase.from('recommend_material') as any;
+    const query = ctx.supabase.from('recommend_material') as any;
 
     if (id) {
       const { error } = await query.delete().eq('id', id);
@@ -218,7 +213,7 @@ export async function DELETE(request: Request) {
     }
 
     return NextResponse.json({ success: true });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }

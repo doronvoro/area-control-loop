@@ -1,22 +1,19 @@
-import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth';
-import { hasRole } from '@/lib/permissions';
+import { getApiContext } from '@/lib/api/auth-context';
+import { handleApiError } from '@/lib/api-utils';
 
 export async function GET(request: Request) {
   try {
-    await requireAuth();
+    const ctx = await getApiContext();
 
-    const isAdmin = await hasRole('admin');
-    if (!isAdmin) {
+    if (!ctx.isAdmin) {
       return NextResponse.json({ error: 'אין הרשאה לצפות בהרשאות תפקידים' }, { status: 403 });
     }
 
     const { searchParams } = new URL(request.url);
     const roleId = searchParams.get('roleId');
 
-    const supabase = await createClient();
-    let query = supabase
+    let query = ctx.supabase
       .from('role_permissions')
       .select('*, roles(*), permissions(*)');
 
@@ -29,17 +26,16 @@ export async function GET(request: Request) {
     if (error) throw error;
 
     return NextResponse.json(data);
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }
 
 export async function POST(request: Request) {
   try {
-    await requireAuth();
+    const ctx = await getApiContext();
 
-    const isAdmin = await hasRole('admin');
-    if (!isAdmin) {
+    if (!ctx.isAdmin) {
       return NextResponse.json({ error: 'אין הרשאה להקצות הרשאה לתפקיד' }, { status: 403 });
     }
 
@@ -50,8 +46,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'תפקיד והרשאה נדרשים' }, { status: 400 });
     }
 
-    const adminClient = createAdminClient();
-    const { data, error } = await (adminClient.from('role_permissions') as any)
+    const { data, error } = await (ctx.adminClient.from('role_permissions') as any)
       .insert({
         role_id,
         permission_id,
@@ -67,17 +62,16 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json(data, { status: 201 });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }
 
 export async function DELETE(request: Request) {
   try {
-    await requireAuth();
+    const ctx = await getApiContext();
 
-    const isAdmin = await hasRole('admin');
-    if (!isAdmin) {
+    if (!ctx.isAdmin) {
       return NextResponse.json({ error: 'אין הרשאה להסיר הרשאה מתפקיד' }, { status: 403 });
     }
 
@@ -88,13 +82,12 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'id נדרש' }, { status: 400 });
     }
 
-    const adminClient = createAdminClient();
-    const { error } = await (adminClient.from('role_permissions') as any).delete().eq('id', id);
+    const { error } = await (ctx.adminClient.from('role_permissions') as any).delete().eq('id', id);
 
     if (error) throw error;
 
     return NextResponse.json({ success: true });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }

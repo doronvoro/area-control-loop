@@ -1,11 +1,11 @@
-import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth';
+import { getApiContext } from '@/lib/api/auth-context';
+import { handleApiError } from '@/lib/api-utils';
 import { ENTIRE_AREA_DISPLAY } from '@/lib/constants';
 
 export async function GET(request: Request) {
   try {
-    await requireAuth();
+    const ctx = await getApiContext();
     const { searchParams } = new URL(request.url);
     const areaId = searchParams.get('areaId');
 
@@ -18,10 +18,8 @@ export async function GET(request: Request) {
       );
     }
 
-    const supabase = await createClient();
-
     // Get all report areas for this area
-    const { data: reportAreas, error: reportAreasError } = await supabase
+    const { data: reportAreas, error: reportAreasError } = await ctx.supabase
       .from('report_areas')
       .select('id')
       .eq('area_id', areaId);
@@ -35,7 +33,7 @@ export async function GET(request: Request) {
     const reportAreaIds = (reportAreas as any[]).map((ra) => ra.id);
 
     // Get all monitoring reports for these report areas
-    const { data, error } = await supabase
+    const { data, error } = await ctx.supabase
       .from('monitoring_area_report')
       .select(
         'id, sub_area:sub_areas(id, name, variety, rows, display), finding:findings(id, name, display_name:name), status'
@@ -59,8 +57,8 @@ export async function GET(request: Request) {
     console.log('[Monitoring by-area GET] Fetched monitoring reports:', formatted?.length ?? 0);
 
     return NextResponse.json(formatted);
-  } catch (error: any) {
-    console.error('[Monitoring by-area GET] Error:', error.message);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    console.error('[Monitoring by-area GET] Error:', error instanceof Error ? error.message : error);
+    return handleApiError(error);
   }
 }

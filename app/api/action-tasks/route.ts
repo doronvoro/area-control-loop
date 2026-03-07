@@ -1,39 +1,33 @@
-import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
-import { getCurrentWorker, getCurrentCustomer, requireAuth } from '@/lib/auth';
-import { hasRole } from '@/lib/permissions';
+import { getApiContext, requireWorkerAdminOrCustomer, resolveCustomerId } from '@/lib/api/auth-context';
+import { handleApiError } from '@/lib/api-utils';
 import { AreaTypeId } from '@/types/database';
 import { ENTIRE_AREA_DISPLAY } from '@/lib/constants';
 
 export async function GET(request: Request) {
   try {
-    await requireAuth();
-    const supabase = await createClient();
-    const worker = await getCurrentWorker();
-    const isAdmin = await hasRole('admin');
-    const customer = await getCurrentCustomer();
+    const ctx = await getApiContext();
 
-    if (!worker && !isAdmin && !customer) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const authError = requireWorkerAdminOrCustomer(ctx);
+    if (authError) return authError;
 
     const { searchParams } = new URL(request.url);
     const areaId = searchParams.get('areaId');
 
     // Determine which areas the user can access
-    const customerId = (worker as any)?.customer_id || (customer as any)?.id || null;
+    const customerId = resolveCustomerId(ctx);
 
     // Get ALL accessible area IDs (for the dropdown list)
     let allAccessibleAreaIds: string[] = [];
 
-    if (isAdmin) {
+    if (ctx.isAdmin) {
       // Admin sees all areas
-      const { data: allAreas } = await supabase
+      const { data: allAreas } = await ctx.supabase
         .from('areas')
         .select('id');
       allAccessibleAreaIds = (allAreas || []).map((a: any) => a.id);
     } else if (customerId) {
-      const { data: customerAreas } = await supabase
+      const { data: customerAreas } = await ctx.supabase
         .from('customer_areas')
         .select('area_id')
         .eq('customer_id', customerId);
@@ -48,13 +42,13 @@ export async function GET(request: Request) {
     }
 
     // Get area details (all accessible areas for dropdown)
-    const { data: areas } = await (supabase
+    const { data: areas } = await (ctx.supabase
       .from('areas') as any)
       .select('id, name, crop_id')
       .in('id', allAccessibleAreaIds) as { data: any[] | null };
 
     // Get report_areas for task areas (monitoring type only)
-    const { data: reportAreas, error: raError } = await (supabase
+    const { data: reportAreas, error: raError } = await (ctx.supabase
       .from('report_areas') as any)
       .select('id, area_id, name, worker_id')
       .eq('area_type_id', AreaTypeId.MONITORING)
@@ -68,7 +62,7 @@ export async function GET(request: Request) {
     const reportAreaIds = reportAreas.map((ra: any) => ra.id);
 
     // Get all monitoring reports with treatments
-    const { data: monitoringReports, error: mrError } = await (supabase
+    const { data: monitoringReports, error: mrError } = await (ctx.supabase
       .from('monitoring_area_report') as any)
       .select(`
         id,
@@ -176,17 +170,12 @@ export async function GET(request: Request) {
       tasks,
       areas: areas || [],
     });
-  } catch (error: unknown) {
-    // Re-throw Next.js redirects (from requireAuth)
+  } catch (error) {
+    // Re-throw Next.js redirects (from getApiContext)
     if (error && typeof error === 'object' && 'digest' in error) {
       throw error;
     }
     console.error('GET /api/action-tasks error:', JSON.stringify(error, null, 2));
-    const message = error instanceof Error
-      ? error.message
-      : (error && typeof error === 'object' && 'message' in error)
-        ? (error as any).message
-        : JSON.stringify(error);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return handleApiError(error);
   }
 }

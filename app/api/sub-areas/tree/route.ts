@@ -1,5 +1,7 @@
-import { createClient, createAdminClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
+import { handleApiError } from '@/lib/api-utils';
 
 interface SubArea {
   id: string;
@@ -19,7 +21,7 @@ async function buildTree(
 ): Promise<SubArea[]> {
   const filtered = items.filter((item) => item.parent_sub_area_id === parentId);
   const result: SubArea[] = [];
-  
+
   for (const item of filtered) {
     const children = await buildTree(items, item.id);
     result.push({
@@ -27,7 +29,7 @@ async function buildTree(
       children,
     });
   }
-  
+
   return result;
 }
 
@@ -73,7 +75,7 @@ export async function GET(request: Request) {
     const tree = await buildTree(data || []);
 
     return NextResponse.json(tree);
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }

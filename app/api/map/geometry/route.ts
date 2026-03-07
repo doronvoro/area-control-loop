@@ -1,11 +1,10 @@
-import { createAdminClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth';
-import { hasPermission } from '@/lib/permissions';
+import { getApiContext, checkPermission } from '@/lib/api/auth-context';
+import { handleApiError } from '@/lib/api-utils';
 
 export async function PUT(request: Request) {
   try {
-    await requireAuth();
+    const ctx = await getApiContext();
 
     const body = await request.json();
     const { entity_type, entity_id, geometry } = body;
@@ -41,7 +40,7 @@ export async function PUT(request: Request) {
     // Check permission
     const permissionName =
       entity_type === 'area' ? 'update_area' : 'update_sub_area';
-    const canUpdate = await hasPermission(permissionName);
+    const canUpdate = await checkPermission(ctx, permissionName);
     if (!canUpdate) {
       return NextResponse.json(
         { error: 'אין הרשאה לעדכן גיאומטריה' },
@@ -50,9 +49,8 @@ export async function PUT(request: Request) {
     }
 
     const tableName = entity_type === 'area' ? 'areas' : 'sub_areas';
-    const adminClient = createAdminClient();
 
-    const { data, error } = await (adminClient.from(tableName) as any)
+    const { data, error } = await (ctx.adminClient.from(tableName) as any)
       .update({
         geometry: geometry || null,
         updated_at: new Date().toISOString(),
@@ -64,7 +62,7 @@ export async function PUT(request: Request) {
     if (error) throw error;
 
     return NextResponse.json(data);
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }

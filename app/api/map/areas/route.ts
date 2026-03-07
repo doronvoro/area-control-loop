@@ -1,24 +1,19 @@
-import { createClientFromRequest } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
-import { getCurrentCustomer, getCurrentWorker, requireAuth } from '@/lib/auth';
+import { getApiContext, resolveCustomerId } from '@/lib/api/auth-context';
+import { handleApiError } from '@/lib/api-utils';
 
 export async function GET() {
   try {
-    await requireAuth();
+    const ctx = await getApiContext();
 
-    const supabase = await createClientFromRequest();
-    const customer = await getCurrentCustomer();
-    const worker = await getCurrentWorker();
-
-    const targetCustomerId =
-      (customer as any)?.id || (worker as any)?.customer_id;
+    const targetCustomerId = resolveCustomerId(ctx);
 
     if (!targetCustomerId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Get areas for customer with geometry (exclude indoor areas)
-    const { data: customerAreas, error: areasError } = await supabase
+    const { data: customerAreas, error: areasError } = await ctx.supabase
       .from('customer_areas')
       .select(
         'area_id, areas(id, name, description, geometry, area_type)'
@@ -39,7 +34,7 @@ export async function GET() {
       return NextResponse.json({ areas: [] });
     }
 
-    const { data: subAreas, error: subAreasError } = await supabase
+    const { data: subAreas, error: subAreasError } = await ctx.supabase
       .from('sub_areas')
       .select('id, area_id, name, display, variety, level, geometry')
       .in('area_id', areaIds)
@@ -53,7 +48,7 @@ export async function GET() {
 
     if (areaIds.length > 0) {
       // Get report_areas for our areas
-      const { data: reportAreas, error: reportAreasError } = await supabase
+      const { data: reportAreas, error: reportAreasError } = await ctx.supabase
         .from('report_areas')
         .select('id, area_id')
         .in('area_id', areaIds);
@@ -71,7 +66,7 @@ export async function GET() {
         for (let i = 0; i < reportAreaIds.length; i += BATCH_SIZE) {
           const batch = reportAreaIds.slice(i, i + BATCH_SIZE);
           const { data: reports, error: reportsError } = await (
-            supabase.from('monitoring_area_report') as any
+            ctx.supabase.from('monitoring_area_report') as any
           )
             .select(
               `id, sub_area_id, area_report_id, severity, status, created_at,
@@ -159,7 +154,7 @@ export async function GET() {
     });
 
     return NextResponse.json({ areas: areasWithSubAreas });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }

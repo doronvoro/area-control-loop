@@ -1,6 +1,6 @@
-import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth';
+import { getApiContext } from '@/lib/api/auth-context';
+import { handleApiError } from '@/lib/api-utils';
 import { fetchReportDetail } from '@/lib/reports/fetch-report-detail';
 import { STATUS_LABELS, TREATMENT_STATUS_LABELS } from '@/lib/reports/labels';
 import { SEVERITY_LABELS, ReportSeverity } from '@/types/database';
@@ -40,12 +40,10 @@ const TOTAL_COLS = 13;
 
 export async function GET() {
   try {
-    await requireAuth();
-
-    const supabase = await createClient();
+    const ctx = await getApiContext();
 
     // Fetch all report IDs
-    const { data: reportAreas, error } = await supabase
+    const { data: reportAreas, error } = await ctx.supabase
       .from('report_areas')
       .select('id')
       .order('created_at', { ascending: false })
@@ -108,7 +106,7 @@ export async function GET() {
 
     // Fetch full details for each report and flatten
     for (const { id } of reportAreas) {
-      const report = await fetchReportDetail(supabase, id);
+      const report = await fetchReportDetail(ctx.supabase, id);
       if (!report) continue;
 
       const isMonitoring = report.area_type_id === 'monitoring';
@@ -125,7 +123,7 @@ export async function GET() {
       let monitoringTreatmentMap: Map<string, any[]> | null = null;
       if (!isMonitoring && entries.length > 0) {
         const actionEntryIds = entries.map((e: any) => e.id);
-        const { data: linkedMonitoring } = await (supabase
+        const { data: linkedMonitoring } = await (ctx.supabase
           .from('monitoring_area_report') as any)
           .select(
             `actions_area_report_id,
@@ -211,8 +209,8 @@ export async function GET() {
         'Content-Disposition': `attachment; filename="reports-${exportDate}.xlsx"`,
       },
     });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }
 

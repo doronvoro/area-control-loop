@@ -1,84 +1,66 @@
-import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
-import { requireAuth, getCurrentWorker, getCurrentCustomer } from '@/lib/auth';
-import { hasRole } from '@/lib/permissions';
+import { getApiContext, resolveCustomerId } from '@/lib/api/auth-context';
+import { handleApiError } from '@/lib/api-utils';
+import { getWorkerTypeId } from '@/lib/api/utils';
 
 export async function GET() {
   try {
-    await requireAuth();
-
-    const supabase = await createClient();
-    const isAdmin = await hasRole('admin');
-    const currentWorker = (await getCurrentWorker()) as { id: string; customer_id: string } | null;
-    const currentCustomer = (await getCurrentCustomer()) as { id: string } | null;
-
-    // Determine customer_id from worker or customer owner
-    const customerIdForData = currentWorker?.customer_id || currentCustomer?.id || null;
+    const ctx = await getApiContext();
+    const customerIdForData = resolveCustomerId(ctx);
 
     // Fetch common lookup data
     const [customersResult, findingsResult, actionTypesResult, unitTypesResult] = await Promise.all([
-      isAdmin ? supabase.from('customers').select('*').order('name') : { data: [] },
-      supabase.from('findings').select('*').order('name'),
-      supabase.from('action_types').select('*').order('name'),
-      supabase.from('unit_types').select('*').order('name'),
+      ctx.isAdmin ? ctx.supabase.from('customers').select('*').order('name') : { data: [] },
+      ctx.supabase.from('findings').select('*').order('name'),
+      ctx.supabase.from('action_types').select('*').order('name'),
+      ctx.supabase.from('unit_types').select('*').order('name'),
     ]);
 
-    // For non-admin users, get their customer's areas and action workers
     let initialAreas: any[] = [];
     let initialWorkers: any[] = [];
 
     if (customerIdForData) {
-      // Look up the action_worker type ID
-      const { data: actionWorkerType } = await supabase
-        .from('worker_types')
-        .select('id')
-        .eq('name', 'action_worker')
-        .single();
+      const actionWorkerTypeId = await getWorkerTypeId(ctx.supabase, 'action_worker');
 
       const [areasRes, workersRes] = await Promise.all([
-        supabase
+        ctx.supabase
           .from('customer_areas')
           .select('areas(*)')
           .eq('customer_id', customerIdForData),
-        actionWorkerType
-          ? supabase
+        actionWorkerTypeId
+          ? ctx.supabase
               .from('workers')
               .select('*, worker_types(*)')
               .eq('customer_id', customerIdForData)
-              .eq('type_id', (actionWorkerType as any).id)
+              .eq('type_id', actionWorkerTypeId)
           : Promise.resolve({ data: [] }),
       ]);
 
       initialAreas = (areasRes.data || []).map((ca: any) => ca.areas).filter(Boolean);
       initialWorkers = workersRes.data || [];
-    } else if (isAdmin) {
-      // Admin without a customer context: fetch all action workers
-      const { data: actionWorkerType } = await supabase
-        .from('worker_types')
-        .select('id')
-        .eq('name', 'action_worker')
-        .single();
+    } else if (ctx.isAdmin) {
+      const actionWorkerTypeId = await getWorkerTypeId(ctx.supabase, 'action_worker');
 
-      if (actionWorkerType) {
-        const { data: allWorkers } = await supabase
+      if (actionWorkerTypeId) {
+        const { data: allWorkers } = await ctx.supabase
           .from('workers')
           .select('*, worker_types(*)')
-          .eq('type_id', (actionWorkerType as any).id);
+          .eq('type_id', actionWorkerTypeId);
         initialWorkers = allWorkers || [];
       }
     }
 
     return NextResponse.json({
-      isAdmin,
+      isAdmin: ctx.isAdmin,
       customers: customersResult.data || [],
       initialAreas,
       initialWorkers,
       findings: findingsResult.data || [],
       actionTypes: actionTypesResult.data || [],
       unitTypes: unitTypesResult.data || [],
-      currentWorkerId: currentWorker?.id || null,
+      currentWorkerId: ctx.worker?.id || null,
     });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }

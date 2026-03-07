@@ -1,7 +1,6 @@
-import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
-import { getCurrentWorker, getCurrentCustomer, requireAuth } from '@/lib/auth';
-import { hasRole } from '@/lib/permissions';
+import { getApiContext, requireWorkerAdminOrCustomer } from '@/lib/api/auth-context';
+import { handleApiError } from '@/lib/api-utils';
 import { AreaTypeId } from '@/types/database';
 import { updateReportStatuses } from '@/lib/report-status';
 
@@ -41,16 +40,10 @@ function parseDosage(value: string | number | null | undefined): number | null {
 
 export async function POST(request: Request) {
   try {
-    await requireAuth();
-    const supabase = await createClient();
-    const adminClient = createAdminClient();
-    const worker = await getCurrentWorker();
-    const isAdmin = await hasRole('admin');
-    const customer = await getCurrentCustomer();
+    const ctx = await getApiContext();
 
-    if (!worker && !isAdmin && !customer) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const authError = requireWorkerAdminOrCustomer(ctx);
+    if (authError) return authError;
 
     const body: RequestBody = await request.json();
     const { area_id, worker_id, completed_tasks = [], standalone_actions = [] } = body;
@@ -63,10 +56,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No tasks or actions provided' }, { status: 400 });
     }
 
-    const effectiveWorkerId = worker_id || (worker as any)?.id || null;
+    const effectiveWorkerId = worker_id || ctx.worker?.id || null;
 
     // Step 1: Get or create report_areas for actions
-    const { data: existingReportAreas } = await (supabase
+    const { data: existingReportAreas } = await (ctx.supabase
       .from('report_areas') as any)
       .select('id')
       .eq('area_id', area_id)
@@ -78,19 +71,19 @@ export async function POST(request: Request) {
       reportAreaId = existingReportAreas[0].id;
       // Update worker_id on existing report_areas if provided
       if (effectiveWorkerId) {
-        await (adminClient
+        await (ctx.adminClient
           .from('report_areas') as any)
           .update({ worker_id: effectiveWorkerId })
           .eq('id', reportAreaId);
       }
     } else {
-      const { data: areaData } = await supabase
+      const { data: areaData } = await ctx.supabase
         .from('areas')
         .select('name')
         .eq('id', area_id)
         .single() as { data: { name: string } | null };
 
-      const { data: newReportArea, error: createError } = await (adminClient
+      const { data: newReportArea, error: createError } = await (ctx.adminClient
         .from('report_areas') as any)
         .insert({
           area_id,
@@ -113,7 +106,7 @@ export async function POST(request: Request) {
     for (const task of completed_tasks) {
       try {
         // Fetch the monitoring treatment to get recommendation data
-        const { data: monitoringTreatment, error: mtError } = await (supabase
+        const { data: monitoringTreatment, error: mtError } = await (ctx.supabase
           .from('monitoring_treatments') as any)
           .select(`
             *,
@@ -145,7 +138,7 @@ export async function POST(request: Request) {
         const severity = monReport.severity;
 
         // Get or create actions_area_report for this sub_area + finding
-        let existingActionQuery = (supabase
+        let existingActionQuery = (ctx.supabase
           .from('actions_area_report') as any)
           .select('id')
           .eq('area_report_id', reportAreaId)
@@ -164,7 +157,7 @@ export async function POST(request: Request) {
         if (existingAction) {
           actionReportId = existingAction.id;
         } else {
-          const { data: newAction, error: actionError } = await (adminClient
+          const { data: newAction, error: actionError } = await (ctx.adminClient
             .from('actions_area_report') as any)
             .insert({
               area_report_id: reportAreaId,
@@ -194,7 +187,7 @@ export async function POST(request: Request) {
           : (task.action_type_id || monitoringTreatment.action_type_id);
 
         // Create action treatment
-        const { data: actionTreatment, error: atError } = await (adminClient
+        const { data: actionTreatment, error: atError } = await (ctx.adminClient
           .from('action_treatments') as any)
           .insert({
             action_report_id: actionReportId,
@@ -211,7 +204,7 @@ export async function POST(request: Request) {
         if (atError) throw atError;
 
         // Link monitoring treatment to action treatment
-        const { error: linkError } = await (adminClient
+        const { error: linkError } = await (ctx.adminClient
           .from('monitoring_treatments') as any)
           .update({
             action_treatment_id: actionTreatment.id,
@@ -222,7 +215,7 @@ export async function POST(request: Request) {
 
         // Link monitoring report to action report (if not already linked)
         if (task.monitoring_report_id) {
-          const { error: reportLinkError } = await (adminClient
+          const { error: reportLinkError } = await (ctx.adminClient
             .from('monitoring_area_report') as any)
             .update({
               actions_area_report_id: actionReportId,
@@ -254,7 +247,7 @@ export async function POST(request: Request) {
         }
 
         // Get or create actions_area_report
-        let existingStandaloneQuery = (supabase
+        let existingStandaloneQuery = (ctx.supabase
           .from('actions_area_report') as any)
           .select('id')
           .eq('area_report_id', reportAreaId)
@@ -273,7 +266,7 @@ export async function POST(request: Request) {
         if (existingAction) {
           actionReportId = existingAction.id;
         } else {
-          const { data: newAction, error: actionError } = await (adminClient
+          const { data: newAction, error: actionError } = await (ctx.adminClient
             .from('actions_area_report') as any)
             .insert({
               area_report_id: reportAreaId,
@@ -289,7 +282,7 @@ export async function POST(request: Request) {
         }
 
         // Create action treatment
-        const { data: actionTreatment, error: atError } = await (adminClient
+        const { data: actionTreatment, error: atError } = await (ctx.adminClient
           .from('action_treatments') as any)
           .insert({
             action_report_id: actionReportId,
@@ -334,7 +327,7 @@ export async function POST(request: Request) {
     // Look up the monitoring report_areas ID for the same area
     let monitoringReportAreaId: string | undefined;
     if (monitoringReportIds.length > 0) {
-      const { data: monReportArea } = await (supabase
+      const { data: monReportArea } = await (ctx.supabase
         .from('report_areas') as any)
         .select('id')
         .eq('area_id', area_id)
@@ -343,7 +336,7 @@ export async function POST(request: Request) {
       monitoringReportAreaId = monReportArea?.id;
     }
 
-    await updateReportStatuses(adminClient, {
+    await updateReportStatuses(ctx.adminClient, {
       monitoringReportIds,
       actionReportIds,
       monitoringReportAreaId,
@@ -355,8 +348,7 @@ export async function POST(request: Request) {
       results,
       errors: errors.length > 0 ? errors : undefined,
     }, { status: 201 });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ error: message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }

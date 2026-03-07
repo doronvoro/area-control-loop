@@ -1,24 +1,12 @@
-import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth';
+import { getApiContext } from '@/lib/api/auth-context';
+import { handleApiError } from '@/lib/api-utils';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 /**
- * Cascade API for monitoring form
- *
- * Query params:
- * - type: 'findings' | 'action_types' | 'materials' | 'dosage'
- * - cropId: UUID of the crop
- * - findingId: UUID of the finding (optional - for finding-specific recommendations)
- * - actionTypeId: UUID of the action type (for materials, dosage)
- * - materialId: UUID of the material (for dosage)
- *
- * Schema:
- * - crop_findings: crop_id -> finding_id (available findings per crop)
- * - recommend_material: crop_id + finding_id + action_type_id + material_id -> unit_type_id + dosage
- *   (finding_id is optional - NULL means crop-level default)
+ * Get parent_crop_id for a crop (for inheritance fallback).
  */
-// Helper: get parent_crop_id for a crop (for inheritance fallback)
-async function getParentCropId(supabase: any, cropId: string): Promise<string | null> {
+async function getParentCropId(supabase: SupabaseClient, cropId: string): Promise<string | null> {
   const { data } = await (supabase.from('crops') as any)
     .select('parent_crop_id')
     .eq('id', cropId)
@@ -26,9 +14,88 @@ async function getParentCropId(supabase: any, cropId: string): Promise<string | 
   return data?.parent_crop_id || null;
 }
 
+/**
+ * Query recommend_material with a 2-level fallback per crop:
+ * 1. With findingId (if provided)
+ * 2. Without findingId (crop-level defaults)
+ *
+ * Returns the first non-empty result.
+ */
+async function queryRecommendWithFindingFallback(
+  supabase: SupabaseClient,
+  cropId: string,
+  select: string,
+  findingId: string | null,
+  actionTypeId: string | null,
+  materialId: string | null,
+  single: boolean = false
+): Promise<{ data: any; error: any }> {
+  const buildQuery = (cId: string, fId: string | null) => {
+    let query = (supabase.from('recommend_material') as any)
+      .select(select)
+      .eq('crop_id', cId);
+
+    if (actionTypeId) {
+      query = query.or(`action_type_id.eq.${actionTypeId},action_type_id.is.null`);
+    }
+    if (materialId) {
+      query = query.eq('material_id', materialId);
+    }
+    if (fId) {
+      query = query.eq('finding_id', fId);
+    } else {
+      query = query.is('finding_id', null);
+    }
+
+    return single ? query.maybeSingle() : query;
+  };
+
+  // Try with finding first
+  let result = await buildQuery(cropId, findingId);
+  const hasData = single ? !!result.data : result.data?.length > 0;
+
+  // Fallback to crop-level (null finding) if no results with specific finding
+  if (findingId && !hasData) {
+    result = await buildQuery(cropId, null);
+  }
+
+  return result;
+}
+
+/**
+ * Full cascade: try cropId, then parentCropId, with finding fallback at each level.
+ */
+async function queryWithCropFallback(
+  supabase: SupabaseClient,
+  cropId: string,
+  select: string,
+  findingId: string | null,
+  actionTypeId: string | null,
+  materialId: string | null,
+  single: boolean = false
+): Promise<{ data: any; error: any }> {
+  // Level 1: direct crop
+  let result = await queryRecommendWithFindingFallback(
+    supabase, cropId, select, findingId, actionTypeId, materialId, single
+  );
+  const hasData = single ? !!result.data : result.data?.length > 0;
+
+  if (hasData) return result;
+
+  // Level 2: parent crop
+  const parentCropId = await getParentCropId(supabase, cropId);
+  if (parentCropId) {
+    result = await queryRecommendWithFindingFallback(
+      supabase, parentCropId, select, findingId, actionTypeId, materialId, single
+    );
+  }
+
+  return result;
+}
+
 export async function GET(request: Request) {
   try {
-    await requireAuth();
+    const ctx = await getApiContext();
 
     const { searchParams } = new URL(request.url);
     const type = searchParams.get('type');
@@ -37,20 +104,13 @@ export async function GET(request: Request) {
     const actionTypeId = searchParams.get('actionTypeId');
     const materialId = searchParams.get('materialId');
 
-    const supabase = await createClient();
-
     switch (type) {
       case 'findings': {
-        // Get findings for a specific crop via crop_findings junction
         if (!cropId) {
-          return NextResponse.json(
-            { error: 'cropId is required for findings' },
-            { status: 400 }
-          );
+          return NextResponse.json({ error: 'cropId is required for findings' }, { status: 400 });
         }
 
-        const { data, error } = await (supabase
-          .from('crop_findings') as any)
+        const { data, error } = await (ctx.supabase.from('crop_findings') as any)
           .select('finding_id, findings(*)')
           .eq('crop_id', cropId);
 
@@ -58,11 +118,11 @@ export async function GET(request: Request) {
 
         let findings = data?.map((cf: any) => cf.findings).filter(Boolean) || [];
 
-        // Fallback to parent crop if no findings found
+        // Fallback to parent crop
         if (findings.length === 0) {
-          const parentCropId = await getParentCropId(supabase, cropId);
+          const parentCropId = await getParentCropId(ctx.supabase, cropId);
           if (parentCropId) {
-            const { data: parentData, error: parentError } = await (supabase
+            const { data: parentData, error: parentError } = await (ctx.supabase
               .from('crop_findings') as any)
               .select('finding_id, findings(*)')
               .eq('crop_id', parentCropId);
@@ -75,62 +135,27 @@ export async function GET(request: Request) {
       }
 
       case 'action_types': {
-        // Return all action types directly (recommend_material.action_type_id is not in use)
-        const { data: allActionTypes, error: atError } = await supabase
+        const { data, error } = await ctx.supabase
           .from('action_types')
           .select('*')
           .order('name');
-        if (atError) throw atError;
-        return NextResponse.json(allActionTypes || []);
+        if (error) throw error;
+        return NextResponse.json(data || []);
       }
 
       case 'materials': {
-        // Get materials available for a specific crop (and optionally action_type/finding) via recommend_material
         if (!cropId) {
-          return NextResponse.json(
-            { error: 'cropId is required for materials' },
-            { status: 400 }
-          );
+          return NextResponse.json({ error: 'cropId is required for materials' }, { status: 400 });
         }
 
-        // Build query: match specific action_type OR null action_type (applies to all)
-        let query = (supabase
-          .from('recommend_material') as any)
-          .select('material_id, materials(*)')
-          .eq('crop_id', cropId);
-
-        if (actionTypeId) {
-          query = query.or(`action_type_id.eq.${actionTypeId},action_type_id.is.null`);
-        }
-
-        if (findingId) {
-          query = query.eq('finding_id', findingId);
-        } else {
-          query = query.is('finding_id', null);
-        }
-
-        let { data, error } = await query;
-
-        // Fallback to crop-level if no finding-specific results
-        if (findingId && (!data || data.length === 0)) {
-          let fallbackQuery = (supabase
-            .from('recommend_material') as any)
-            .select('material_id, materials(*)')
-            .eq('crop_id', cropId)
-            .is('finding_id', null);
-
-          if (actionTypeId) {
-            fallbackQuery = fallbackQuery.or(`action_type_id.eq.${actionTypeId},action_type_id.is.null`);
-          }
-
-          const fallbackResult = await fallbackQuery;
-          data = fallbackResult.data;
-          error = fallbackResult.error;
-        }
+        const { data, error } = await queryWithCropFallback(
+          ctx.supabase, cropId, 'material_id, materials(*)',
+          findingId, actionTypeId, null
+        );
 
         if (error) throw error;
 
-        // Get unique materials
+        // Deduplicate materials
         const materialsMap = new Map();
         data?.forEach((rm: any) => {
           if (rm.materials && !materialsMap.has(rm.material_id)) {
@@ -138,57 +163,9 @@ export async function GET(request: Request) {
           }
         });
 
-        // Fallback to parent crop if no materials found
+        // Fall back to all materials if no recommendations found
         if (materialsMap.size === 0) {
-          const parentCropId = await getParentCropId(supabase, cropId);
-          if (parentCropId) {
-            let parentQuery = (supabase
-              .from('recommend_material') as any)
-              .select('material_id, materials(*)')
-              .eq('crop_id', parentCropId);
-
-            if (actionTypeId) {
-              parentQuery = parentQuery.or(`action_type_id.eq.${actionTypeId},action_type_id.is.null`);
-            }
-
-            if (findingId) {
-              parentQuery = parentQuery.eq('finding_id', findingId);
-            } else {
-              parentQuery = parentQuery.is('finding_id', null);
-            }
-
-            let { data: parentData, error: parentError } = await parentQuery;
-
-            // Finding-specific fallback for parent crop too
-            if (findingId && (!parentData || parentData.length === 0)) {
-              let parentFallbackQuery = (supabase
-                .from('recommend_material') as any)
-                .select('material_id, materials(*)')
-                .eq('crop_id', parentCropId)
-                .is('finding_id', null);
-
-              if (actionTypeId) {
-                parentFallbackQuery = parentFallbackQuery.or(`action_type_id.eq.${actionTypeId},action_type_id.is.null`);
-              }
-
-              const parentFallback = await parentFallbackQuery;
-              parentData = parentFallback.data;
-              parentError = parentFallback.error;
-            }
-
-            if (parentError) throw parentError;
-
-            parentData?.forEach((rm: any) => {
-              if (rm.materials && !materialsMap.has(rm.material_id)) {
-                materialsMap.set(rm.material_id, rm.materials);
-              }
-            });
-          }
-        }
-
-        // If still no recommendations found, fall back to all materials
-        if (materialsMap.size === 0) {
-          const { data: allMaterials, error: mError } = await supabase
+          const { data: allMaterials, error: mError } = await ctx.supabase
             .from('materials')
             .select('*')
             .order('name');
@@ -200,7 +177,6 @@ export async function GET(request: Request) {
       }
 
       case 'dosage': {
-        // Get dosage and unit_type for a specific combination
         if (!cropId || !materialId) {
           return NextResponse.json(
             { error: 'cropId and materialId are required for dosage' },
@@ -208,90 +184,10 @@ export async function GET(request: Request) {
           );
         }
 
-        let query = (supabase
-          .from('recommend_material') as any)
-          .select('dosage, unit_type_id, unit_types(*)');
-
-        if (actionTypeId) {
-          query = query.eq('crop_id', cropId).or(`action_type_id.eq.${actionTypeId},action_type_id.is.null`).eq('material_id', materialId);
-        } else {
-          query = query.eq('crop_id', cropId).eq('material_id', materialId);
-        }
-
-        if (findingId) {
-          query = query.eq('finding_id', findingId);
-        } else {
-          query = query.is('finding_id', null);
-        }
-
-        let { data, error } = await query.maybeSingle();
-
-        // Fallback to crop-level if no finding-specific result
-        if (findingId && !data) {
-          let fallbackQuery = (supabase
-            .from('recommend_material') as any)
-            .select('dosage, unit_type_id, unit_types(*)');
-
-          if (actionTypeId) {
-            fallbackQuery = fallbackQuery.eq('crop_id', cropId).or(`action_type_id.eq.${actionTypeId},action_type_id.is.null`).eq('material_id', materialId);
-          } else {
-            fallbackQuery = fallbackQuery.eq('crop_id', cropId).eq('material_id', materialId);
-          }
-
-          const fallbackResult = await fallbackQuery
-            .is('finding_id', null)
-            .maybeSingle();
-
-          data = fallbackResult.data;
-          error = fallbackResult.error;
-        }
-
-        // Fallback to parent crop if no dosage found
-        if (!data) {
-          const parentCropId = await getParentCropId(supabase, cropId);
-          if (parentCropId) {
-            let parentQuery = (supabase
-              .from('recommend_material') as any)
-              .select('dosage, unit_type_id, unit_types(*)');
-
-            if (actionTypeId) {
-              parentQuery = parentQuery.eq('crop_id', parentCropId).or(`action_type_id.eq.${actionTypeId},action_type_id.is.null`).eq('material_id', materialId);
-            } else {
-              parentQuery = parentQuery.eq('crop_id', parentCropId).eq('material_id', materialId);
-            }
-
-            if (findingId) {
-              parentQuery = parentQuery.eq('finding_id', findingId);
-            } else {
-              parentQuery = parentQuery.is('finding_id', null);
-            }
-
-            const parentResult = await parentQuery.maybeSingle();
-
-            // Finding-specific fallback for parent crop too
-            if (findingId && !parentResult.data) {
-              let parentFallbackQuery = (supabase
-                .from('recommend_material') as any)
-                .select('dosage, unit_type_id, unit_types(*)');
-
-              if (actionTypeId) {
-                parentFallbackQuery = parentFallbackQuery.eq('crop_id', parentCropId).or(`action_type_id.eq.${actionTypeId},action_type_id.is.null`).eq('material_id', materialId);
-              } else {
-                parentFallbackQuery = parentFallbackQuery.eq('crop_id', parentCropId).eq('material_id', materialId);
-              }
-
-              const parentFallback = await parentFallbackQuery
-                .is('finding_id', null)
-                .maybeSingle();
-
-              data = parentFallback.data;
-              error = parentFallback.error;
-            } else {
-              data = parentResult.data;
-              error = parentResult.error;
-            }
-          }
-        }
+        const { data, error } = await queryWithCropFallback(
+          ctx.supabase, cropId, 'dosage, unit_type_id, unit_types(*)',
+          findingId, actionTypeId, materialId, true
+        );
 
         if (error) throw error;
 
@@ -312,7 +208,7 @@ export async function GET(request: Request) {
           { status: 400 }
         );
     }
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }

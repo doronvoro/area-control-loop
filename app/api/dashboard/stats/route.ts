@@ -1,25 +1,15 @@
-import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth';
+import { getApiContext } from '@/lib/api/auth-context';
+import { handleApiError } from '@/lib/api-utils';
 
 export async function GET() {
   try {
-    await requireAuth();
+    const ctx = await getApiContext();
 
-    const supabase = await createClient();
-
-    // Get statistics
     const [monitoringCount, actionsCount, pendingMonitoring] = await Promise.all([
-      supabase
-        .from('monitoring_area_report')
-        .select('id', { count: 'exact', head: true }),
-      supabase
-        .from('actions_area_report')
-        .select('id', { count: 'exact', head: true }),
-      supabase
-        .from('monitoring_area_report')
-        .select('id', { count: 'exact', head: true })
-        .eq('status', 'pending'),
+      ctx.supabase.from('monitoring_area_report').select('id', { count: 'exact', head: true }),
+      ctx.supabase.from('actions_area_report').select('id', { count: 'exact', head: true }),
+      ctx.supabase.from('monitoring_area_report').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
     ]);
 
     return NextResponse.json({
@@ -27,7 +17,7 @@ export async function GET() {
       actionsCount: actionsCount.count || 0,
       pendingMonitoring: pendingMonitoring.count || 0,
     });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }

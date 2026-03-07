@@ -1,19 +1,16 @@
-import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth';
-import { hasRole } from '@/lib/permissions';
+import { getApiContext } from '@/lib/api/auth-context';
+import { handleApiError } from '@/lib/api-utils';
 
 export async function GET() {
   try {
-    await requireAuth();
+    const ctx = await getApiContext();
 
-    const isAdmin = await hasRole('admin');
-    if (!isAdmin) {
+    if (!ctx.isAdmin) {
       return NextResponse.json({ error: 'אין הרשאה לצפות בהרשאות' }, { status: 403 });
     }
 
-    const supabase = await createClient();
-    const { data, error } = await supabase
+    const { data, error } = await ctx.supabase
       .from('permissions')
       .select('*')
       .order('resource')
@@ -22,17 +19,16 @@ export async function GET() {
     if (error) throw error;
 
     return NextResponse.json(data);
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }
 
 export async function POST(request: Request) {
   try {
-    await requireAuth();
+    const ctx = await getApiContext();
 
-    const isAdmin = await hasRole('admin');
-    if (!isAdmin) {
+    if (!ctx.isAdmin) {
       return NextResponse.json({ error: 'אין הרשאה ליצור הרשאה' }, { status: 403 });
     }
 
@@ -43,8 +39,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'שם, שם תצוגה, משאב ופעולה נדרשים' }, { status: 400 });
     }
 
-    const adminClient = createAdminClient();
-    const { data, error } = await (adminClient.from('permissions') as any)
+    const { data, error } = await (ctx.adminClient.from('permissions') as any)
       .insert({
         name,
         display_name,
@@ -63,17 +58,16 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json(data, { status: 201 });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }
 
 export async function PUT(request: Request) {
   try {
-    await requireAuth();
+    const ctx = await getApiContext();
 
-    const isAdmin = await hasRole('admin');
-    if (!isAdmin) {
+    if (!ctx.isAdmin) {
       return NextResponse.json({ error: 'אין הרשאה לעדכן הרשאה' }, { status: 403 });
     }
 
@@ -84,8 +78,7 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: 'id, שם, שם תצוגה, משאב ופעולה נדרשים' }, { status: 400 });
     }
 
-    const adminClient = createAdminClient();
-    const { data, error } = await (adminClient.from('permissions') as any)
+    const { data, error } = await (ctx.adminClient.from('permissions') as any)
       .update({
         name,
         display_name,
@@ -101,17 +94,16 @@ export async function PUT(request: Request) {
     if (error) throw error;
 
     return NextResponse.json(data);
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }
 
 export async function DELETE(request: Request) {
   try {
-    await requireAuth();
+    const ctx = await getApiContext();
 
-    const isAdmin = await hasRole('admin');
-    if (!isAdmin) {
+    if (!ctx.isAdmin) {
       return NextResponse.json({ error: 'אין הרשאה למחוק הרשאה' }, { status: 403 });
     }
 
@@ -122,13 +114,12 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'id נדרש' }, { status: 400 });
     }
 
-    const adminClient = createAdminClient();
-    const { error } = await (adminClient.from('permissions') as any).delete().eq('id', id);
+    const { error } = await (ctx.adminClient.from('permissions') as any).delete().eq('id', id);
 
     if (error) throw error;
 
     return NextResponse.json({ success: true });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }

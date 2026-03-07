@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth';
-import { hasRole } from '@/lib/permissions';
-import { createClient } from '@/lib/supabase/server';
+import { getApiContext, checkRole } from '@/lib/api/auth-context';
+import { handleApiError } from '@/lib/api-utils';
 import {
   parseCsvContent,
   extractCropList,
@@ -11,12 +10,9 @@ import {
 
 export async function POST(request: NextRequest) {
   try {
-    await requireAuth();
-    const [isAdmin, isCustomerOwner] = await Promise.all([
-      hasRole('admin'),
-      hasRole('customer_owner'),
-    ]);
-    if (!isAdmin && !isCustomerOwner) {
+    const ctx = await getApiContext();
+    const isCustomerOwner = await checkRole(ctx, 'customer_owner');
+    if (!ctx.isAdmin && !isCustomerOwner) {
       return NextResponse.json({ error: 'אין הרשאה' }, { status: 403 });
     }
 
@@ -78,18 +74,16 @@ export async function POST(request: NextRequest) {
     }
 
     // Query existing data from DB
-    const supabase = await createClient();
-
     const [
       { data: existingCrops },
       { data: existingFindings },
       { data: existingMaterials },
       { data: existingUnitTypes },
     ] = await Promise.all([
-      supabase.from('crops').select('name').in('name', csvCropNames),
-      supabase.from('findings').select('name').in('name', csvPestNames.length > 0 ? csvPestNames : ['']),
-      supabase.from('materials').select('name').in('name', csvMaterialNames),
-      supabase.from('unit_types').select('name').in('name', [...csvUnitNames]),
+      ctx.supabase.from('crops').select('name').in('name', csvCropNames),
+      ctx.supabase.from('findings').select('name').in('name', csvPestNames.length > 0 ? csvPestNames : ['']),
+      ctx.supabase.from('materials').select('name').in('name', csvMaterialNames),
+      ctx.supabase.from('unit_types').select('name').in('name', [...csvUnitNames]),
     ]);
 
     const existingCropNames = new Set((existingCrops || []).map((c: any) => c.name as string));
@@ -124,7 +118,7 @@ export async function POST(request: NextRequest) {
         registryRows: filteredRows.length,
       },
     });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }

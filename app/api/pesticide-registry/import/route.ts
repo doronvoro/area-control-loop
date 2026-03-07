@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth';
-import { hasRole } from '@/lib/permissions';
-import { createAdminClient } from '@/lib/supabase/server';
+import { getApiContext, checkRole } from '@/lib/api/auth-context';
+import { handleApiError } from '@/lib/api-utils';
 import {
   parseCsvContent,
   filterRowsByCrops,
@@ -48,12 +47,9 @@ async function getOrCreate(
 
 export async function POST(request: NextRequest) {
   try {
-    await requireAuth();
-    const [isAdmin, isCustomerOwner] = await Promise.all([
-      hasRole('admin'),
-      hasRole('customer_owner'),
-    ]);
-    if (!isAdmin && !isCustomerOwner) {
+    const ctx = await getApiContext();
+    const isCustomerOwner = await checkRole(ctx, 'customer_owner');
+    if (!ctx.isAdmin && !isCustomerOwner) {
       return NextResponse.json({ error: 'אין הרשאה' }, { status: 403 });
     }
 
@@ -81,7 +77,7 @@ export async function POST(request: NextRequest) {
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const supabase: any = createAdminClient();
+    const supabase: any = ctx.adminClient;
 
     // Clear idCache for fresh import
     for (const key in idCache) delete idCache[key];
@@ -317,7 +313,7 @@ export async function POST(request: NextRequest) {
         errors,
       },
     });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }

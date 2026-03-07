@@ -1,7 +1,6 @@
-import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth';
-import { hasPermission, hasRole } from '@/lib/permissions';
+import { getApiContext, checkPermission } from '@/lib/api/auth-context';
+import { handleApiError } from '@/lib/api-utils';
 
 interface Customer {
   id: string;
@@ -18,29 +17,23 @@ interface Area {
 
 export async function GET() {
   try {
-    await requireAuth();
-
-    const supabase = await createClient();
-    const isAdmin = await hasRole('admin');
+    const ctx = await getApiContext();
 
     // Fetch customers - admins see all, customer owners see only their own
     let customers: Customer[] = [];
-    if (isAdmin) {
-      const { data } = await supabase
+    if (ctx.isAdmin) {
+      const { data } = await ctx.supabase
         .from('customers')
         .select('id, name, description')
         .order('name');
       customers = data || [];
     } else {
       // Customer owner sees only their customer
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (user) {
-        const { data } = await supabase
+      if (ctx.user) {
+        const { data } = await ctx.supabase
           .from('customers')
           .select('id, name, description')
-          .eq('user_id', user.id);
+          .eq('user_id', ctx.user.id);
         customers = data || [];
       }
     }
@@ -49,14 +42,13 @@ export async function GET() {
     // For admins: use admin client to get all
     // For customer owners: regular client respects RLS
     let customerAreas;
-    if (isAdmin) {
-      const adminClient = createAdminClient();
-      const { data } = await (adminClient.from('customer_areas') as any).select(
+    if (ctx.isAdmin) {
+      const { data } = await (ctx.adminClient.from('customer_areas') as any).select(
         'customer_id, area_id, areas(id, name, description, crop_id, area_type)'
       );
       customerAreas = data;
     } else {
-      const { data } = await (supabase.from('customer_areas') as any).select(
+      const { data } = await (ctx.supabase.from('customer_areas') as any).select(
         'customer_id, area_id, areas(id, name, description, crop_id, area_type)'
       );
       customerAreas = data;
@@ -76,22 +68,22 @@ export async function GET() {
     }
 
     // Fetch all crops for forms
-    const { data: crops } = await supabase
+    const { data: crops } = await ctx.supabase
       .from('crops')
       .select('id, name, description')
       .order('name');
 
     // Get permissions
     const permissions = {
-      canCreateCustomer: await hasPermission('create_customer'),
-      canUpdateCustomer: await hasPermission('update_customer'),
-      canDeleteCustomer: await hasPermission('delete_customer'),
-      canCreateArea: await hasPermission('create_area'),
-      canUpdateArea: await hasPermission('update_area'),
-      canDeleteArea: await hasPermission('delete_area'),
-      canCreateSubArea: await hasPermission('create_sub_area'),
-      canUpdateSubArea: await hasPermission('update_sub_area'),
-      canDeleteSubArea: await hasPermission('delete_sub_area'),
+      canCreateCustomer: await checkPermission(ctx, 'create_customer'),
+      canUpdateCustomer: await checkPermission(ctx, 'update_customer'),
+      canDeleteCustomer: await checkPermission(ctx, 'delete_customer'),
+      canCreateArea: await checkPermission(ctx, 'create_area'),
+      canUpdateArea: await checkPermission(ctx, 'update_area'),
+      canDeleteArea: await checkPermission(ctx, 'delete_area'),
+      canCreateSubArea: await checkPermission(ctx, 'create_sub_area'),
+      canUpdateSubArea: await checkPermission(ctx, 'update_sub_area'),
+      canDeleteSubArea: await checkPermission(ctx, 'delete_sub_area'),
     };
 
     return NextResponse.json({
@@ -100,7 +92,7 @@ export async function GET() {
       crops: crops || [],
       permissions,
     });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }

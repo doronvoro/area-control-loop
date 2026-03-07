@@ -1,7 +1,7 @@
-import { createClient, createAdminClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth';
-import { hasRole } from '@/lib/permissions';
+import { getApiContext } from '@/lib/api/auth-context';
+import { handleApiError } from '@/lib/api-utils';
 
 export async function GET(request: Request) {
   try {
@@ -34,18 +34,17 @@ export async function GET(request: Request) {
     if (error) throw error;
 
     return NextResponse.json(data);
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }
 
 export async function POST(request: Request) {
   try {
-    await requireAuth();
+    const ctx = await getApiContext();
 
     // Only admins can create report areas directly
-    const isAdmin = await hasRole('admin');
-    if (!isAdmin) {
+    if (!ctx.isAdmin) {
       return NextResponse.json(
         { error: 'אין הרשאה ליצור אזור דוח' },
         { status: 403 }
@@ -62,8 +61,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const adminClient = createAdminClient();
-    const { data, error } = await (adminClient
+    const { data, error } = await (ctx.adminClient
       .from('report_areas') as any)
       .insert({
         area_id,
@@ -77,7 +75,7 @@ export async function POST(request: Request) {
     if (error) throw error;
 
     return NextResponse.json(data, { status: 201 });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }

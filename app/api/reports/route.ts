@@ -1,23 +1,19 @@
-import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth';
+import { getApiContext } from '@/lib/api/auth-context';
+import { handleApiError } from '@/lib/api-utils';
 
 export async function GET() {
   try {
-    await requireAuth();
+    const ctx = await getApiContext();
 
     console.log('[Reports GET] Fetching report areas');
 
-    const supabase = await createClient();
-
-    const { data: reportAreas, error } = await supabase
+    const { data: reportAreas, error } = await ctx.supabase
       .from('report_areas')
-      .select(
-        `id, name, description, status, created_at, report_number,
+      .select(`id, name, description, status, created_at, report_number,
         area_type:report_area_types(name, display_name),
         area:areas(id, name),
-        worker:workers(id, name)`
-      )
+        worker:workers(id, name)`)
       .order('created_at', { ascending: false })
       .limit(50);
 
@@ -25,7 +21,6 @@ export async function GET() {
 
     console.log('[Reports GET] Fetched report areas:', reportAreas?.length ?? 0);
 
-    // Find monitoring → action report linkages
     const monitoringIds = (reportAreas || [])
       .filter((r: any) => r.area_type?.name === 'monitoring')
       .map((r: any) => r.id);
@@ -33,8 +28,7 @@ export async function GET() {
     const linkMap = new Map<string, Set<string>>();
 
     if (monitoringIds.length > 0) {
-      const { data: links } = await (supabase
-        .from('monitoring_area_report') as any)
+      const { data: links } = await (ctx.supabase.from('monitoring_area_report') as any)
         .select('area_report_id, actions_area_report:actions_area_report!inner(area_report_id)')
         .in('area_report_id', monitoringIds)
         .not('actions_area_report_id', 'is', null);
@@ -51,14 +45,11 @@ export async function GET() {
 
     const result = (reportAreas || []).map((r: any) => ({
       ...r,
-      ...(linkMap.has(r.id)
-        ? { linked_action_report_ids: [...linkMap.get(r.id)!] }
-        : {}),
+      ...(linkMap.has(r.id) ? { linked_action_report_ids: [...linkMap.get(r.id)!] } : {}),
     }));
 
     return NextResponse.json(result);
-  } catch (error: any) {
-    console.error('[Reports GET] Error:', error.message);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }

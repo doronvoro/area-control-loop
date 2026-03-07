@@ -1,15 +1,13 @@
-import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth';
-import { hasRole } from '@/lib/permissions';
+import { getApiContext } from '@/lib/api/auth-context';
+import { handleApiError } from '@/lib/api-utils';
 import { ENTIRE_AREA_DISPLAY } from '@/lib/constants';
 
 export async function GET(request: Request) {
   try {
-    await requireAuth();
-    const isAdmin = await hasRole('admin');
+    const ctx = await getApiContext();
 
-    if (!isAdmin) {
+    if (!ctx.isAdmin) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -26,10 +24,8 @@ export async function GET(request: Request) {
       );
     }
 
-    const supabase = await createClient();
-
     // Get all report areas for this area
-    const { data: reportAreas, error: reportAreasError } = await supabase
+    const { data: reportAreas, error: reportAreasError } = await ctx.supabase
       .from('report_areas')
       .select('id')
       .eq('area_id', areaId);
@@ -43,7 +39,7 @@ export async function GET(request: Request) {
     const reportAreaIds = (reportAreas as any[]).map((ra) => ra.id);
 
     // Build the query for monitoring reports with full details including treatments
-    let query = supabase
+    let query = ctx.supabase
       .from('monitoring_area_report')
       .select(`
         id,
@@ -105,7 +101,7 @@ export async function GET(request: Request) {
     if (error) throw error;
 
     // Get area info for cases where sub_area_id is null (entire area)
-    const { data: areaInfo } = await supabase
+    const { data: areaInfo } = await ctx.supabase
       .from('areas')
       .select('id, name, crop_id')
       .eq('id', areaId)
@@ -157,8 +153,8 @@ export async function GET(request: Request) {
     console.log('[Monitoring by-area-for-actions GET] Fetched:', filteredFormatted.length, 'reports');
 
     return NextResponse.json(filteredFormatted);
-  } catch (error: any) {
-    console.error('[Monitoring by-area-for-actions GET] Error:', error.message);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    console.error('[Monitoring by-area-for-actions GET] Error:', error instanceof Error ? error.message : error);
+    return handleApiError(error);
   }
 }

@@ -1,39 +1,34 @@
-import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth';
-import { hasRole } from '@/lib/permissions';
+import { getApiContext } from '@/lib/api/auth-context';
+import { handleApiError } from '@/lib/api-utils';
+
+function requireAdmin(ctx: { isAdmin: boolean }) {
+  if (!ctx.isAdmin) {
+    return NextResponse.json({ error: 'אין הרשאה' }, { status: 403 });
+  }
+  return null;
+}
 
 export async function GET() {
   try {
-    await requireAuth();
+    const ctx = await getApiContext();
+    const forbidden = requireAdmin(ctx);
+    if (forbidden) return forbidden;
 
-    const isAdmin = await hasRole('admin');
-    if (!isAdmin) {
-      return NextResponse.json({ error: 'אין הרשאה לצפות בתפקידים' }, { status: 403 });
-    }
-
-    const supabase = await createClient();
-    const { data, error } = await supabase
-      .from('roles')
-      .select('*')
-      .order('name');
-
+    const { data, error } = await ctx.supabase.from('roles').select('*').order('name');
     if (error) throw error;
 
     return NextResponse.json(data);
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }
 
 export async function POST(request: Request) {
   try {
-    await requireAuth();
-
-    const isAdmin = await hasRole('admin');
-    if (!isAdmin) {
-      return NextResponse.json({ error: 'אין הרשאה ליצור תפקיד' }, { status: 403 });
-    }
+    const ctx = await getApiContext();
+    const forbidden = requireAdmin(ctx);
+    if (forbidden) return forbidden;
 
     const body = await request.json();
     const { name, display_name, description } = body;
@@ -42,13 +37,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'שם ושם תצוגה נדרשים' }, { status: 400 });
     }
 
-    const adminClient = createAdminClient();
-    const { data, error } = await (adminClient.from('roles') as any)
-      .insert({
-        name,
-        display_name,
-        description: description || null,
-      })
+    const { data, error } = await (ctx.adminClient.from('roles') as any)
+      .insert({ name, display_name, description: description || null })
       .select()
       .single();
 
@@ -60,19 +50,16 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json(data, { status: 201 });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }
 
 export async function PUT(request: Request) {
   try {
-    await requireAuth();
-
-    const isAdmin = await hasRole('admin');
-    if (!isAdmin) {
-      return NextResponse.json({ error: 'אין הרשאה לעדכן תפקיד' }, { status: 403 });
-    }
+    const ctx = await getApiContext();
+    const forbidden = requireAdmin(ctx);
+    if (forbidden) return forbidden;
 
     const body = await request.json();
     const { id, name, display_name, description } = body;
@@ -81,14 +68,8 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: 'id, שם ושם תצוגה נדרשים' }, { status: 400 });
     }
 
-    const adminClient = createAdminClient();
-    const { data, error } = await (adminClient.from('roles') as any)
-      .update({
-        name,
-        display_name,
-        description: description || null,
-        updated_at: new Date().toISOString(),
-      })
+    const { data, error } = await (ctx.adminClient.from('roles') as any)
+      .update({ name, display_name, description: description || null, updated_at: new Date().toISOString() })
       .eq('id', id)
       .select()
       .single();
@@ -96,34 +77,27 @@ export async function PUT(request: Request) {
     if (error) throw error;
 
     return NextResponse.json(data);
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }
 
 export async function DELETE(request: Request) {
   try {
-    await requireAuth();
-
-    const isAdmin = await hasRole('admin');
-    if (!isAdmin) {
-      return NextResponse.json({ error: 'אין הרשאה למחוק תפקיד' }, { status: 403 });
-    }
+    const ctx = await getApiContext();
+    const forbidden = requireAdmin(ctx);
+    if (forbidden) return forbidden;
 
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 
-    if (!id) {
-      return NextResponse.json({ error: 'id נדרש' }, { status: 400 });
-    }
+    if (!id) return NextResponse.json({ error: 'id נדרש' }, { status: 400 });
 
-    const adminClient = createAdminClient();
-    const { error } = await (adminClient.from('roles') as any).delete().eq('id', id);
-
+    const { error } = await (ctx.adminClient.from('roles') as any).delete().eq('id', id);
     if (error) throw error;
 
     return NextResponse.json({ success: true });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }
