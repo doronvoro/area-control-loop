@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RolesList } from './RolesList';
 import { PermissionsList } from './PermissionsList';
 import { UserRolesList } from './UserRolesList';
 import { Role, Permission } from '@/types/database';
+import { useApiData } from '@/hooks/useApiData';
 
 interface User {
   id: string;
@@ -15,39 +15,15 @@ interface User {
 }
 
 export function RolesPageContent() {
-  const [loading, setLoading] = useState(true);
-  const [roles, setRoles] = useState<Role[]>([]);
-  const [permissions, setPermissions] = useState<Permission[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
+  const { data: roles, loading: rLoading, refetch: refetchRoles } = useApiData<Role[]>('/api/roles');
+  const { data: permissions, loading: pLoading, refetch: refetchPermissions } = useApiData<Permission[]>('/api/permissions');
+  const { data: users, loading: uLoading, refetch: refetchUsers } = useApiData<User[]>('/api/users');
 
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const [rolesRes, permissionsRes, usersRes] = await Promise.all([
-        fetch('/api/roles'),
-        fetch('/api/permissions'),
-        fetch('/api/users'),
-      ]);
+  const loading = rLoading || pLoading || uLoading;
 
-      if (rolesRes.ok) {
-        setRoles(await rolesRes.json());
-      }
-      if (permissionsRes.ok) {
-        setPermissions(await permissionsRes.json());
-      }
-      if (usersRes.ok) {
-        setUsers(await usersRes.json());
-      }
-    } catch (error) {
-      console.error('Failed to fetch data:', error);
-    } finally {
-      setLoading(false);
-    }
+  const refetchAll = async () => {
+    await Promise.all([refetchRoles(), refetchPermissions(), refetchUsers()]);
   };
-
-  useEffect(() => {
-    fetchData();
-  }, []);
 
   if (loading) {
     return (
@@ -67,24 +43,24 @@ export function RolesPageContent() {
 
       <TabsContent value="roles">
         <RolesList
-          roles={roles}
-          permissions={permissions}
-          onRefresh={fetchData}
+          roles={roles || []}
+          permissions={permissions || []}
+          onRefresh={refetchAll}
         />
       </TabsContent>
 
       <TabsContent value="permissions">
         <PermissionsList
-          permissions={permissions}
-          onRefresh={fetchData}
+          permissions={permissions || []}
+          onRefresh={refetchAll}
         />
       </TabsContent>
 
       <TabsContent value="user-roles">
         <UserRolesList
-          roles={roles}
-          users={users}
-          onRefresh={fetchData}
+          roles={roles || []}
+          users={users || []}
+          onRefresh={refetchAll}
         />
       </TabsContent>
     </Tabs>

@@ -25,7 +25,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Plus, Trash2 } from 'lucide-react';
-import { ENTIRE_AREA, ENTIRE_AREA_DISPLAY } from '@/lib/constants';
+import { ENTIRE_AREA, ENTIRE_AREA_DISPLAY, ACTION_STATUS_OPTIONS } from '@/lib/constants';
 
 const subAreaEntrySchema = z.object({
   source: z.enum(['monitoring', 'standalone']),
@@ -59,11 +59,7 @@ interface AdminActionFormProps {
   unitTypes: any[];
 }
 
-const statusOptions = [
-  { value: 'planned', label: 'מתוכנן' },
-  { value: 'in_progress', label: 'בביצוע' },
-  { value: 'completed', label: 'הושלם' },
-];
+const statusOptions = ACTION_STATUS_OPTIONS;
 
 export function AdminActionForm({
   customers,

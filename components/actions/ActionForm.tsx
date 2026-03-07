@@ -26,7 +26,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Plus, Trash2 } from 'lucide-react';
 import { ReportSeverity, SEVERITY_OPTIONS } from '@/types/database';
-import { ENTIRE_AREA, ENTIRE_AREA_DISPLAY } from '@/lib/constants';
+import { ENTIRE_AREA, ENTIRE_AREA_DISPLAY, ACTION_STATUS_OPTIONS } from '@/lib/constants';
 
 const treatmentSchema = z.object({
   action_type_id: z.string().min(1, 'נדרש לבחור סוג פעולה'),
@@ -71,11 +71,7 @@ interface ActionFormProps {
   currentWorkerId?: string;
 }
 
-const statusOptions = [
-  { value: 'planned', label: 'מתוכנן' },
-  { value: 'in_progress', label: 'בביצוע' },
-  { value: 'completed', label: 'הושלם' },
-];
+const statusOptions = ACTION_STATUS_OPTIONS;
 
 export function ActionForm({
   isAdmin,

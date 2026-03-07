@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { toast } from 'sonner';
+import { showToast } from '@/lib/toast';
 import { useRouter } from 'next/navigation';
 import { Save, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -69,15 +69,15 @@ export function IndoorDesignerPageContent() {
     const { areaName, areaDescription, areaGeometry, generatedSubAreas } = state;
 
     if (!areaName.trim()) {
-      toast.error('שם שטח נדרש');
+      showToast.error('שם שטח נדרש');
       return;
     }
     if (!areaGeometry) {
-      toast.error('יש להגדיר את צורת השטח');
+      showToast.error('יש להגדיר את צורת השטח');
       return;
     }
     if (generatedSubAreas.length === 0) {
-      toast.error('יש להגדיר לפחות חלוקה אחת');
+      showToast.error('יש להגדיר לפחות חלוקה אחת');
       return;
     }
 
@@ -146,10 +146,10 @@ export function IndoorDesignerPageContent() {
       }
 
       setSaveProgress(100);
-      toast.success('השטח נוצר בהצלחה!');
+      showToast.success('השטח נוצר בהצלחה!');
       router.push('/admin/areas-management');
     } catch (error: any) {
-      toast.error(error.message || 'שגיאה בשמירת השטח');
+      showToast.error(error.message || 'שגיאה בשמירת השטח');
       console.error('Save error:', error);
     } finally {
       setSaving(false);

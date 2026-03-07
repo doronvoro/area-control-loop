@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { toast } from 'sonner';
+import { showToast } from '@/lib/toast';
 import { Loader2 } from 'lucide-react';
 import { InlineTemplateForm } from '@/components/indoor-designer/tree/InlineTemplateForm';
 import { subdivideRectangle, createRectangleGeometry, getBounds } from '@/components/indoor-designer/geometry/geometry-utils';
@@ -102,7 +102,7 @@ export function InlineIndoorSubAreaForm({
   const handleGenerate = useCallback(
     async (config: InlineTemplateFormData) => {
       if (!geometry) {
-        toast.error('לא נמצאה גאומטריה להורה. יש להגדיר גבולות תחילה.');
+        showToast.error('לא נמצאה גאומטריה להורה. יש להגדיר גבולות תחילה.');
         return;
       }
 
@@ -140,10 +140,10 @@ export function InlineIndoorSubAreaForm({
           }
         }
 
-        toast.success(`נוצרו ${childGeometries.length} תתי-שטחים בהצלחה`);
+        showToast.success(`נוצרו ${childGeometries.length} תתי-שטחים בהצלחה`);
         onSuccess();
       } catch (error: any) {
-        toast.error(error.message || 'שגיאה ביצירת תתי-שטחים');
+        showToast.error(error.message || 'שגיאה ביצירת תתי-שטחים');
         console.error(error);
       } finally {
         setSaving(false);

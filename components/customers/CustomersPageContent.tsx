@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import { CustomersList } from './CustomersList';
 import { Customer } from '@/types/database';
 import { Loader2 } from 'lucide-react';
+import { useApiData } from '@/hooks/useApiData';
 
 interface CustomersPageContentProps {
   canCreate: boolean;
@@ -16,33 +16,7 @@ export function CustomersPageContent({
   canUpdate,
   canDelete,
 }: CustomersPageContentProps) {
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    async function fetchCustomers() {
-      try {
-        setLoading(true);
-        setError(null);
-
-        const response = await fetch('/api/customers');
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || 'שגיאה בטעינת הלקוחות');
-        }
-
-        const data = await response.json();
-        setCustomers(data);
-      } catch (err: any) {
-        setError(err.message || 'שגיאה בטעינת הנתונים');
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchCustomers();
-  }, []);
+  const { data: customers, loading, error } = useApiData<Customer[]>('/api/customers');
 
   if (loading) {
     return (
@@ -63,7 +37,7 @@ export function CustomersPageContent({
 
   return (
     <CustomersList
-      customers={customers}
+      customers={customers || []}
       canCreate={canCreate}
       canUpdate={canUpdate}
       canDelete={canDelete}

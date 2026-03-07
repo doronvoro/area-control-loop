@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { toast } from 'sonner';
+import { showToast } from '@/lib/toast';
 import { InteractiveMap } from './InteractiveMap';
 import { MapSidebar } from './MapSidebar';
 import type {
@@ -30,7 +30,7 @@ export function MapPageContent() {
       const data = await res.json();
       setAreas(data.areas || []);
     } catch (error: any) {
-      toast.error('שגיאה בטעינת שטחים');
+      showToast.error('שגיאה בטעינת שטחים');
       console.error(error);
     } finally {
       setLoading(false);
@@ -63,10 +63,10 @@ export function MapPageContent() {
         throw new Error(data.error || 'Failed to save geometry');
       }
 
-      toast.success('גבולות נשמרו בהצלחה');
+      showToast.success('גבולות נשמרו בהצלחה');
       await fetchAreas();
     } catch (error: any) {
-      toast.error(error.message || 'שגיאה בשמירת גבולות');
+      showToast.error(error.message || 'שגיאה בשמירת גבולות');
       console.error(error);
     }
   };

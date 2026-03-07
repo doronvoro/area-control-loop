@@ -1,36 +1,30 @@
-import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
-import { getCurrentWorker, getCurrentCustomer, requireAuth } from '@/lib/auth';
-import { hasRole } from '@/lib/permissions';
+import { getApiContext, requireWorkerAdminOrCustomer, resolveCustomerId } from '@/lib/api/auth-context';
+import { handleApiError } from '@/lib/api-utils';
 import { AreaTypeId } from '@/types/database';
 
 export async function GET(request: Request) {
   try {
-    await requireAuth();
-    const supabase = await createClient();
-    const worker = await getCurrentWorker();
-    const isAdmin = await hasRole('admin');
-    const customer = await getCurrentCustomer();
+    const ctx = await getApiContext();
 
-    if (!worker && !isAdmin && !customer) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const authError = requireWorkerAdminOrCustomer(ctx);
+    if (authError) return authError;
 
     const { searchParams } = new URL(request.url);
-    const customerId = searchParams.get('customerId') || (worker as any)?.customer_id || (customer as any)?.id || null;
+    const customerId = searchParams.get('customerId') || resolveCustomerId(ctx);
 
     // Get areas accessible to this user
     let areaIds: string[] = [];
 
-    if (isAdmin && !customerId) {
+    if (ctx.isAdmin && !customerId) {
       // Admin without filter: get all areas that have reports
-      const { data: allReportAreas } = await supabase
+      const { data: allReportAreas } = await ctx.supabase
         .from('report_areas')
         .select('area_id')
         .eq('area_type_id', AreaTypeId.MONITORING);
       areaIds = [...new Set((allReportAreas || []).map((ra: any) => ra.area_id))];
     } else if (customerId) {
-      const { data: customerAreas } = await supabase
+      const { data: customerAreas } = await ctx.supabase
         .from('customer_areas')
         .select('area_id')
         .eq('customer_id', customerId);
@@ -42,20 +36,19 @@ export async function GET(request: Request) {
     }
 
     // Get area details
-    const { data: areas } = await supabase
+    const { data: areas } = await ctx.supabase
       .from('areas')
       .select('id, name, description')
       .in('id', areaIds);
 
     // Get monitoring report areas
-    const { data: monReportAreas } = await supabase
+    const { data: monReportAreas } = await ctx.supabase
       .from('report_areas')
       .select('id, area_id')
       .eq('area_type_id', AreaTypeId.MONITORING)
       .in('area_id', areaIds);
 
     if (!monReportAreas || monReportAreas.length === 0) {
-      // No monitoring data — all areas are "not inspected"
       const areasStatus = (areas || []).map((a: any) => ({
         id: a.id,
         name: a.name,
@@ -76,7 +69,7 @@ export async function GET(request: Request) {
     );
 
     // Get all monitoring reports with treatments
-    const { data: monitoringReports } = await (supabase
+    const { data: monitoringReports } = await (ctx.supabase
       .from('monitoring_area_report') as any)
       .select(`
         id,
@@ -90,7 +83,7 @@ export async function GET(request: Request) {
       .in('area_report_id', reportAreaIds) as { data: any[] | null };
 
     // Get latest action dates per area
-    const { data: actionReportAreas } = await supabase
+    const { data: actionReportAreas } = await ctx.supabase
       .from('report_areas')
       .select('id, area_id')
       .eq('area_type_id', AreaTypeId.ACTION)
@@ -103,7 +96,7 @@ export async function GET(request: Request) {
         actionReportAreas.map((ra: any) => [ra.id, ra.area_id])
       );
 
-      const { data: actionReports } = await (supabase
+      const { data: actionReports } = await (ctx.supabase
         .from('actions_area_report') as any)
         .select('id, area_report_id, created_at')
         .in('area_report_id', actionRAIds)
@@ -195,8 +188,11 @@ export async function GET(request: Request) {
     });
 
     return NextResponse.json({ areas: areasStatus });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ error: message }, { status: 500 });
+  } catch (error) {
+    if (error && typeof error === 'object' && 'digest' in error) {
+      throw error;
+    }
+    console.error('GET /api/areas/status error:', JSON.stringify(error, null, 2));
+    return handleApiError(error);
   }
 }

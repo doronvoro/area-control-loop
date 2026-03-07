@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import { WorkersList } from './WorkersList';
 import { Customer, WorkerType } from '@/types/database';
 import { Loader2 } from 'lucide-react';
+import { useApiData } from '@/hooks/useApiData';
 
 interface Worker {
   id: string;
@@ -28,57 +28,12 @@ export function WorkersPageContent({
   canUpdate,
   canDelete,
 }: WorkersPageContentProps) {
-  const [workers, setWorkers] = useState<Worker[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [workerTypes, setWorkerTypes] = useState<WorkerType[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data: workers, loading: wLoading, error: wError } = useApiData<Worker[]>('/api/workers?all=true');
+  const { data: customers, loading: cLoading, error: cError } = useApiData<Customer[]>('/api/customers');
+  const { data: workerTypes, loading: wtLoading, error: wtError } = useApiData<WorkerType[]>('/api/worker-types');
 
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        setLoading(true);
-        setError(null);
-
-        const [workersRes, customersRes, workerTypesRes] = await Promise.all([
-          fetch('/api/workers?all=true'),
-          fetch('/api/customers'),
-          fetch('/api/worker-types'),
-        ]);
-
-        if (!workersRes.ok) {
-          const errorData = await workersRes.json();
-          throw new Error(errorData.error || 'שגיאה בטעינת העובדים');
-        }
-
-        if (!customersRes.ok) {
-          const errorData = await customersRes.json();
-          throw new Error(errorData.error || 'שגיאה בטעינת הלקוחות');
-        }
-
-        if (!workerTypesRes.ok) {
-          const errorData = await workerTypesRes.json();
-          throw new Error(errorData.error || 'שגיאה בטעינת סוגי העובדים');
-        }
-
-        const [workersData, customersData, workerTypesData] = await Promise.all([
-          workersRes.json(),
-          customersRes.json(),
-          workerTypesRes.json(),
-        ]);
-
-        setWorkers(workersData);
-        setCustomers(customersData);
-        setWorkerTypes(workerTypesData);
-      } catch (err: any) {
-        setError(err.message || 'שגיאה בטעינת הנתונים');
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchData();
-  }, []);
+  const loading = wLoading || cLoading || wtLoading;
+  const error = wError || cError || wtError;
 
   if (loading) {
     return (
@@ -99,9 +54,9 @@ export function WorkersPageContent({
 
   return (
     <WorkersList
-      workers={workers}
-      customers={customers}
-      workerTypes={workerTypes}
+      workers={workers || []}
+      customers={customers || []}
+      workerTypes={workerTypes || []}
       canCreate={canCreate}
       canUpdate={canUpdate}
       canDelete={canDelete}

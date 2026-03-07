@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { toast } from 'sonner';
+import { showToast } from '@/lib/toast';
 import { Loader2 } from 'lucide-react';
 import { InteractiveMap } from '@/components/map/InteractiveMap';
 import type { AreaWithGeometry, DrawingState, GeoJSONPolygon } from './types';
@@ -33,7 +33,7 @@ export function LiveMapView({
       const data = await res.json();
       setAreas(data.areas || []);
     } catch (error: any) {
-      toast.error('שגיאה בטעינת שטחים');
+      showToast.error('שגיאה בטעינת שטחים');
       console.error(error);
     } finally {
       setLoading(false);

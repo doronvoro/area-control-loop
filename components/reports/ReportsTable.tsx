@@ -34,7 +34,7 @@ import {
   CornerDownLeft,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { toast } from 'sonner';
+import { showToast } from '@/lib/toast';
 import { ReportDetailSheet } from './ReportDetailSheet';
 import { STATUS_LABELS, REPORT_TYPE_LABELS } from '@/lib/reports/labels';
 
@@ -217,7 +217,7 @@ export function ReportsTable({ reportAreas }: ReportsTableProps) {
       a.remove();
       window.URL.revokeObjectURL(url);
     } catch {
-      toast.error('שגיאה בהורדת הקובץ');
+      showToast.error('שגיאה בהורדת הקובץ');
     } finally {
       setDownloading(false);
     }

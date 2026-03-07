@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -25,6 +25,7 @@ import { Plus, Trash2, Edit, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-reac
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
+import { useApiData } from '@/hooks/useApiData';
 
 const cropSchema = z.object({
   name: z.string().min(1, 'שם גידול נדרש'),
@@ -47,11 +48,11 @@ type SortField = 'name' | 'description';
 type SortDirection = 'asc' | 'desc';
 
 export function CropsManager() {
-  const [crops, setCrops] = useState<Crop[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: crops, loading, error: fetchError, refetch } = useApiData<Crop[]>('/api/crops');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingCrop, setEditingCrop] = useState<Crop | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [mutationError, setMutationError] = useState<string | null>(null);
+  const error = mutationError || fetchError;
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
@@ -64,12 +65,8 @@ export function CropsManager() {
     },
   });
 
-  useEffect(() => {
-    fetchCrops();
-  }, []);
-
   const sortedCrops = useMemo(() => {
-    return [...crops].sort((a, b) => {
+    return [...(crops || [])].sort((a, b) => {
       const aValue = (a[sortField] || '').toLowerCase();
       const bValue = (b[sortField] || '').toLowerCase();
 
@@ -98,21 +95,6 @@ export function CropsManager() {
       : <ArrowDown className="h-4 w-4 mr-2" />;
   };
 
-  const fetchCrops = async () => {
-    setLoading(true);
-    try {
-      const response = await fetch('/api/crops');
-      if (response.ok) {
-        const data = await response.json();
-        setCrops(data);
-      }
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleOpenDialog = (crop?: Crop) => {
     if (crop) {
       setEditingCrop(crop);
@@ -139,7 +121,7 @@ export function CropsManager() {
   };
 
   const onSubmit = async (data: CropFormData) => {
-    setError(null);
+    setMutationError(null);
     try {
       const url = '/api/crops';
       const method = editingCrop ? 'PUT' : 'POST';
@@ -159,9 +141,9 @@ export function CropsManager() {
       }
 
       handleCloseDialog();
-      fetchCrops();
+      refetch();
     } catch (err: any) {
-      setError(err.message);
+      setMutationError(err.message);
     }
   };
 
@@ -178,9 +160,9 @@ export function CropsManager() {
         throw new Error(errorData.error || 'שגיאה במחיקה');
       }
 
-      fetchCrops();
+      refetch();
     } catch (err: any) {
-      setError(err.message);
+      setMutationError(err.message);
     }
   };
 
@@ -263,7 +245,7 @@ export function CropsManager() {
                   <TableCell>{crop.description || '-'}</TableCell>
                   <TableCell>
                     {crop.parent_crop_id
-                      ? crops.find((c) => c.id === crop.parent_crop_id)?.name || '-'
+                      ? (crops || []).find((c) => c.id === crop.parent_crop_id)?.name || '-'
                       : '-'}
                   </TableCell>
                 </TableRow>
@@ -317,7 +299,7 @@ export function CropsManager() {
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
                 <option value="">ללא גידול אב</option>
-                {crops
+                {(crops || [])
                   .filter((c) => c.id !== editingCrop?.id)
                   .map((c) => (
                     <option key={c.id} value={c.id}>

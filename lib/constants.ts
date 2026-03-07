@@ -15,6 +15,13 @@ export function entireAreaToNull(id: string | null | undefined): string | null {
   return isEntireArea(id) ? null : (id as string);
 }
 
+// Action status options used in action forms
+export const ACTION_STATUS_OPTIONS = [
+  { value: 'planned', label: 'מתוכנן' },
+  { value: 'in_progress', label: 'בביצוע' },
+  { value: 'completed', label: 'הושלם' },
+] as const;
+
 // Get display name for a sub_area_id, with fallback for null (entire area)
 export function getSubAreaDisplay(
   subArea: { display?: string | null; name?: string | null } | null | undefined

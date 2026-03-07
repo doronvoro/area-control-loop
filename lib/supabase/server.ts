@@ -92,9 +92,6 @@ export async function createClient() {
   );
 }
 
-/** @deprecated Use createClient() instead - it's now token-aware */
-export const createClientFromRequest = createClient;
-
 /**
  * Create a Supabase admin client with service role key.
  * Use this for admin operations like creating/deleting users.

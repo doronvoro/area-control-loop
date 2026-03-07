@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { toast } from 'sonner';
+import { showToast } from '@/lib/toast';
 import { MapPin, Pencil, Plus, Trash2, X, Loader2, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -67,7 +67,7 @@ export function OutdoorAreaEditor({
       setFitToEntityId(targetId);
       setTimeout(() => setFitToEntityId(null), 500);
     } catch (error: any) {
-      toast.error('שגיאה בטעינת נתוני מפה');
+      showToast.error('שגיאה בטעינת נתוני מפה');
       console.error(error);
     } finally {
       setLoading(false);
@@ -99,11 +99,11 @@ export function OutdoorAreaEditor({
         throw new Error(data.error || 'Failed to save geometry');
       }
 
-      toast.success('גבולות נשמרו בהצלחה');
+      showToast.success('גבולות נשמרו בהצלחה');
       await fetchMapData();
       onRefresh();
     } catch (error: any) {
-      toast.error(error.message || 'שגיאה בשמירת גבולות');
+      showToast.error(error.message || 'שגיאה בשמירת גבולות');
       console.error(error);
     }
   };

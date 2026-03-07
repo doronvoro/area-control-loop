@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -25,6 +25,7 @@ import { Plus, Trash2, Edit, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-reac
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
+import { useApiData } from '@/hooks/useApiData';
 
 const findingSchema = z.object({
   name: z.string().min(1, 'שם ממצא נדרש'),
@@ -46,11 +47,11 @@ type SortField = 'name' | 'description';
 type SortDirection = 'asc' | 'desc';
 
 export function FindingsManager() {
-  const [findings, setFindings] = useState<Finding[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: findings, loading, error: fetchError, refetch } = useApiData<Finding[]>('/api/findings');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingFinding, setEditingFinding] = useState<Finding | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [mutationError, setMutationError] = useState<string | null>(null);
+  const error = mutationError || fetchError;
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
@@ -62,12 +63,8 @@ export function FindingsManager() {
     },
   });
 
-  useEffect(() => {
-    fetchFindings();
-  }, []);
-
   const sortedFindings = useMemo(() => {
-    return [...findings].sort((a, b) => {
+    return [...(findings || [])].sort((a, b) => {
       const aValue = (a[sortField] || '').toLowerCase();
       const bValue = (b[sortField] || '').toLowerCase();
 
@@ -96,21 +93,6 @@ export function FindingsManager() {
       : <ArrowDown className="h-4 w-4 mr-2" />;
   };
 
-  const fetchFindings = async () => {
-    setLoading(true);
-    try {
-      const response = await fetch('/api/findings');
-      if (response.ok) {
-        const data = await response.json();
-        setFindings(data);
-      }
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleOpenDialog = (finding?: Finding) => {
     if (finding) {
       setEditingFinding(finding);
@@ -135,7 +117,7 @@ export function FindingsManager() {
   };
 
   const onSubmit = async (data: FindingFormData) => {
-    setError(null);
+    setMutationError(null);
     try {
       const url = '/api/findings';
       const method = editingFinding ? 'PUT' : 'POST';
@@ -155,9 +137,9 @@ export function FindingsManager() {
       }
 
       handleCloseDialog();
-      fetchFindings();
+      refetch();
     } catch (err: any) {
-      setError(err.message);
+      setMutationError(err.message);
     }
   };
 
@@ -174,9 +156,9 @@ export function FindingsManager() {
         throw new Error(errorData.error || 'שגיאה במחיקה');
       }
 
-      fetchFindings();
+      refetch();
     } catch (err: any) {
-      setError(err.message);
+      setMutationError(err.message);
     }
   };
 
