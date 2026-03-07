@@ -67,6 +67,7 @@ export function ActionTaskList() {
   const [materials, setMaterials] = useState<any[]>([]);
   const [subAreas, setSubAreas] = useState<any[]>([]);
   const [selectedWorkerId, setSelectedWorkerId] = useState<string>('');
+  const [allTaskCounts, setAllTaskCounts] = useState<Record<string, number>>({});
 
   // Fetch tasks
   const fetchTasks = useCallback(async () => {
@@ -80,10 +81,16 @@ export function ActionTaskList() {
         throw new Error(data.error || 'Failed to fetch tasks');
       }
       const data = await res.json();
-      setTasks(data.tasks || []);
-      // Only update the full areas list when fetching all (no filter)
+      const fetchedTasks: ActionTask[] = data.tasks || [];
+      setTasks(fetchedTasks);
+      // Only update the full areas list and task counts when fetching all (no filter)
       if (selectedAreaId === 'all') {
         setAreas(data.areas || []);
+        const counts: Record<string, number> = {};
+        for (const t of fetchedTasks) {
+          counts[t.area_id] = (counts[t.area_id] || 0) + 1;
+        }
+        setAllTaskCounts(counts);
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'שגיאה בטעינת משימות');
@@ -285,11 +292,7 @@ export function ActionTaskList() {
     name: tasksByArea[id][0]?.area_name || id,
   }));
 
-  // Count open tasks per area
-  const taskCountByArea: Record<string, number> = {};
-  for (const task of tasks) {
-    taskCountByArea[task.area_id] = (taskCountByArea[task.area_id] || 0) + 1;
-  }
+  const totalTaskCount = Object.values(allTaskCounts).reduce((sum, n) => sum + n, 0);
 
   const workers = formData?.initialWorkers || [];
 
@@ -390,10 +393,10 @@ export function ActionTaskList() {
                   </SelectTrigger>
                   <SelectContent position="popper" sideOffset={4}>
                     <SelectItem value="all">
-                      <span className="flex items-center justify-between gap-3 w-full">
+                      <span className="area-select-item">
                         <span>כל השטחים</span>
-                        {tasks.length > 0 && (
-                          <span className="area-task-count-badge">{tasks.length}</span>
+                        {totalTaskCount > 0 && (
+                          <span className="area-task-count-badge ms-auto">{totalTaskCount}</span>
                         )}
                       </span>
                     </SelectItem>
@@ -403,13 +406,13 @@ export function ActionTaskList() {
                       const cropLabel = cropName
                         ? variety ? `${cropName}, ${variety}` : cropName
                         : 'ללא גידול';
-                      const count = taskCountByArea[area.id] || 0;
+                      const count = allTaskCounts[area.id] || 0;
                       return (
                         <SelectItem key={area.id} value={area.id}>
-                          <span className="flex items-center justify-between gap-3 w-full">
+                          <span className="area-select-item">
                             <span>{`${area.name} (${cropLabel})`}</span>
                             {count > 0 && (
-                              <span className="area-task-count-badge">{count}</span>
+                              <span className="area-task-count-badge ms-auto">{count}</span>
                             )}
                           </span>
                         </SelectItem>

@@ -433,7 +433,19 @@
   box-shadow: 0 0 0 3px oklch(0.55 0.16 55 / 12%) !important;
 }
 
-/* --- Area Task Count Badge (in dropdown) --- */
+/* --- Area Select Item & Task Count Badge (in dropdown) --- */
+[data-slot="select-item"]:has(.area-select-item) > span[data-slot="select-item-indicator"] ~ span {
+  flex: 1;
+  min-width: 0;
+}
+
+.area-select-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+}
+
 .area-task-count-badge {
   display: inline-flex;
   align-items: center;
