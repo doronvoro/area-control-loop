@@ -176,7 +176,7 @@ export function StandaloneActionForm({
                 <SelectValue placeholder="בחר ממצא" />
               </SelectTrigger>
               <SelectContent>
-                {findings.map((f) => (
+                {[...findings].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'he')).map((f) => (
                   <SelectItem key={f.id} value={f.id}>
                     {f.name}
                   </SelectItem>

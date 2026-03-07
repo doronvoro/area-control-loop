@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { getSubAreaLabel } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 import { useForm, useFieldArray } from 'react-hook-form';
@@ -36,6 +36,10 @@ import {
   Send,
   ChevronDown,
   ChevronUp,
+  Copy,
+  Leaf,
+  X,
+  RotateCcw,
 } from 'lucide-react';
 import { ReportSeverity, SEVERITY_OPTIONS } from '@/types/database';
 import { MultiSelect } from '@/components/ui/multi-select';
@@ -127,6 +131,16 @@ export function MonitoringForm({
   const [loadingAreas, setLoadingAreas] = useState(false);
   const [loadingSubAreas, setLoadingSubAreas] = useState(false);
 
+  // Quick-resume from localStorage
+  const [lastSelections, setLastSelections] = useState<{
+    inspector_id?: string; area_id?: string; inspector_name?: string; area_name?: string;
+  } | null>(null);
+  const [showQuickResume, setShowQuickResume] = useState(false);
+
+  // Step completion pulse tracking
+  const prevStepRef = useRef(0);
+  const [justCompletedSteps, setJustCompletedSteps] = useState<Set<number>>(new Set());
+
   const form = useForm<MonitoringFormData>({
     resolver: zodResolver(monitoringSchema),
     defaultValues: {
@@ -153,11 +167,17 @@ export function MonitoringForm({
 
   // Progress step calculation
   const currentStep = useMemo(() => {
-    if (!watchedCustomerId) return 0;
-    if (!watchedInspectorId) return 1;
-    if (!watchedAreaId) return 2;
-    return 3;
-  }, [watchedCustomerId, watchedInspectorId, watchedAreaId]);
+    if (isAdmin) {
+      if (!watchedCustomerId) return 0;
+      if (!watchedInspectorId) return 1;
+      if (!watchedAreaId) return 2;
+      return 3;
+    }
+    // Non-admin: no customer step
+    if (!watchedInspectorId) return 0;
+    if (!watchedAreaId) return 1;
+    return 2;
+  }, [isAdmin, watchedCustomerId, watchedInspectorId, watchedAreaId]);
 
   // Load all action types once on mount (they're global, not per crop/finding)
   useEffect(() => {
@@ -179,6 +199,101 @@ export function MonitoringForm({
     };
     loadActionTypes();
   }, []);
+
+  // Load last selections from localStorage on mount
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('monitoring_last_selections');
+      if (raw) {
+        const saved = JSON.parse(raw);
+        if (saved?.inspector_id && saved?.area_id) {
+          setLastSelections(saved);
+          setShowQuickResume(true);
+        }
+      }
+    } catch { /* ignore */ }
+  }, []);
+
+  // Track step completion for pulse animation
+  useEffect(() => {
+    if (currentStep > prevStepRef.current) {
+      const newCompleted = new Set<number>();
+      for (let i = prevStepRef.current; i < currentStep; i++) {
+        newCompleted.add(i);
+      }
+      setJustCompletedSteps(newCompleted);
+      const timer = setTimeout(() => setJustCompletedSteps(new Set()), 600);
+      prevStepRef.current = currentStep;
+      return () => clearTimeout(timer);
+    }
+    prevStepRef.current = currentStep;
+  }, [currentStep]);
+
+  // Auto-scroll to next field on selection
+  const scrollToNext = useCallback((elementId: string) => {
+    setTimeout(() => {
+      document.getElementById(elementId)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 150);
+  }, []);
+
+  useEffect(() => {
+    if (watchedCustomerId && !watchedInspectorId) {
+      scrollToNext('inspector-section');
+    }
+  }, [watchedCustomerId]);
+
+  useEffect(() => {
+    if (watchedInspectorId && !watchedAreaId) {
+      scrollToNext('area-section');
+    }
+  }, [watchedInspectorId]);
+
+  useEffect(() => {
+    if (watchedAreaId) {
+      scrollToNext('entries-section');
+    }
+  }, [watchedAreaId]);
+
+  // Quick resume handler
+  const handleQuickResume = useCallback(() => {
+    if (!lastSelections) return;
+    const { inspector_id, area_id } = lastSelections;
+    if (inspector_id && inspectors.some(i => i.id === inspector_id)) {
+      form.setValue('inspector_id', inspector_id);
+    }
+    if (area_id && areas.some(a => a.id === area_id)) {
+      form.setValue('area_id', area_id);
+    }
+    setShowQuickResume(false);
+  }, [lastSelections, inspectors, areas, form]);
+
+  // Duplicate entry handler
+  const duplicateEntry = useCallback((index: number) => {
+    const source = form.getValues(`entries.${index}`);
+    append({
+      sub_area_ids: [],
+      finding_id: source.finding_id,
+      severity: source.severity,
+      treatments: source.treatments.map(t => ({ ...t })),
+    });
+    const newIndex = fields.length;
+    const cropId = entryCropIds[index];
+    if (cropId) {
+      setEntryCropIds(prev => ({ ...prev, [newIndex]: cropId }));
+      setEntryFindings(prev => ({ ...prev, [newIndex]: entryFindings[index] || findings }));
+      source.treatments.forEach((_, tIdx) => {
+        const srcKey = `${index}-${tIdx}`;
+        const dstKey = `${newIndex}-${tIdx}`;
+        if (treatmentMaterials[srcKey]) {
+          setTreatmentMaterials(prev => ({ ...prev, [dstKey]: treatmentMaterials[srcKey] }));
+        }
+        if (treatmentRecommendedDosage[srcKey]) {
+          setTreatmentRecommendedDosage(prev => ({ ...prev, [dstKey]: treatmentRecommendedDosage[srcKey] }));
+          setTreatmentRecommendedUnitTypeId(prev => ({ ...prev, [dstKey]: treatmentRecommendedUnitTypeId[srcKey] }));
+        }
+      });
+    }
+  }, [form, append, fields.length, entryCropIds, entryFindings, findings, treatmentMaterials, treatmentRecommendedDosage, treatmentRecommendedUnitTypeId]);
 
   // Fetch inspectors and areas when customer changes (admin only)
   useEffect(() => {
@@ -613,6 +728,18 @@ export function MonitoringForm({
         throw new Error(errorData.error || 'שגיאה בשמירת הדוח');
       }
 
+      // Save selections to localStorage for quick-resume
+      try {
+        const selectedInspector = inspectors.find(i => i.id === data.inspector_id);
+        const selectedArea = areas.find(a => a.id === data.area_id);
+        localStorage.setItem('monitoring_last_selections', JSON.stringify({
+          inspector_id: data.inspector_id,
+          area_id: data.area_id,
+          inspector_name: selectedInspector?.name || '',
+          area_name: selectedArea?.name || '',
+        }));
+      } catch { /* ignore */ }
+
       setSuccess(true);
       form.reset();
       if (!isAdmin && customerIdForData) {
@@ -640,7 +767,7 @@ export function MonitoringForm({
   const LoadingSpinner = () => <Loader2 className="h-3.5 w-3.5 animate-spin inline ms-1.5 opacity-60" />;
 
   const steps = [
-    { label: 'לקוח', icon: User },
+    ...(isAdmin ? [{ label: 'לקוח', icon: User }] : []),
     { label: 'פקח', icon: User },
     { label: 'שטח', icon: MapPin },
     { label: 'ממצאים', icon: ClipboardList },
@@ -649,10 +776,10 @@ export function MonitoringForm({
   return (
     <div className="monitoring-form-container max-w-4xl mx-auto">
       {/* Hero Header */}
-      <div className="monitoring-hero px-6 py-8 md:px-8 md:py-10">
+      <div className="monitoring-hero px-6 py-5 md:px-8 md:py-6">
         <div className="hero-pattern" />
         <div className="relative z-10">
-          <div className="flex items-center justify-center gap-3 mb-3">
+          <div className="flex items-center justify-center gap-3">
             <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-white/15 backdrop-blur-sm">
               <ClipboardList className="h-5 w-5 text-white" />
             </div>
@@ -660,14 +787,11 @@ export function MonitoringForm({
               טופס ניטור חדש
             </h2>
           </div>
-          <p className="text-center text-white/70 text-sm">
-            מלא את פרטי הניטור עבור השטח הנבחר
-          </p>
         </div>
       </div>
 
       {/* Progress Steps */}
-      <div className="progress-steps border-b border-border/40">
+      <div className="progress-steps">
         {steps.map((step, i) => (
           <div key={i} className="progress-step">
             <div className="flex flex-col items-center gap-1">
@@ -675,11 +799,14 @@ export function MonitoringForm({
                 i < currentStep ? 'step-circle-complete' :
                 i === currentStep ? 'step-circle-active' :
                 'step-circle-pending'
-              }`}>
+              } ${justCompletedSteps.has(i) ? 'step-circle-just-completed' : ''}`}>
                 {i < currentStep ? (
                   <Check className="h-3.5 w-3.5" />
                 ) : (
                   <step.icon className="h-3.5 w-3.5" />
+                )}
+                {i === steps.length - 1 && currentStep >= steps.length - 1 && fields.length > 0 && (
+                  <span className="step-badge">{fields.length}</span>
                 )}
               </div>
               <span className={`step-label ${i === currentStep ? 'step-label-active' : ''}`}>
@@ -692,6 +819,29 @@ export function MonitoringForm({
           </div>
         ))}
       </div>
+
+      {/* Quick Resume Chip */}
+      {showQuickResume && lastSelections && (
+        <div className="flex justify-center py-3">
+          <button
+            type="button"
+            className="quick-resume-chip"
+            onClick={handleQuickResume}
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            <span>המשך מהניטור הקודם?</span>
+            {lastSelections.area_name && (
+              <span className="font-bold">{lastSelections.area_name}</span>
+            )}
+            <span
+              className="quick-resume-close"
+              onClick={(e) => { e.stopPropagation(); setShowQuickResume(false); }}
+            >
+              <X className="h-3 w-3" />
+            </span>
+          </button>
+        </div>
+      )}
 
       {/* Form Body */}
       <div className="p-4 md:p-6 space-y-5">
@@ -716,138 +866,199 @@ export function MonitoringForm({
             )}
 
             {/* Section 1: Customer & Inspector Selection */}
-            <div className="monitoring-section section-customer p-5">
-              <div className="section-header">
-                <div className="section-icon section-icon-customer">
-                  <User className="h-4 w-4" />
+            <div id="customer-section" className={`monitoring-section section-customer px-5 py-3.5 ${
+              currentStep === 0 ? 'section-entering' : currentStep > 1 ? 'section-completed' : ''
+            }`}>
+              {isAdmin ? (
+                <>
+                  <div className="section-header">
+                    <div className="section-icon section-icon-customer">
+                      <User className="h-4 w-4" />
+                    </div>
+                    <h3 className="font-bold text-base">פרטי לקוח ופקח</h3>
+                    {watchedCustomerId && watchedInspectorId && (
+                      <span className="field-check"><Check className="h-2.5 w-2.5" /></span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="customer_id"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="font-semibold text-sm">לקוח *</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl>
+                              <SelectTrigger className="h-11 monitoring-select-trigger">
+                                <SelectValue placeholder="בחר לקוח" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {customers.map((customer) => (
+                                <SelectItem key={customer.id} value={customer.id}>
+                                  {customer.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="inspector_id"
+                      render={({ field }) => (
+                        <FormItem id="inspector-section">
+                          <FormLabel className="font-semibold text-sm">
+                            פקח *
+                            {loadingInspectors && <LoadingSpinner />}
+                          </FormLabel>
+                          <Select
+                            onValueChange={field.onChange}
+                            value={field.value}
+                            disabled={!watchedCustomerId || loadingInspectors}
+                          >
+                            <FormControl>
+                              <SelectTrigger className="h-11 monitoring-select-trigger">
+                                <SelectValue placeholder={
+                                  !watchedCustomerId ? 'בחר לקוח תחילה' : 'בחר'
+                                } />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent position="popper" sideOffset={4}>
+                              {inspectors.map((inspector) => (
+                                <SelectItem key={inspector.id} value={inspector.id}>
+                                  {inspector.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </>
+              ) : (
+                <div className="section-header-inline">
+                  <div className="section-icon section-icon-customer shrink-0">
+                    <User className="h-4 w-4" />
+                  </div>
+                  <h3 className="font-bold text-base shrink-0">פקח</h3>
+                  {loadingInspectors && <LoadingSpinner />}
+
+                  <div className="flex items-center shrink-0">
+                    <FormField
+                      control={form.control}
+                      name="inspector_id"
+                      render={({ field }) => (
+                        <FormItem id="inspector-section">
+                          <Select
+                            onValueChange={field.onChange}
+                            value={field.value}
+                            disabled={!watchedCustomerId || loadingInspectors}
+                          >
+                            <FormControl>
+                              <SelectTrigger className="h-11 w-56 monitoring-select-trigger">
+                                <SelectValue placeholder="בחר" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent position="popper" sideOffset={4}>
+                              {inspectors.map((inspector) => (
+                                <SelectItem key={inspector.id} value={inspector.id}>
+                                  {inspector.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    {watchedInspectorId && (
+                      <span className="field-check"><Check className="h-2.5 w-2.5" /></span>
+                    )}
+                  </div>
                 </div>
-                <h3 className="font-bold text-base">פרטי לקוח ופקח</h3>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Customer Selection - Admin only */}
-                {isAdmin && (
+              )}
+            </div>
+
+            {/* Section 2: Area Selection */}
+            <div id="area-section" className={`monitoring-section section-area px-5 py-3.5 ${
+              currentStep === 2 ? 'section-entering' : currentStep > 2 ? 'section-completed' : ''
+            }`}>
+              <div className="section-header-inline">
+                <div className="section-icon section-icon-area shrink-0">
+                  <MapPin className="h-4 w-4" />
+                </div>
+                <h3 className="font-bold text-base shrink-0">שטח</h3>
+                {loadingAreas && <LoadingSpinner />}
+                <div className="flex items-center shrink-0">
                   <FormField
                     control={form.control}
-                    name="customer_id"
+                    name="area_id"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="font-semibold text-sm">לקוח *</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
+                        <Select
+                          onValueChange={field.onChange}
+                          value={field.value}
+                          disabled={!watchedCustomerId || loadingAreas}
+                        >
                           <FormControl>
-                            <SelectTrigger className="h-11 monitoring-select-trigger">
-                              <SelectValue placeholder="בחר לקוח" />
+                            <SelectTrigger className="h-11 w-56 monitoring-select-trigger">
+                              <SelectValue placeholder={
+                                !watchedCustomerId ? 'בחר לקוח תחילה' : 'בחר'
+                              } />
                             </SelectTrigger>
                           </FormControl>
-                          <SelectContent>
-                            {customers.map((customer) => (
-                              <SelectItem key={customer.id} value={customer.id}>
-                                {customer.name}
-                              </SelectItem>
-                            ))}
+                          <SelectContent position="popper" sideOffset={4}>
+                            {areas.map((area) => {
+                              const cropName = area.crops?.name;
+                              const variety = area.variety;
+                              const cropLabel = cropName
+                                ? variety ? `${cropName}, ${variety}` : cropName
+                                : 'ללא גידול';
+                              return (
+                                <SelectItem key={area.id} value={area.id}>
+                                  {`${area.name} (${cropLabel})`}
+                                </SelectItem>
+                              );
+                            })}
                           </SelectContent>
                         </Select>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
-                )}
-
-                <FormField
-                  control={form.control}
-                  name="inspector_id"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="font-semibold text-sm">
-                        פקח *
-                        {loadingInspectors && <LoadingSpinner />}
-                      </FormLabel>
-                      <Select
-                        onValueChange={field.onChange}
-                        value={field.value}
-                        disabled={!watchedCustomerId || loadingInspectors}
-                      >
-                        <FormControl>
-                          <SelectTrigger className="h-11 monitoring-select-trigger">
-                            <SelectValue placeholder={
-                              !watchedCustomerId ? 'בחר לקוח תחילה' : 'בחר פקח'
-                            } />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {inspectors.map((inspector) => (
-                            <SelectItem key={inspector.id} value={inspector.id}>
-                              {inspector.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
+                  {watchedAreaId && (
+                    <span className="field-check"><Check className="h-2.5 w-2.5" /></span>
                   )}
-                />
-              </div>
-            </div>
-
-            {/* Section 2: Area Selection */}
-            <div className="monitoring-section section-area p-5">
-              <div className="section-header">
-                <div className="section-icon section-icon-area">
-                  <MapPin className="h-4 w-4" />
+                  {watchedAreaId && (() => {
+                    const selectedArea = areas.find(a => a.id === watchedAreaId);
+                    const cropName = selectedArea?.crops?.name;
+                    const variety = selectedArea?.variety;
+                    return cropName ? (
+                      <div className="area-info-badge" style={{ margin: 0 }}>
+                        <Leaf className="h-3 w-3" />
+                        <span>{cropName}{variety ? `, ${variety}` : ''}</span>
+                      </div>
+                    ) : null;
+                  })()}
                 </div>
-                <h3 className="font-bold text-base">שטח</h3>
               </div>
-              <FormField
-                control={form.control}
-                name="area_id"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="font-semibold text-sm">
-                      שטח *
-                      {loadingAreas && <LoadingSpinner />}
-                    </FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      value={field.value}
-                      disabled={!watchedCustomerId || loadingAreas}
-                    >
-                      <FormControl>
-                        <SelectTrigger className="h-11 monitoring-select-trigger">
-                          <SelectValue placeholder={
-                            !watchedCustomerId ? 'בחר לקוח תחילה' : 'בחר שטח'
-                          } />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {areas.map((area) => {
-                          const cropName = area.crops?.name;
-                          const variety = area.variety;
-                          const cropLabel = cropName
-                            ? variety ? `${cropName}, ${variety}` : cropName
-                            : 'ללא גידול';
-                          return (
-                            <SelectItem key={area.id} value={area.id}>
-                              {`${area.name} (${cropLabel})`}
-                            </SelectItem>
-                          );
-                        })}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
             </div>
 
             {/* Section 3: Sub-Area Entries */}
             {watchedAreaId && (
-              <div className="monitoring-section section-entries p-5">
+              <div id="entries-section" className="monitoring-section section-entries section-entering p-5">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-3">
                     <div className="section-icon section-icon-entries">
                       <ClipboardList className="h-4 w-4" />
                     </div>
                     <div>
-                      <h3 className="font-bold text-base">רשומות תת-שטח</h3>
+                      <h3 className="font-bold text-base">ממצאים</h3>
                       <p className="text-xs text-muted-foreground mt-0.5">
                         {fields.length} {fields.length === 1 ? 'רשומה' : 'רשומות'}
                       </p>
@@ -859,7 +1070,7 @@ export function MonitoringForm({
                     onClick={addEntry}
                   >
                     <Plus className="h-3.5 w-3.5" />
-                    הוסף רשומה
+                    הוסף
                   </button>
                 </div>
 
@@ -876,23 +1087,46 @@ export function MonitoringForm({
                       <div key={field.id} className="entry-card p-4 space-y-4">
                         {/* Entry Header */}
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2.5">
+                          <div
+                            className="flex items-center gap-2.5 flex-1 cursor-pointer"
+                            onClick={() => entrySubAreaIds.length > 0 && toggleEntryCollapse(index)}
+                          >
                             <span className="entry-number">{index + 1}</span>
                             {isCollapsed && summary.subAreaName && (
-                              <div className="flex items-center gap-2 text-sm">
+                              <div className="flex items-center gap-2 text-sm flex-wrap">
                                 <span className="font-medium text-foreground/80">{summary.subAreaName}</span>
+                                {summary.findingName && (
+                                  <>
+                                    <span className="text-muted-foreground">·</span>
+                                    <span className="text-xs text-muted-foreground">{summary.findingName}</span>
+                                  </>
+                                )}
                                 {summary.severity && (
-                                  <span className={`severity-dot ${SEVERITY_CONFIG[summary.severity]?.dotClass}`} />
+                                  <span className={`severity-chip-mini ${SEVERITY_CONFIG[summary.severity]?.chipClass}`}>
+                                    {SEVERITY_CONFIG[summary.severity]?.label}
+                                  </span>
                                 )}
                                 {summary.treatmentCount > 0 && (
                                   <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded-md">
-                                    {summary.treatmentCount} טיפולים
+                                    <Beaker className="h-2.5 w-2.5 inline me-0.5" />
+                                    {summary.treatmentCount}
                                   </span>
                                 )}
                               </div>
                             )}
                           </div>
                           <div className="flex items-center gap-1">
+                            {/* Duplicate button */}
+                            {entryFindingId && (
+                              <button
+                                type="button"
+                                className="duplicate-button"
+                                onClick={() => duplicateEntry(index)}
+                                title="שכפל רשומה"
+                              >
+                                <Copy className="h-3.5 w-3.5" />
+                              </button>
+                            )}
                             {entrySubAreaIds.length > 0 && (
                               <button
                                 type="button"
@@ -977,7 +1211,7 @@ export function MonitoringForm({
                                           <div className="flex items-center justify-center py-2">
                                             <Loader2 className="h-4 w-4 animate-spin" />
                                           </div>
-                                        ) : (entryFindings[index] || findings).map((finding) => (
+                                        ) : [...(entryFindings[index] || findings)].sort((a, b) => (a.description || a.name || '').localeCompare(b.description || b.name || '', 'he')).map((finding) => (
                                           <SelectItem key={finding.id} value={finding.id}>
                                             {finding.description || finding.name}
                                           </SelectItem>
@@ -1219,18 +1453,24 @@ export function MonitoringForm({
             {/* Sticky Submit Footer */}
             <div className="sticky-footer">
               <div className="flex items-center justify-between gap-4">
-                {/* Summary stats */}
-                <div className="hidden md:flex items-center gap-3 text-xs text-muted-foreground">
+                {/* Summary stats - visible on all sizes */}
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   {watchedAreaId && (
                     <>
-                      <span className="flex items-center gap-1.5">
+                      <span className="flex items-center gap-1">
                         <ClipboardList className="h-3.5 w-3.5" />
-                        {fields.length} {fields.length === 1 ? 'רשומה' : 'רשומות'}
+                        <span className="hidden md:inline">{fields.length} {fields.length === 1 ? 'רשומה' : 'רשומות'}</span>
+                        <span className="md:hidden">{fields.length}</span>
                       </span>
                       <span className="w-px h-3.5 bg-border" />
-                      <span className="flex items-center gap-1.5">
+                      <span className="flex items-center gap-1">
                         <Beaker className="h-3.5 w-3.5" />
-                        {fields.reduce((sum, _, i) => sum + (form.watch(`entries.${i}.treatments`)?.length || 0), 0)} טיפולים
+                        <span className="hidden md:inline">
+                          {fields.reduce((sum, _, i) => sum + (form.watch(`entries.${i}.treatments`)?.length || 0), 0)} טיפולים
+                        </span>
+                        <span className="md:hidden">
+                          {fields.reduce((sum, _, i) => sum + (form.watch(`entries.${i}.treatments`)?.length || 0), 0)}
+                        </span>
                       </span>
                     </>
                   )}
@@ -1238,8 +1478,10 @@ export function MonitoringForm({
 
                 <button
                   type="submit"
-                  disabled={loading}
-                  className="monitoring-submit flex items-center justify-center gap-2 h-12 px-8 w-full md:w-auto min-w-[200px]"
+                  disabled={loading || !watchedInspectorId || !watchedAreaId || fields.length === 0}
+                  className={`monitoring-submit flex items-center justify-center gap-2 h-12 px-8 w-full md:w-auto min-w-[200px] ${
+                    !loading && watchedInspectorId && watchedAreaId && fields.length > 0 ? 'monitoring-submit-ready' : ''
+                  }`}
                 >
                   {loading ? (
                     <>

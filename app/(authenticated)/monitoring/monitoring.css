@@ -96,9 +96,17 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding-bottom: 0.875rem;
-  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  margin-bottom: 0.75rem;
   border-bottom: 1px solid oklch(0.912 0.015 152 / 50%);
+}
+
+/* Inline header: title + dropdown on same row */
+.section-header-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
 }
 
 .section-icon {
@@ -638,6 +646,41 @@
   .monitoring-section {
     border-radius: 0.875rem;
   }
+
+  /* Larger touch targets on mobile */
+  .delete-button,
+  .duplicate-button {
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 0.625rem;
+  }
+
+  .severity-chip {
+    padding: 0.5rem 1rem;
+    font-size: 0.85rem;
+  }
+
+  .add-button {
+    padding: 0.625rem 1.125rem;
+    font-size: 0.875rem;
+  }
+
+  .monitoring-select-trigger {
+    min-height: 2.875rem !important;
+    font-size: 1rem !important;
+  }
+}
+
+/* Safe area for sticky footer on iPhones */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .sticky-footer {
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+  }
+}
+
+/* Step circle needs relative for badge positioning */
+.step-circle {
+  position: relative;
 }
 
 /* --- Multi-Select Component --- */
@@ -719,4 +762,174 @@
 
 .multi-select-tree-toggle:hover {
   background: oklch(0.92 0.02 152);
+}
+
+/* --- Quick Resume Chip --- */
+.quick-resume-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: 9999px;
+  background: oklch(0.94 0.04 85 / 80%);
+  border: 1px solid oklch(0.85 0.06 85 / 50%);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: oklch(0.35 0.10 85);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  animation: fadeSlideIn 0.3s ease;
+}
+.quick-resume-chip:hover {
+  background: oklch(0.92 0.06 85 / 90%);
+  box-shadow: 0 2px 8px oklch(0.55 0.15 85 / 15%);
+}
+.quick-resume-chip .quick-resume-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 50%;
+  transition: background 0.15s ease;
+}
+.quick-resume-chip .quick-resume-close:hover {
+  background: oklch(0.55 0.22 25 / 15%);
+}
+
+/* --- Field Completion Check --- */
+.field-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 50%;
+  background: oklch(0.55 0.16 152);
+  color: white;
+  animation: checkPop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  flex-shrink: 0;
+  margin-inline-start: 0.25rem;
+}
+
+@keyframes checkPop {
+  0% { transform: scale(0); opacity: 0; }
+  60% { transform: scale(1.2); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* --- Step Completion Pulse --- */
+.step-circle-just-completed {
+  animation: stepComplete 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes stepComplete {
+  0% { box-shadow: 0 0 0 0 oklch(0.55 0.16 152 / 40%); }
+  50% { box-shadow: 0 0 0 8px oklch(0.55 0.16 152 / 0%); }
+  100% { box-shadow: 0 0 0 0 oklch(0.55 0.16 152 / 0%); }
+}
+
+/* --- Submit Glow When Valid --- */
+.monitoring-submit-ready {
+  animation: submitGlow 2s ease-in-out infinite;
+}
+
+@keyframes submitGlow {
+  0%, 100% { box-shadow: 0 2px 12px oklch(0.35 0.12 152 / 15%); }
+  50% { box-shadow: 0 4px 24px oklch(0.35 0.12 152 / 40%); }
+}
+
+/* --- Section Entrance Animation --- */
+.section-entering {
+  animation: sectionEnter 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes sectionEnter {
+  from {
+    opacity: 0.6;
+    transform: translateY(8px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.section-completed {
+  opacity: 0.88;
+  transition: opacity 0.3s ease;
+}
+.section-completed:hover,
+.section-completed:focus-within {
+  opacity: 1;
+}
+
+/* --- Mini Severity Chip (collapsed summary) --- */
+.severity-chip-mini {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+/* --- Area Crop Info Badge --- */
+.area-info-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.625rem;
+  border-radius: 0.5rem;
+  background: oklch(0.96 0.03 152 / 60%);
+  color: oklch(0.40 0.10 152);
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-top: 0.5rem;
+  animation: fadeSlideIn 0.3s ease;
+}
+
+/* --- Entry Count Badge on Stepper --- */
+.step-badge {
+  position: absolute;
+  top: -4px;
+  inset-inline-end: -4px;
+  min-width: 1.125rem;
+  height: 1.125rem;
+  border-radius: 9999px;
+  background: oklch(0.62 0.19 50);
+  color: white;
+  font-size: 0.6rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid white;
+  animation: checkPop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* --- Scroll margin for sections --- */
+.monitoring-section {
+  scroll-margin-top: 1rem;
+}
+
+/* --- Duplicate Button --- */
+.duplicate-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.5rem;
+  color: oklch(0.45 0.12 250 / 60%);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.duplicate-button:hover {
+  color: oklch(0.45 0.15 250);
+  background: oklch(0.94 0.04 250);
 }

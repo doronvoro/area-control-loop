@@ -358,7 +358,7 @@ export function useActionCascade(form: UseFormReturn<ActionFormValues>) {
   const findingOptions: SelectOption[] = (formData?.findings || []).map((f: any) => ({
     value: f.id,
     label: f.description || f.name,
-  }));
+  })).sort((a, b) => a.label.localeCompare(b.label, 'he'));
 
   const actionTypeOptions: SelectOption[] = (formData?.actionTypes || []).map((at: any) => ({
     value: at.id,

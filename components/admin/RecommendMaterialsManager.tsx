@@ -358,7 +358,7 @@ export function RecommendMaterialsManager() {
                 <SelectContent>
                   <SelectItem value="__all__">כל הממצאים</SelectItem>
                   <SelectItem value="__null__">ברירת מחדל (ללא ממצא)</SelectItem>
-                  {findings.map((finding) => (
+                  {[...findings].sort((a, b) => (a.description || a.name || '').localeCompare(b.description || b.name || '', 'he')).map((finding) => (
                     <SelectItem key={finding.id} value={finding.id}>
                       {finding.description || finding.name}
                     </SelectItem>
@@ -533,7 +533,7 @@ export function RecommendMaterialsManager() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__null__">ברירת מחדל לכל הגידול</SelectItem>
-                    {findings.map((finding) => (
+                    {[...findings].sort((a, b) => (a.description || a.name || '').localeCompare(b.description || b.name || '', 'he')).map((finding) => (
                       <SelectItem key={finding.id} value={finding.id}>
                         {finding.description || finding.name}
                       </SelectItem>

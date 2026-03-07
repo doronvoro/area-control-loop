@@ -853,7 +853,7 @@ export function ActionForm({
                                     </SelectTrigger>
                                   </FormControl>
                                   <SelectContent>
-                                    {findings.map((finding) => (
+                                    {[...findings].sort((a, b) => (a.description || a.name || '').localeCompare(b.description || b.name || '', 'he')).map((finding) => (
                                       <SelectItem key={finding.id} value={finding.id}>
                                         {finding.description || finding.name}
                                       </SelectItem>

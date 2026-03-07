@@ -370,7 +370,7 @@ export function useMonitoringCascade(form: UseFormReturn<MonitoringFormValues>) 
   const findingOptions: SelectOption[] = (formData?.findings || []).map((f: any) => ({
     value: f.id,
     label: f.description || f.name,
-  }));
+  })).sort((a, b) => a.label.localeCompare(b.label, 'he'));
 
   const unitTypeOptions: SelectOption[] = (formData?.unitTypes || []).map((u: any) => ({
     value: u.id,

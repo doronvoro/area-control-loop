@@ -662,7 +662,7 @@ export function AdminMonitoringForm({
                                 </SelectTrigger>
                               </FormControl>
                               <SelectContent>
-                                {(entryFindings[index] || []).map((finding: any) => (
+                                {[...(entryFindings[index] || [])].sort((a: any, b: any) => (a.description || a.name || '').localeCompare(b.description || b.name || '', 'he')).map((finding: any) => (
                                   <SelectItem key={finding.id} value={finding.id}>
                                     {finding.description || finding.name}
                                   </SelectItem>
