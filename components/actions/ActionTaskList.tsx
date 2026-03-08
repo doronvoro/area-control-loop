@@ -62,7 +62,6 @@ export function ActionTaskList() {
   const [completedTasks, setCompletedTasks] = useState<CompletedTaskData[]>([]);
   const [standaloneActions, setStandaloneActions] = useState<StandaloneActionData[]>([]);
   const [formData, setFormData] = useState<FormData | null>(null);
-  const [materials, setMaterials] = useState<any[]>([]);
   const [subAreas, setSubAreas] = useState<any[]>([]);
   const [selectedWorkerId, setSelectedWorkerId] = useState<string>('');
   const [allTaskCounts, setAllTaskCounts] = useState<Record<string, number>>({});
@@ -102,17 +101,10 @@ export function ActionTaskList() {
   // Fetch form reference data (for standalone form + task edit)
   const fetchFormData = useCallback(async () => {
     try {
-      const [formRes, matRes] = await Promise.all([
-        fetch('/api/actions/form-data'),
-        fetch('/api/materials'),
-      ]);
-      if (formRes.ok) {
-        const data = await formRes.json();
+      const res = await fetch('/api/actions/form-data');
+      if (res.ok) {
+        const data = await res.json();
         setFormData(data);
-      }
-      if (matRes.ok) {
-        const data = await matRes.json();
-        setMaterials(data || []);
       }
     } catch {
       // Non-critical — standalone form won't work but tasks still do
@@ -531,7 +523,6 @@ export function ActionTaskList() {
                         task={task}
                         onComplete={handleTaskComplete}
                         disabled={submitting}
-                        materials={materials}
                         unitTypes={formData?.unitTypes || []}
                       />
                     ))}
