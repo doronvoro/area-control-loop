@@ -16,11 +16,9 @@ import {
   Zap,
   Filter,
   ClipboardCheck,
-  Plus,
   AlertTriangle,
   CheckCircle2,
   PackageCheck,
-  RefreshCw,
   X,
   Loader2,
   User,
@@ -82,15 +80,17 @@ export function ActionTaskList() {
       }
       const data = await res.json();
       const fetchedTasks: ActionTask[] = data.tasks || [];
-      setTasks(fetchedTasks);
-      // Only update the full areas list and task counts when fetching all (no filter)
+      // When "בחר" is selected, fetch all to get counts but don't show tasks
       if (selectedAreaId === 'all') {
+        setTasks([]);
         setAreas(data.areas || []);
         const counts: Record<string, number> = {};
         for (const t of fetchedTasks) {
           counts[t.area_id] = (counts[t.area_id] || 0) + 1;
         }
         setAllTaskCounts(counts);
+      } else {
+        setTasks(fetchedTasks);
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'שגיאה בטעינת משימות');
@@ -292,36 +292,7 @@ export function ActionTaskList() {
     name: tasksByArea[id][0]?.area_name || id,
   }));
 
-  const totalTaskCount = Object.values(allTaskCounts).reduce((sum, n) => sum + n, 0);
-
   const workers = formData?.initialWorkers || [];
-
-  // Loading state with hero
-  if (loading && tasks.length === 0) {
-    return (
-      <div className="max-w-4xl mx-auto">
-        <div className="actions-form-container">
-          <div className="actions-hero px-6 py-8 md:px-8 md:py-10">
-            <div className="hero-pattern" />
-            <div className="relative z-10">
-              <div className="flex items-center justify-center gap-3 mb-3">
-                <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-white/15 backdrop-blur-sm">
-                  <Zap className="h-5 w-5 text-white" />
-                </div>
-                <h2 className="text-2xl md:text-3xl font-bold text-white tracking-tight">
-                  משימות פעולה
-                </h2>
-              </div>
-            </div>
-          </div>
-          <div className="actions-loading">
-            <div className="actions-loading-spinner" />
-            <span className="text-sm text-muted-foreground font-medium">טוען משימות...</span>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -357,7 +328,7 @@ export function ActionTaskList() {
                 <div className="actions-section-icon section-icon-worker shrink-0">
                   <User className="h-4 w-4" />
                 </div>
-                <h3 className="font-bold text-base shrink-0">מבצע</h3>
+                <h3 className="font-bold text-base shrink-0 w-12">מבצע</h3>
                 <div className="flex items-center shrink-0">
                   <Select value={selectedWorkerId} onValueChange={setSelectedWorkerId}>
                     <SelectTrigger className="h-11 w-64 actions-select-trigger">
@@ -385,21 +356,14 @@ export function ActionTaskList() {
               <div className="actions-section-icon section-icon-area-select shrink-0">
                 <MapPin className="h-4 w-4" />
               </div>
-              <h3 className="font-bold text-base shrink-0">שטח</h3>
+              <h3 className="font-bold text-base shrink-0 w-12">שטח</h3>
               <div className="flex items-center shrink-0">
                 <Select value={selectedAreaId} onValueChange={setSelectedAreaId}>
                   <SelectTrigger className="h-11 w-64 actions-select-trigger">
-                    <SelectValue placeholder="כל השטחים" />
+                    <SelectValue placeholder="בחר" />
                   </SelectTrigger>
                   <SelectContent position="popper" sideOffset={4}>
-                    <SelectItem value="all">
-                      <span className="area-select-item">
-                        <span>כל השטחים</span>
-                        {totalTaskCount > 0 && (
-                          <span className="area-task-count-badge ms-auto">{totalTaskCount}</span>
-                        )}
-                      </span>
-                    </SelectItem>
+                    <SelectItem value="all">בחר</SelectItem>
                     {areaList.map((area) => {
                       const cropName = area.crops?.name;
                       const variety = area.variety;
@@ -424,14 +388,9 @@ export function ActionTaskList() {
                   <span className="actions-field-check"><Check className="h-2.5 w-2.5" /></span>
                 )}
               </div>
-              <button
-                className="action-btn-edit mr-auto"
-                onClick={fetchTasks}
-                disabled={loading}
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-                {loading ? 'טוען...' : 'רענן'}
-              </button>
+              {loading && (
+                <Loader2 className="h-4 w-4 animate-spin text-amber-500/70 mr-auto" />
+              )}
             </div>
           </div>
 
@@ -520,8 +479,26 @@ export function ActionTaskList() {
             </div>
           )}
 
+          {/* Loading state */}
+          {loading && (
+            <div className="actions-loading">
+              <div className="actions-loading-spinner" />
+              <span className="text-sm text-muted-foreground font-medium">טוען משימות...</span>
+            </div>
+          )}
+
           {/* Task lists grouped by area */}
-          {tasks.length === 0 && pendingCount === 0 ? (
+          {loading ? null : selectedAreaId === 'all' ? (
+            <div className="actions-empty-state">
+              <div className="actions-empty-icon">
+                <MapPin className="h-6 w-6" />
+              </div>
+              <div className="text-base font-semibold text-foreground">בחר שטח להצגת משימות</div>
+              <div className="text-sm text-muted-foreground max-w-sm">
+                בחר שטח מהרשימה למעלה כדי לצפות במשימות הפעולה
+              </div>
+            </div>
+          ) : tasks.length === 0 && pendingCount === 0 ? (
             <div className="actions-empty-state">
               <div className="actions-empty-icon">
                 <PackageCheck className="h-6 w-6" />
@@ -577,22 +554,6 @@ export function ActionTaskList() {
             />
           ) : null}
 
-          {/* Add standalone action button */}
-          {!showStandaloneForm && (
-            <button
-              className="actions-add-button w-full justify-center py-3"
-              onClick={() => {
-                if (selectedAreaId === 'all') {
-                  setError('יש לבחור שטח ספציפי כדי להוסיף פעולה עצמאית');
-                  return;
-                }
-                setShowStandaloneForm(true);
-              }}
-            >
-              <Plus className="h-4 w-4" />
-              הוסף פעולה שאינה קשורה לניטור
-            </button>
-          )}
         </div>
       </div>
     </div>
