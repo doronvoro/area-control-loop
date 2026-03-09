@@ -14,7 +14,6 @@ import { StandaloneActionForm, StandaloneActionData } from './StandaloneActionFo
 import { ReportDetailSheet } from '@/components/reports/ReportDetailSheet';
 import {
   Zap,
-  Filter,
   ClipboardCheck,
   AlertTriangle,
   CheckCircle2,
@@ -144,9 +143,11 @@ export function ActionTaskList() {
     setSavedReportAreaId(null);
   };
 
-  // Dismiss success banner when area or worker changes
+  // Clear pending tasks and success banner when area or worker changes
   useEffect(() => {
     if (success) clearSuccessBanner();
+    setCompletedTasks([]);
+    setStandaloneActions([]);
   }, [selectedAreaId, selectedWorkerId]);
 
   // Group tasks by area
@@ -293,21 +294,25 @@ export function ActionTaskList() {
         <div className="actions-hero px-6 py-8 md:px-8 md:py-10">
           <div className="hero-pattern" />
           <div className="relative z-10">
-            <div className="flex items-center justify-center gap-3 mb-3">
+            <div className="flex items-center justify-center gap-3">
               <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-white/15 backdrop-blur-sm">
                 <Zap className="h-5 w-5 text-white" />
               </div>
               <h2 className="text-2xl md:text-3xl font-bold text-white tracking-tight">
-                משימות פעולה
+                טופס פעולה
               </h2>
+              {(() => {
+                const totalTasks = Object.values(allTaskCounts).reduce((sum, c) => sum + c, 0);
+                if (totalTasks === 0) return null;
+                return (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/15 backdrop-blur-sm text-white/90 text-xs font-semibold">
+                    {selectedAreaId !== 'all' && tasks.length > 0
+                      ? `${tasks.length}/${totalTasks} משימות ממתינות`
+                      : `${totalTasks} משימות ממתינות`}
+                  </span>
+                );
+              })()}
             </div>
-            {tasks.length > 0 && (
-              <div className="flex justify-center mt-3">
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/15 backdrop-blur-sm text-white/90 text-xs font-semibold">
-                  {tasks.length} משימות ממתינות
-                </span>
-              </div>
-            )}
           </div>
         </div>
 
@@ -380,9 +385,6 @@ export function ActionTaskList() {
                   <span className="actions-field-check"><Check className="h-2.5 w-2.5" /></span>
                 )}
               </div>
-              {loading && (
-                <Loader2 className="h-4 w-4 animate-spin text-amber-500/70 mr-auto" />
-              )}
             </div>
           </div>
 
@@ -470,6 +472,7 @@ export function ActionTaskList() {
               </div>
             </div>
           )}
+
 
           {/* Loading state */}
           {loading && (

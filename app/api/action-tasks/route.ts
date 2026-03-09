@@ -75,7 +75,8 @@ export async function GET(request: Request) {
         report_area:report_areas!inner (
           id,
           area_id,
-          name
+          name,
+          report_number
         ),
         sub_area:sub_areas (
           id,
@@ -156,6 +157,8 @@ export async function GET(request: Request) {
           },
           notes: treatment.notes,
           monitoring_date: report.created_at,
+          monitoring_report_area_id: reportArea?.id || null,
+          monitoring_report_number: reportArea?.report_number || null,
           effective_crop_id: effectiveCropId,
         });
       }

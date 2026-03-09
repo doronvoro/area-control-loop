@@ -13,7 +13,8 @@ import {
 } from '@/components/ui/select';
 import { SEVERITY_LABELS, ReportSeverity } from '@/types/database';
 import { SearchableMaterialSelect } from '@/components/monitoring/SearchableMaterialSelect';
-import { Check, Edit3, Calendar, Sparkles, Loader2 } from 'lucide-react';
+import { ReportDetailSheet } from '@/components/reports/ReportDetailSheet';
+import { Check, Edit3, Calendar, Sparkles, Loader2, FileText } from 'lucide-react';
 
 export interface ActionTask {
   monitoring_treatment_id: string;
@@ -39,6 +40,8 @@ export interface ActionTask {
   };
   notes: string | null;
   monitoring_date: string;
+  monitoring_report_area_id: string | null;
+  monitoring_report_number: number | null;
   effective_crop_id: string | null;
 }
 
@@ -106,6 +109,7 @@ export function TaskCard({ task, onComplete, disabled, unitTypes = [] }: TaskCar
   );
   const [editNotes, setEditNotes] = useState('');
   const [isCompleting, setIsCompleting] = useState(false);
+  const [showReport, setShowReport] = useState(false);
 
   // Cascade-fetched materials and dosage recommendation
   const [cascadeMaterials, setCascadeMaterials] = useState<any[]>([]);
@@ -221,19 +225,31 @@ export function TaskCard({ task, onComplete, disabled, unitTypes = [] }: TaskCar
       {/* Header: finding info + severity */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold text-foreground">
+            {subAreaDisplay} / {task.finding.name}
+          </span>
           {task.severity && (
             <span className={`action-severity-chip ${severityClasses[task.severity] || ''}`}>
               <span className={`action-severity-dot ${severityDotClasses[task.severity] || ''}`} />
               {SEVERITY_LABELS[task.severity] || task.severity}
             </span>
           )}
-          <span className="text-sm font-semibold text-foreground">
-            {subAreaDisplay} / {task.finding.name}
-          </span>
         </div>
-        <div className="flex items-center gap-1.5 text-muted-foreground text-xs">
-          <Calendar className="h-3 w-3" />
-          <span>{formatDate(task.monitoring_date)}</span>
+        <div className="flex items-center gap-3 text-muted-foreground text-xs">
+          {task.monitoring_report_number && (
+            <button
+              type="button"
+              onClick={() => setShowReport(true)}
+              className="action-report-link"
+            >
+              <FileText className="h-3 w-3" />
+              <span>דוח #{task.monitoring_report_number}</span>
+            </button>
+          )}
+          <div className="flex items-center gap-1.5">
+            <Calendar className="h-3 w-3" />
+            <span>{formatDate(task.monitoring_date)}</span>
+          </div>
         </div>
       </div>
 
@@ -408,6 +424,14 @@ export function TaskCard({ task, onComplete, disabled, unitTypes = [] }: TaskCar
             </button>
           </div>
         </>
+      )}
+
+      {task.monitoring_report_area_id && (
+        <ReportDetailSheet
+          reportId={task.monitoring_report_area_id}
+          open={showReport}
+          onOpenChange={setShowReport}
+        />
       )}
     </div>
   );
