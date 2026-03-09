@@ -54,6 +54,96 @@
   overflow: hidden;
 }
 
+/* --- Progress Steps --- */
+.actions-progress-steps {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  padding: 1.25rem 1.5rem;
+}
+
+.actions-progress-step {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.actions-step-circle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  font-size: 0.75rem;
+  font-weight: 700;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
+  position: relative;
+}
+
+.actions-step-circle-pending {
+  background: oklch(0.95 0 0);
+  color: oklch(0.60 0 0);
+  border: 2px solid oklch(0.88 0 0);
+}
+
+.actions-step-circle-active {
+  background: oklch(0.45 0.14 55);
+  color: white;
+  border: 2px solid oklch(0.45 0.14 55);
+  box-shadow: 0 2px 8px oklch(0.45 0.14 55 / 30%);
+}
+
+.actions-step-circle-complete {
+  background: oklch(0.55 0.16 55);
+  color: white;
+  border: 2px solid oklch(0.55 0.16 55);
+}
+
+.actions-step-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: oklch(0.55 0 0);
+  white-space: nowrap;
+}
+
+.actions-step-label-active {
+  color: oklch(0.35 0.10 55);
+}
+
+.actions-step-connector {
+  width: 2.5rem;
+  height: 2px;
+  background: oklch(0.90 0 0);
+  margin: 0 0.25rem;
+  flex-shrink: 0;
+  transition: background 0.3s ease;
+}
+
+.actions-step-connector-complete {
+  background: oklch(0.55 0.16 55);
+}
+
+.actions-step-badge {
+  position: absolute;
+  top: -4px;
+  inset-inline-end: -4px;
+  min-width: 1.125rem;
+  height: 1.125rem;
+  border-radius: 9999px;
+  background: oklch(0.55 0.16 55);
+  color: white;
+  font-size: 0.6rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid white;
+  animation: actionCheckPop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
 /* --- Glass Card Sections --- */
 .actions-section {
   position: relative;

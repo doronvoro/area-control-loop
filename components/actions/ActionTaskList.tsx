@@ -23,6 +23,7 @@ import {
   User,
   MapPin,
   Check,
+  type LucideIcon,
 } from 'lucide-react';
 
 interface Area {
@@ -89,6 +90,18 @@ export function ActionTaskList() {
         setAllTaskCounts(counts);
       } else {
         setTasks(fetchedTasks);
+        // Also refresh all-task counts in the background
+        fetch('/api/action-tasks').then(r => r.ok ? r.json() : null).then(allData => {
+          if (allData) {
+            const allTasks: ActionTask[] = allData.tasks || [];
+            if (allData.areas) setAreas(allData.areas);
+            const counts: Record<string, number> = {};
+            for (const t of allTasks) {
+              counts[t.area_id] = (counts[t.area_id] || 0) + 1;
+            }
+            setAllTaskCounts(counts);
+          }
+        }).catch(() => {});
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'שגיאה בטעינת משימות');
@@ -287,6 +300,20 @@ export function ActionTaskList() {
 
   const workers = formData?.initialWorkers || [];
 
+  // Step definitions for progress stepper
+  const steps: { label: string; icon: LucideIcon }[] = [
+    ...(needsWorkerSelection ? [{ label: 'מבצע', icon: User }] : []),
+    { label: 'שטח', icon: MapPin },
+    { label: 'משימות', icon: ClipboardCheck },
+  ];
+
+  // Compute current step index
+  const currentStep = (() => {
+    if (needsWorkerSelection && !selectedWorkerId) return 0;
+    if (selectedAreaId === 'all') return needsWorkerSelection ? 1 : 0;
+    return steps.length - 1;
+  })();
+
   return (
     <div className="max-w-4xl mx-auto">
       <div className="actions-form-container">
@@ -314,6 +341,36 @@ export function ActionTaskList() {
               })()}
             </div>
           </div>
+        </div>
+
+        {/* Progress Steps */}
+        <div className="actions-progress-steps">
+          {steps.map((step, i) => (
+            <div key={i} className="actions-progress-step">
+              <div className="flex flex-col items-center gap-1">
+                <div className={`actions-step-circle ${
+                  i < currentStep ? 'actions-step-circle-complete' :
+                  i === currentStep ? 'actions-step-circle-active' :
+                  'actions-step-circle-pending'
+                }`}>
+                  {i < currentStep ? (
+                    <Check className="h-3.5 w-3.5" />
+                  ) : (
+                    <step.icon className="h-3.5 w-3.5" />
+                  )}
+                  {i === steps.length - 1 && currentStep >= steps.length - 1 && tasks.length > 0 && (
+                    <span className="actions-step-badge">{tasks.length}</span>
+                  )}
+                </div>
+                <span className={`actions-step-label ${i === currentStep ? 'actions-step-label-active' : ''}`}>
+                  {step.label}
+                </span>
+              </div>
+              {i < steps.length - 1 && (
+                <div className={`actions-step-connector ${i < currentStep ? 'actions-step-connector-complete' : ''}`} />
+              )}
+            </div>
+          ))}
         </div>
 
         {/* Content area */}
