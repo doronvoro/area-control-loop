@@ -3,7 +3,16 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, MapPin, Search, Zap, CalendarDays } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Loader2, MapPin, Search, Zap, CalendarDays, LayoutGrid, TableIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { formatDistanceToNow } from 'date-fns';
 import { he } from 'date-fns/locale';
@@ -67,10 +76,13 @@ function formatRelativeDate(dateStr: string | null): string {
   }
 }
 
+type ViewMode = 'cards' | 'table';
+
 export function AreaStatusBoard() {
   const [areas, setAreas] = useState<AreaStatusData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>('table');
   const router = useRouter();
 
   useEffect(() => {
@@ -123,81 +135,182 @@ export function AreaStatusBoard() {
   }
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {areas.map((area) => {
-        const config = STATUS_CONFIG[area.status];
-        const completionPercent = area.total_treatments > 0
-          ? Math.round((area.completed_treatments / area.total_treatments) * 100)
-          : 0;
-
-        return (
-          <Card
-            key={area.id}
-            className="group cursor-pointer transition-all hover:shadow-md hover:border-primary/20"
-            onClick={() => router.push(`/actions?areaId=${area.id}`)}
+    <div>
+      {/* View mode toggle */}
+      <div className="flex justify-end mb-3">
+        <div className="flex items-center border rounded-lg p-0.5 gap-0.5">
+          <Button
+            variant={viewMode === 'cards' ? 'default' : 'ghost'}
+            size="sm"
+            className="h-7 px-2.5"
+            onClick={() => setViewMode('cards')}
           >
-            <CardContent className="p-5 space-y-3">
-              {/* Header: area name + status badge */}
-              <div className="flex items-start justify-between gap-2">
-                <h3 className="font-semibold text-base truncate">
-                  {area.name}
-                </h3>
-                <Badge
-                  variant="outline"
-                  className={cn('shrink-0 gap-1.5', config.badgeClass)}
-                >
-                  <span className={cn('size-2 rounded-full', config.dotColor)} />
-                  {config.label}
-                </Badge>
-              </div>
+            <LayoutGrid className="size-4" />
+          </Button>
+          <Button
+            variant={viewMode === 'table' ? 'default' : 'ghost'}
+            size="sm"
+            className="h-7 px-2.5"
+            onClick={() => setViewMode('table')}
+          >
+            <TableIcon className="size-4" />
+          </Button>
+        </div>
+      </div>
 
-              {/* Findings + treatments count */}
-              <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                <span className="flex items-center gap-1">
-                  <Search className="size-3.5" />
-                  {area.total_findings} ממצאים
-                </span>
-                {area.total_treatments > 0 && (
-                  <span className="flex items-center gap-1">
-                    <Zap className="size-3.5" />
-                    {area.completed_treatments}/{area.total_treatments} טיפולים
-                  </span>
-                )}
-              </div>
+      {viewMode === 'cards' ? (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {areas.map((area) => {
+            const config = STATUS_CONFIG[area.status];
+            const completionPercent = area.total_treatments > 0
+              ? Math.round((area.completed_treatments / area.total_treatments) * 100)
+              : 0;
 
-              {/* Progress bar */}
-              {area.total_treatments > 0 && (
-                <div className="space-y-1">
-                  <div className="h-2 w-full rounded-full bg-muted">
-                    <div
-                      className={cn(
-                        'h-2 rounded-full transition-all',
-                        config.progressColor
-                      )}
-                      style={{ width: `${completionPercent}%` }}
-                    />
+            return (
+              <Card
+                key={area.id}
+                className="group cursor-pointer transition-all hover:shadow-md hover:border-primary/20"
+                onClick={() => router.push(`/actions?areaId=${area.id}`)}
+              >
+                <CardContent className="p-5 space-y-3">
+                  {/* Header: area name + status badge */}
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="font-semibold text-base truncate">
+                      {area.name}
+                    </h3>
+                    <Badge
+                      variant="outline"
+                      className={cn('shrink-0 gap-1.5', config.badgeClass)}
+                    >
+                      <span className={cn('size-2 rounded-full', config.dotColor)} />
+                      {config.label}
+                    </Badge>
                   </div>
-                  <p className="text-xs text-muted-foreground text-end">
-                    {completionPercent}%
-                  </p>
-                </div>
-              )}
 
-              {/* Dates */}
-              <div className="flex items-center gap-4 text-xs text-muted-foreground pt-1 border-t">
-                <span className="flex items-center gap-1">
-                  <CalendarDays className="size-3" />
-                  ניטור: {formatRelativeDate(area.last_monitoring)}
-                </span>
-                <span className="flex items-center gap-1">
-                  <Zap className="size-3" />
-                  פעולה: {formatRelativeDate(area.last_action)}
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-        );
-      })}
+                  {/* Findings + treatments count */}
+                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                    <span className="flex items-center gap-1">
+                      <Search className="size-3.5" />
+                      {area.total_findings} ממצאים
+                    </span>
+                    {area.total_treatments > 0 && (
+                      <span className="flex items-center gap-1">
+                        <Zap className="size-3.5" />
+                        {area.completed_treatments}/{area.total_treatments} טיפולים
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Progress bar */}
+                  {area.total_treatments > 0 && (
+                    <div className="space-y-1">
+                      <div className="h-2 w-full rounded-full bg-muted">
+                        <div
+                          className={cn(
+                            'h-2 rounded-full transition-all',
+                            config.progressColor
+                          )}
+                          style={{ width: `${completionPercent}%` }}
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground text-end">
+                        {completionPercent}%
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Dates */}
+                  <div className="flex items-center gap-4 text-xs text-muted-foreground pt-1 border-t">
+                    <span className="flex items-center gap-1">
+                      <CalendarDays className="size-3" />
+                      ניטור: {formatRelativeDate(area.last_monitoring)}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Zap className="size-3" />
+                      פעולה: {formatRelativeDate(area.last_action)}
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="rounded-lg border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="text-right">שטח</TableHead>
+                <TableHead className="text-right">סטטוס</TableHead>
+                <TableHead className="text-right">ממצאים</TableHead>
+                <TableHead className="text-right">טיפולים</TableHead>
+                <TableHead className="text-right">התקדמות</TableHead>
+                <TableHead className="text-right">ניטור אחרון</TableHead>
+                <TableHead className="text-right">פעולה אחרונה</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {areas.map((area) => {
+                const config = STATUS_CONFIG[area.status];
+                const completionPercent = area.total_treatments > 0
+                  ? Math.round((area.completed_treatments / area.total_treatments) * 100)
+                  : 0;
+
+                return (
+                  <TableRow
+                    key={area.id}
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => router.push(`/actions?areaId=${area.id}`)}
+                  >
+                    <TableCell className="font-medium">{area.name}</TableCell>
+                    <TableCell>
+                      <Badge
+                        variant="outline"
+                        className={cn('gap-1.5', config.badgeClass)}
+                      >
+                        <span className={cn('size-2 rounded-full', config.dotColor)} />
+                        {config.label}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>{area.total_findings}</TableCell>
+                    <TableCell>
+                      {area.total_treatments > 0
+                        ? `${area.completed_treatments}/${area.total_treatments}`
+                        : '—'}
+                    </TableCell>
+                    <TableCell>
+                      {area.total_treatments > 0 ? (
+                        <div className="flex items-center gap-2 min-w-[100px]">
+                          <div className="h-2 flex-1 rounded-full bg-muted">
+                            <div
+                              className={cn(
+                                'h-2 rounded-full transition-all',
+                                config.progressColor
+                              )}
+                              style={{ width: `${completionPercent}%` }}
+                            />
+                          </div>
+                          <span className="text-xs text-muted-foreground w-8 text-end">
+                            {completionPercent}%
+                          </span>
+                        </div>
+                      ) : (
+                        '—'
+                      )}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-sm">
+                      {formatRelativeDate(area.last_monitoring)}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-sm">
+                      {formatRelativeDate(area.last_action)}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      )}
     </div>
   );
 }

@@ -50,7 +50,8 @@ export async function getAreasStatus(
   const { data: areas } = await supabase
     .from('areas')
     .select('id, name, description')
-    .in('id', areaIds);
+    .in('id', areaIds)
+    .order('name');
 
   // Get monitoring report areas
   const { data: monReportAreas } = await supabase
