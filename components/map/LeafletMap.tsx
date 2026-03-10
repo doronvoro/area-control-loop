@@ -102,6 +102,10 @@ function buildSubAreaTooltipContent(subArea: SubAreaWithGeometry): string {
   </div>`;
 }
 
+// Persist last map position across component remounts (e.g. switching between areas)
+let _lastCenter: [number, number] | null = null;
+let _lastZoom: number | null = null;
+
 // Fix Leaflet default marker icon issue with bundlers
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -145,9 +149,15 @@ export function LeafletMap({
     initializedRef.current = true;
 
     const map = L.map(mapContainerRef.current, {
-      center: DEFAULT_CENTER,
-      zoom: DEFAULT_ZOOM,
+      center: _lastCenter ?? DEFAULT_CENTER,
+      zoom: _lastZoom ?? DEFAULT_ZOOM,
       zoomControl: true,
+    });
+
+    map.on('moveend', () => {
+      const c = map.getCenter();
+      _lastCenter = [c.lat, c.lng];
+      _lastZoom = map.getZoom();
     });
 
     // Tile layers
@@ -456,9 +466,24 @@ export function LeafletMap({
     }
   }, [areas, selectedEntityId, drawingState, onEntitySelect, handleEditEnd]);
 
-  // Fit map to entity bounds
+  // Fit map to entity bounds (or all entities when fitToEntityId === '__all__')
   useEffect(() => {
     if (!fitToEntityId || !mapRef.current) return;
+
+    if (fitToEntityId === '__all__') {
+      const geoLayers: L.Layer[] = [];
+      for (const area of areas) {
+        if (area.geometry) geoLayers.push(L.geoJSON(area.geometry as any));
+        for (const subArea of area.sub_areas) {
+          if (subArea.geometry) geoLayers.push(L.geoJSON(subArea.geometry as any));
+        }
+      }
+      if (geoLayers.length > 0) {
+        const group = L.featureGroup(geoLayers);
+        mapRef.current.fitBounds(group.getBounds(), { padding: [50, 50] });
+      }
+      return;
+    }
 
     let targetGeometry: GeoJSONPolygon | null = null;
 

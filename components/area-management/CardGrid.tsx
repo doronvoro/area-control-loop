@@ -2,7 +2,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Plus, Pencil, Trash2, MapPin, Folder, Layers } from 'lucide-react';
+import { Plus, Pencil, Trash2, MapPin, Folder, Layers, Pentagon } from 'lucide-react';
 import type { Area, SubArea, Permissions } from './AreaManagementLayout';
 
 interface CardGridProps {
@@ -132,6 +132,10 @@ export function CardGrid({
                       <span className="font-medium">{item.children.length}</span> תת-שטחים
                     </p>
                   )}
+                  <div className={`flex items-center gap-1 mt-2 text-xs ${item.geometry ? 'text-blue-500' : 'text-muted-foreground/40'}`}>
+                    <Pentagon className="h-3.5 w-3.5" />
+                    <span>{item.geometry ? 'גבולות מוגדרים' : 'ללא גבולות'}</span>
+                  </div>
                 </CardContent>
               </Card>
             ))}

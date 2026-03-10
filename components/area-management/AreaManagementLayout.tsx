@@ -18,6 +18,7 @@ export interface Area {
   name: string;
   description: string | null;
   crop_id: string | null;
+  geometry?: any | null;
 }
 
 export interface SubArea {
@@ -30,6 +31,7 @@ export interface SubArea {
   area_id: string;
   display: string | null;
   crop_id: string | null;
+  geometry?: any | null;
   children?: SubArea[];
 }
 

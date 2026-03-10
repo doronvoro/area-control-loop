@@ -15,6 +15,8 @@ import {
   Pencil,
   Trash2,
 } from 'lucide-react';
+import { PendingTasksPopover } from '@/components/map/PendingTasksPopover';
+import type { MonitoringReportForMap } from '@/components/map/types';
 
 interface HierarchyTreeNodeProps {
   nodeType: 'customer' | 'area' | 'sub_area';
@@ -32,6 +34,7 @@ interface HierarchyTreeNodeProps {
   onEdit?: () => void;
   onDelete?: () => void;
   pendingMonitoringCount?: number;
+  monitoringReports?: MonitoringReportForMap[];
 }
 
 export function HierarchyTreeNode({
@@ -49,6 +52,7 @@ export function HierarchyTreeNode({
   onEdit,
   onDelete,
   pendingMonitoringCount,
+  monitoringReports,
 }: HierarchyTreeNodeProps) {
   const getIcon = () => {
     switch (nodeType) {
@@ -106,9 +110,10 @@ export function HierarchyTreeNode({
 
       {/* Pending monitoring indicator */}
       {pendingMonitoringCount != null && pendingMonitoringCount > 0 && (
-        <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold leading-none shrink-0">
-          {pendingMonitoringCount}
-        </span>
+        <PendingTasksPopover
+          count={pendingMonitoringCount}
+          reports={monitoringReports || []}
+        />
       )}
 
       {/* Action buttons — visible on hover */}

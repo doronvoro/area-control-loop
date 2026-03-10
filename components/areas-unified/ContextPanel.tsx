@@ -139,7 +139,7 @@ export function ContextPanel({
       return (
         <IndoorAreaEditor
           area={area}
-          subAreas={subAreas}
+  
           permissions={permissions}
           onRefresh={onRefresh}
         />
@@ -150,7 +150,7 @@ export function ContextPanel({
     return (
       <OutdoorAreaEditor
         area={area}
-        subAreas={subAreas}
+
         permissions={permissions}
         onRefresh={onRefresh}
       />
@@ -186,7 +186,7 @@ export function ContextPanel({
       return (
         <IndoorAreaEditor
           area={area}
-          subAreas={subAreas}
+  
           permissions={permissions}
           selectedSubAreaId={subArea.id}
           onRefresh={onRefresh}
@@ -197,7 +197,7 @@ export function ContextPanel({
     return (
       <OutdoorAreaEditor
         area={area}
-        subAreas={subAreas}
+
         permissions={permissions}
         selectedSubAreaId={subArea.id}
         onRefresh={onRefresh}

@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { AreaWithGeometry, DrawingState } from './types';
+import { PendingTasksPopover } from './PendingTasksPopover';
 
 interface MapSidebarProps {
   areas: AreaWithGeometry[];
@@ -128,9 +129,10 @@ export function MapSidebar({
 
                 {/* Pending monitoring badge */}
                 {area.pending_monitoring > 0 && (
-                  <span className="bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
-                    {area.pending_monitoring}
-                  </span>
+                  <PendingTasksPopover
+                    count={area.pending_monitoring}
+                    reports={area.sub_areas.flatMap((sa) => sa.monitoring_reports)}
+                  />
                 )}
 
                 {/* Actions */}
@@ -221,9 +223,11 @@ export function MapSidebar({
 
                       {/* Pending monitoring badge */}
                       {subArea.pending_monitoring > 0 && (
-                        <span className="bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[16px] h-[16px] flex items-center justify-center px-0.5">
-                          {subArea.pending_monitoring}
-                        </span>
+                        <PendingTasksPopover
+                          count={subArea.pending_monitoring}
+                          reports={subArea.monitoring_reports}
+                          size="sm"
+                        />
                       )}
 
                       <div className="flex items-center gap-0.5">

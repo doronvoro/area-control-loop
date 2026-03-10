@@ -20,9 +20,10 @@ export function LiveMapView({
   const [areas, setAreas] = useState<AreaWithGeometry[]>([]);
   const [loading, setLoading] = useState(true);
   const [internalSelectedId, setInternalSelectedId] = useState<string | null>(null);
+  const [initialFitId, setInitialFitId] = useState<string | null>(null);
 
   const selectedEntityId = externalSelectedId !== undefined ? externalSelectedId : internalSelectedId;
-  const fitToEntityId = externalFitId !== undefined ? externalFitId : null;
+  const fitToEntityId = externalFitId ?? initialFitId;
 
   const viewOnlyDrawing: DrawingState = { mode: 'view' };
 
@@ -32,6 +33,9 @@ export function LiveMapView({
       if (!res.ok) throw new Error('Failed to fetch areas');
       const data = await res.json();
       setAreas(data.areas || []);
+      // Auto-fit to all areas on initial load
+      setInitialFitId('__all__');
+      setTimeout(() => setInitialFitId(null), 500);
     } catch (error: any) {
       showToast.error('שגיאה בטעינת שטחים');
       console.error(error);

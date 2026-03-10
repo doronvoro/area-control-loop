@@ -29,6 +29,7 @@ interface HierarchyTreeProps {
   renderInlineContent?: (nodeId: string, depth: number) => React.ReactNode | null;
   showHeader?: boolean;
   pendingMonitoringCounts?: Record<string, number>;
+  monitoringReports?: Record<string, any[]>;
 }
 
 export function HierarchyTree({
@@ -53,6 +54,7 @@ export function HierarchyTree({
   renderInlineContent,
   showHeader = true,
   pendingMonitoringCounts,
+  monitoringReports,
 }: HierarchyTreeProps) {
   const handleExpandArea = async (areaId: string) => {
     await onLoadSubAreas(areaId);
@@ -92,6 +94,7 @@ export function HierarchyTree({
             onEdit={onEditSubArea ? () => onEditSubArea(subArea) : undefined}
             onDelete={onDeleteSubArea ? () => onDeleteSubArea(subArea) : undefined}
             pendingMonitoringCount={pendingMonitoringCounts?.[subArea.id]}
+            monitoringReports={monitoringReports?.[subArea.id]}
           />
           {renderInlineContent?.(nodeId, depth)}
           {hasChildren && isExpanded && renderSubAreas(subArea.children!, depth + 1, parentAreaId)}
@@ -167,6 +170,24 @@ export function HierarchyTree({
                         const isAreaExpanded = expanded.has(areaId);
                         const isLoading = loadingSubAreas.has(area.id);
 
+                        // Collect reports from area itself + all its sub-areas
+                        const collectSubAreaReports = (subs: SubArea[]): any[] => {
+                          let reports: any[] = [];
+                          for (const sa of subs) {
+                            if (monitoringReports?.[sa.id]) {
+                              reports = reports.concat(monitoringReports[sa.id]);
+                            }
+                            if (sa.children) {
+                              reports = reports.concat(collectSubAreaReports(sa.children));
+                            }
+                          }
+                          return reports;
+                        };
+                        const areaReports = [
+                          ...(monitoringReports?.[area.id] || []),
+                          ...collectSubAreaReports(subAreas),
+                        ];
+
                         return (
                           <div key={area.id}>
                             <HierarchyTreeNode
@@ -196,6 +217,7 @@ export function HierarchyTree({
                               onEdit={onEditArea ? () => onEditArea(area) : undefined}
                               onDelete={onDeleteArea ? () => onDeleteArea(area) : undefined}
                               pendingMonitoringCount={pendingMonitoringCounts?.[area.id]}
+                              monitoringReports={areaReports}
                             />
                             {renderInlineContent?.(areaId, 1)}
                             {isAreaExpanded && hasSubAreas && renderSubAreas(subAreas, 2, area.id)}

@@ -11,14 +11,12 @@ import type {
   SubAreaWithGeometry,
   DrawingState,
   GeoJSONPolygon,
-  SubArea,
   Permissions,
   AreaWithType,
 } from './types';
 
 interface OutdoorAreaEditorProps {
   area: AreaWithType;
-  subAreas: SubArea[];
   permissions: Permissions;
   selectedSubAreaId?: string;
   onRefresh: () => void;
@@ -26,7 +24,6 @@ interface OutdoorAreaEditorProps {
 
 export function OutdoorAreaEditor({
   area,
-  subAreas,
   permissions,
   selectedSubAreaId,
   onRefresh,
@@ -54,16 +51,15 @@ export function OutdoorAreaEditor({
       );
       setMapAreas(filtered);
 
-      // Fit to entity after data loads — fall back to area if sub-area has no geometry
-      let targetId = selectedSubAreaId || area.id;
-      if (selectedSubAreaId && filtered.length > 0) {
-        const subArea = filtered[0].sub_areas?.find(
-          (sa: SubAreaWithGeometry) => sa.id === selectedSubAreaId
+      // Fit to all geometries on load so the map auto-zooms to the area's polygons.
+      // Fall back to a specific sub-area only when it has geometry and was explicitly selected.
+      const areaData = filtered[0];
+      const selectedSubHasGeometry =
+        selectedSubAreaId &&
+        areaData?.sub_areas?.some(
+          (sa: SubAreaWithGeometry) => sa.id === selectedSubAreaId && sa.geometry
         );
-        if (!subArea?.geometry) {
-          targetId = area.id;
-        }
-      }
+      const targetId = selectedSubHasGeometry ? selectedSubAreaId! : '__all__';
       setFitToEntityId(targetId);
       setTimeout(() => setFitToEntityId(null), 500);
     } catch (error: any) {

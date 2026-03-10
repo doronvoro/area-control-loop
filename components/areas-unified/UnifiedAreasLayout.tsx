@@ -717,6 +717,7 @@ export function UnifiedAreasLayout({
             renderInlineContent={mode === 'edit' ? renderInlineContent : undefined}
             showHeader={false}
             pendingMonitoringCounts={pendingMonitoringCounts}
+            monitoringReports={monitoringReports}
           />
         </div>
 
