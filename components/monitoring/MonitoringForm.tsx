@@ -41,6 +41,8 @@ import {
   X,
   RotateCcw,
   Calendar,
+  Lock,
+  LockOpen,
 } from 'lucide-react';
 import { ReportSeverity, SEVERITY_OPTIONS, ActionTypeName, ACTION_TYPE_OPTIONS } from '@/types/database';
 import { MultiSelect } from '@/components/ui/multi-select';
@@ -131,6 +133,11 @@ export function MonitoringForm({
   // Per-entry loading states
   // Per-treatment loading states
   const [treatmentLoadingMaterials, setTreatmentLoadingMaterials] = useState<Record<string, boolean>>({});
+
+  // Unlock states: allow selecting any finding/material instead of crop-filtered ones
+  const [unlockedFindings, setUnlockedFindings] = useState<Record<number, boolean>>({});
+  const [unlockedMaterials, setUnlockedMaterials] = useState<Record<string, boolean>>({});
+  const [allMaterials, setAllMaterials] = useState<any[] | null>(null);
 
   // Loading states
   const [loadingInspectors, setLoadingInspectors] = useState(false);
@@ -286,6 +293,10 @@ export function MonitoringForm({
     if (cropId) {
       setEntryCropIds(prev => ({ ...prev, [newIndex]: cropId }));
       setEntryFindings(prev => ({ ...prev, [newIndex]: entryFindings[index] || findings }));
+      // Copy unlock states for findings
+      if (unlockedFindings[index]) {
+        setUnlockedFindings(prev => ({ ...prev, [newIndex]: true }));
+      }
       source.treatments.forEach((_, tIdx) => {
         const srcKey = `${index}-${tIdx}`;
         const dstKey = `${newIndex}-${tIdx}`;
@@ -296,9 +307,12 @@ export function MonitoringForm({
           setTreatmentRecommendedDosage(prev => ({ ...prev, [dstKey]: treatmentRecommendedDosage[srcKey] }));
           setTreatmentRecommendedUnitTypeId(prev => ({ ...prev, [dstKey]: treatmentRecommendedUnitTypeId[srcKey] }));
         }
+        if (unlockedMaterials[srcKey]) {
+          setUnlockedMaterials(prev => ({ ...prev, [dstKey]: true }));
+        }
       });
     }
-  }, [form, append, fields.length, entryCropIds, entryFindings, findings, treatmentMaterials, treatmentRecommendedDosage, treatmentRecommendedUnitTypeId]);
+  }, [form, append, fields.length, entryCropIds, entryFindings, findings, treatmentMaterials, treatmentRecommendedDosage, treatmentRecommendedUnitTypeId, unlockedFindings, unlockedMaterials]);
 
   // Fetch inspectors and areas when customer changes (admin only)
   useEffect(() => {
@@ -346,6 +360,8 @@ export function MonitoringForm({
     setTreatmentRecommendedUnitTypeId({});
     setTreatmentLoadingMaterials({});
     setCollapsedEntries({});
+    setUnlockedFindings({});
+    setUnlockedMaterials({});
   };
 
   const fetchInspectorsAndAreas = async (customerId: string) => {
@@ -446,6 +462,19 @@ export function MonitoringForm({
     }
   };
 
+  const fetchAllMaterials = async () => {
+    if (allMaterials) return;
+    try {
+      const res = await fetch('/api/materials');
+      if (res.ok) {
+        const data = await res.json();
+        setAllMaterials(data);
+      }
+    } catch (err) {
+      console.error('Error fetching all materials:', err);
+    }
+  };
+
   // Build parentMap for multi-select hierarchy support
   const subAreaParentMap = useMemo(() => {
     const map: Record<string, string | null> = {};
@@ -536,6 +565,7 @@ export function MonitoringForm({
     setTreatmentRecommendedDosage(cleanupState);
     setTreatmentRecommendedUnitTypeId(cleanupState);
     setTreatmentLoadingMaterials(cleanupState);
+    setUnlockedMaterials(cleanupState);
   };
 
   const handleTreatmentActionTypeChange = (actionTypeId: string, entryIndex: number, treatmentIndex: number) => {
@@ -611,6 +641,7 @@ export function MonitoringForm({
     setTreatmentRecommendedDosage(rebuildTreatmentState);
     setTreatmentRecommendedUnitTypeId(rebuildTreatmentState);
     setTreatmentLoadingMaterials(rebuildTreatmentState);
+    setUnlockedMaterials(rebuildTreatmentState);
   };
 
   const addEntry = () => {
@@ -651,10 +682,12 @@ export function MonitoringForm({
     };
 
     setEntryCropIds(rebuildState);
+    setUnlockedFindings(rebuildState);
     setTreatmentMaterials(rebuildTreatmentState);
     setTreatmentRecommendedDosage(rebuildTreatmentState);
     setTreatmentRecommendedUnitTypeId(rebuildTreatmentState);
     setTreatmentLoadingMaterials(rebuildTreatmentState);
+    setUnlockedMaterials(rebuildTreatmentState);
 
     // Rebuild collapsed state
     setCollapsedEntries(prev => {
@@ -1266,13 +1299,27 @@ export function MonitoringForm({
                                 name={`entries.${index}.finding_ids`}
                                 render={({ field: findingField }) => (
                                   <FormItem className="md:col-span-2">
-                                    <FormLabel className="font-semibold text-sm">
-                                      ממצא *
-                                      {entryLoadingFindings[index] && <LoadingSpinner />}
-                                    </FormLabel>
+                                    <div className="flex items-center gap-1.5">
+                                      <FormLabel className="font-semibold text-sm">
+                                        ממצא *
+                                        {entryLoadingFindings[index] && <LoadingSpinner />}
+                                      </FormLabel>
+                                      {entryFindings[index] && entryFindings[index] !== findings && (
+                                        <button
+                                          type="button"
+                                          onClick={() => setUnlockedFindings(prev => ({ ...prev, [index]: !prev[index] }))}
+                                          className="p-0.5 rounded hover:bg-accent text-muted-foreground transition-colors"
+                                          title={unlockedFindings[index] ? 'הצג רק ממצאים מומלצים' : 'הצג את כל הממצאים'}
+                                        >
+                                          {unlockedFindings[index]
+                                            ? <LockOpen className="h-3.5 w-3.5 text-orange-500" />
+                                            : <Lock className="h-3.5 w-3.5" />}
+                                        </button>
+                                      )}
+                                    </div>
                                     <FormControl>
                                       <MultiSelect
-                                        options={[...(entryFindings[index] || findings)]
+                                        options={[...(unlockedFindings[index] ? findings : (entryFindings[index] || findings))]
                                           .sort((a, b) => (a.description || a.name || '').localeCompare(b.description || b.name || '', 'he'))
                                           .map((finding) => ({
                                             value: finding.id,
@@ -1395,13 +1442,30 @@ export function MonitoringForm({
                                             name={`entries.${index}.treatments.${tIndex}.material_id`}
                                             render={({ field: materialField }) => (
                                               <FormItem>
-                                                <FormLabel className="font-semibold text-xs">
-                                                  חומר מומלץ
-                                                  {treatmentLoadingMaterials[treatmentKey] && <LoadingSpinner />}
-                                                </FormLabel>
+                                                <div className="flex items-center gap-1.5">
+                                                  <FormLabel className="font-semibold text-xs">
+                                                    חומר מומלץ
+                                                    {treatmentLoadingMaterials[treatmentKey] && <LoadingSpinner />}
+                                                  </FormLabel>
+                                                  {(treatmentMaterials[treatmentKey]?.length || 0) > 0 && (
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => {
+                                                        if (!unlockedMaterials[treatmentKey]) fetchAllMaterials();
+                                                        setUnlockedMaterials(prev => ({ ...prev, [treatmentKey]: !prev[treatmentKey] }));
+                                                      }}
+                                                      className="p-0.5 rounded hover:bg-accent text-muted-foreground transition-colors"
+                                                      title={unlockedMaterials[treatmentKey] ? 'הצג רק חומרים מומלצים' : 'הצג את כל החומרים'}
+                                                    >
+                                                      {unlockedMaterials[treatmentKey]
+                                                        ? <LockOpen className="h-3.5 w-3.5 text-orange-500" />
+                                                        : <Lock className="h-3.5 w-3.5" />}
+                                                    </button>
+                                                  )}
+                                                </div>
                                                 <FormControl>
                                                   <SearchableMaterialSelect
-                                                    materials={treatmentMaterials[treatmentKey] || []}
+                                                    materials={unlockedMaterials[treatmentKey] ? (allMaterials || []) : (treatmentMaterials[treatmentKey] || [])}
                                                     value={materialField.value}
                                                     onValueChange={(v) => handleTreatmentMaterialChange(v, index, tIndex)}
                                                     disabled={treatmentLoadingMaterials[treatmentKey]}

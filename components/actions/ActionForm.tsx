@@ -26,7 +26,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { MultiSelect } from '@/components/ui/multi-select';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, Lock, LockOpen } from 'lucide-react';
 import { ReportSeverity, SEVERITY_OPTIONS, ActionTypeName, ACTION_TYPE_OPTIONS } from '@/types/database';
 import { ENTIRE_AREA, ENTIRE_AREA_DISPLAY, ACTION_STATUS_OPTIONS } from '@/lib/constants';
 
@@ -97,6 +97,10 @@ export function ActionForm({
   // Treatment-specific cascade data (indexed by "entryIndex-treatmentIndex")
   const [treatmentMaterials, setTreatmentMaterials] = useState<Record<string, any[]>>({});
   const [treatmentLoadingMaterials, setTreatmentLoadingMaterials] = useState<Record<string, boolean>>({});
+
+  // Unlock: allow selecting any material instead of crop-filtered ones
+  const [unlockedMaterials, setUnlockedMaterials] = useState<Record<string, boolean>>({});
+  const [allMaterials, setAllMaterials] = useState<any[] | null>(null);
 
   // Loading states
   const [loadingWorkers, setLoadingWorkers] = useState(false);
@@ -190,6 +194,7 @@ export function ActionForm({
     ]);
     setTreatmentMaterials({});
     setTreatmentLoadingMaterials({});
+    setUnlockedMaterials({});
   };
 
   const fetchActionWorkers = async (customerId: string) => {
@@ -364,6 +369,19 @@ export function ActionForm({
     }
   }, [form]);
 
+  const fetchAllMaterials = useCallback(async () => {
+    if (allMaterials) return;
+    try {
+      const res = await fetch('/api/materials');
+      if (res.ok) {
+        const data = await res.json();
+        setAllMaterials(data);
+      }
+    } catch (err) {
+      console.error('Error fetching all materials:', err);
+    }
+  }, [allMaterials]);
+
   const cleanupTreatmentStateForEntry = (entryIndex: number) => {
     const cleanupState = <T,>(state: Record<string, T>): Record<string, T> => {
       const newState: Record<string, T> = {};
@@ -376,6 +394,7 @@ export function ActionForm({
     };
     setTreatmentMaterials(cleanupState);
     setTreatmentLoadingMaterials(cleanupState);
+    setUnlockedMaterials(cleanupState);
   };
 
   const handleSubAreaChange = (subAreaId: string, entryIndex: number) => {
@@ -438,7 +457,7 @@ export function ActionForm({
     const primaryFindingId = findingIds[0];
     const actionTypeId = form.getValues(`entries.${entryIndex}.treatments.${treatmentIndex}.action_type_id`);
     const key = `${entryIndex}-${treatmentIndex}`;
-    const materials = treatmentMaterials[key] || [];
+    const materials = unlockedMaterials[key] ? (allMaterials || []) : (treatmentMaterials[key] || []);
     const material = materials.find((m: any) => m.id === materialId);
 
     form.setValue(`entries.${entryIndex}.treatments.${treatmentIndex}.material_id`, materialId);
@@ -966,7 +985,24 @@ export function ActionForm({
                                   name={`entries.${entryIndex}.treatments.${treatmentIndex}.material_id`}
                                   render={({ field: materialField }) => (
                                     <FormItem>
-                                      <FormLabel className="text-sm">חומר</FormLabel>
+                                      <div className="flex items-center gap-1.5">
+                                        <FormLabel className="text-sm">חומר</FormLabel>
+                                        {(treatmentMaterials[treatmentKey]?.length || 0) > 0 && (
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              if (!unlockedMaterials[treatmentKey]) fetchAllMaterials();
+                                              setUnlockedMaterials(prev => ({ ...prev, [treatmentKey]: !prev[treatmentKey] }));
+                                            }}
+                                            className="p-0.5 rounded hover:bg-accent text-muted-foreground transition-colors"
+                                            title={unlockedMaterials[treatmentKey] ? 'הצג רק חומרים מומלצים' : 'הצג את כל החומרים'}
+                                          >
+                                            {unlockedMaterials[treatmentKey]
+                                              ? <LockOpen className="h-3.5 w-3.5 text-orange-500" />
+                                              : <Lock className="h-3.5 w-3.5" />}
+                                          </button>
+                                        )}
+                                      </div>
                                       <Select
                                         onValueChange={(value) => handleTreatmentMaterialChange(value, entryIndex, treatmentIndex)}
                                         value={materialField.value || ''}
@@ -986,7 +1022,7 @@ export function ActionForm({
                                           </SelectTrigger>
                                         </FormControl>
                                         <SelectContent>
-                                          {(treatmentMaterials[treatmentKey] || []).map((material: any) => (
+                                          {(unlockedMaterials[treatmentKey] ? (allMaterials || []) : (treatmentMaterials[treatmentKey] || [])).map((material: any) => (
                                             <SelectItem key={material.id} value={material.id}>
                                               {material.description || material.name}
                                             </SelectItem>

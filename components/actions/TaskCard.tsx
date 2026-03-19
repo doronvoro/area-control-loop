@@ -14,7 +14,7 @@ import {
 import { SEVERITY_LABELS, ReportSeverity } from '@/types/database';
 import { SearchableMaterialSelect } from '@/components/monitoring/SearchableMaterialSelect';
 import { ReportDetailSheet } from '@/components/reports/ReportDetailSheet';
-import { Check, Edit3, Calendar, Sparkles, Loader2, FileText } from 'lucide-react';
+import { Check, Edit3, Calendar, Sparkles, Loader2, FileText, Lock, LockOpen } from 'lucide-react';
 
 export interface ActionTask {
   monitoring_treatment_id: string;
@@ -116,6 +116,23 @@ export function TaskCard({ task, onComplete, disabled, unitTypes = [] }: TaskCar
   const [loadingMaterials, setLoadingMaterials] = useState(false);
   const [recommendedDosage, setRecommendedDosage] = useState<string>('');
   const [recommendedUnitTypeId, setRecommendedUnitTypeId] = useState<string>('');
+
+  // Unlock: allow selecting any material instead of crop-filtered ones
+  const [unlockedMaterials, setUnlockedMaterials] = useState(false);
+  const [allMaterials, setAllMaterials] = useState<any[] | null>(null);
+
+  const fetchAllMaterials = useCallback(async () => {
+    if (allMaterials) return;
+    try {
+      const res = await fetch('/api/materials');
+      if (res.ok) {
+        const data = await res.json();
+        setAllMaterials(data);
+      }
+    } catch {
+      // Non-critical
+    }
+  }, [allMaterials]);
 
   const rec = task.recommendation;
   const subAreaDisplay = task.sub_area.display || task.sub_area.name;
@@ -328,12 +345,29 @@ export function TaskCard({ task, onComplete, disabled, unitTypes = [] }: TaskCar
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {/* Material — searchable */}
             <div className="space-y-1">
-              <label className="font-semibold text-xs text-muted-foreground">
-                חומר
-                {loadingMaterials && <Loader2 className="inline h-3 w-3 animate-spin mr-1" />}
-              </label>
+              <div className="flex items-center gap-1.5">
+                <label className="font-semibold text-xs text-muted-foreground">
+                  חומר
+                  {loadingMaterials && <Loader2 className="inline h-3 w-3 animate-spin mr-1" />}
+                </label>
+                {cascadeMaterials.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!unlockedMaterials) fetchAllMaterials();
+                      setUnlockedMaterials(prev => !prev);
+                    }}
+                    className="p-0.5 rounded hover:bg-accent text-muted-foreground transition-colors"
+                    title={unlockedMaterials ? 'הצג רק חומרים מומלצים' : 'הצג את כל החומרים'}
+                  >
+                    {unlockedMaterials
+                      ? <LockOpen className="h-3.5 w-3.5 text-orange-500" />
+                      : <Lock className="h-3.5 w-3.5" />}
+                  </button>
+                )}
+              </div>
               <SearchableMaterialSelect
-                materials={cascadeMaterials}
+                materials={unlockedMaterials ? (allMaterials || []) : cascadeMaterials}
                 value={editMaterialId}
                 onValueChange={handleMaterialChange}
                 disabled={loadingMaterials}

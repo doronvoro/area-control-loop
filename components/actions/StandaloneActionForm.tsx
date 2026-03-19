@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/select';
 import { ENTIRE_AREA, ENTIRE_AREA_DISPLAY } from '@/lib/constants';
 import { ACTION_TYPE_OPTIONS } from '@/types/database';
-import { Plus, Check, X, Sparkles } from 'lucide-react';
+import { Plus, Check, X, Sparkles, Lock, LockOpen } from 'lucide-react';
 
 interface SubArea {
   id: string;
@@ -74,6 +74,21 @@ export function StandaloneActionForm({
   const [notes, setNotes] = useState('');
   const [materials, setMaterials] = useState<Material[]>([]);
   const [loadingMaterials, setLoadingMaterials] = useState(false);
+  const [unlockedMaterials, setUnlockedMaterials] = useState(false);
+  const [allMaterials, setAllMaterials] = useState<Material[] | null>(null);
+
+  const fetchAllMaterials = async () => {
+    if (allMaterials) return;
+    try {
+      const res = await fetch('/api/materials');
+      if (res.ok) {
+        const data = await res.json();
+        setAllMaterials(data);
+      }
+    } catch {
+      // Non-critical
+    }
+  };
 
   // Fetch materials when action type changes (using cascade API)
   useEffect(() => {
@@ -196,7 +211,24 @@ export function StandaloneActionForm({
         </div>
 
         <div className="space-y-1">
-          <label className="text-xs font-medium text-muted-foreground">חומר</label>
+          <div className="flex items-center gap-1.5">
+            <label className="text-xs font-medium text-muted-foreground">חומר</label>
+            {materials.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (!unlockedMaterials) fetchAllMaterials();
+                  setUnlockedMaterials(prev => !prev);
+                }}
+                className="p-0.5 rounded hover:bg-accent text-muted-foreground transition-colors"
+                title={unlockedMaterials ? 'הצג רק חומרים מומלצים' : 'הצג את כל החומרים'}
+              >
+                {unlockedMaterials
+                  ? <LockOpen className="h-3.5 w-3.5 text-orange-500" />
+                  : <Lock className="h-3.5 w-3.5" />}
+              </button>
+            )}
+          </div>
           <Select
             value={materialId}
             onValueChange={setMaterialId}
@@ -206,7 +238,7 @@ export function StandaloneActionForm({
               <SelectValue placeholder={loadingMaterials ? 'טוען...' : 'בחר חומר'} />
             </SelectTrigger>
             <SelectContent>
-              {materials.map((m) => (
+              {(unlockedMaterials ? (allMaterials || []) : materials).map((m) => (
                 <SelectItem key={m.id} value={m.id}>
                   {m.name}
                 </SelectItem>

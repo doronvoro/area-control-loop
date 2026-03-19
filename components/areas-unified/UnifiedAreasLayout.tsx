@@ -552,6 +552,15 @@ export function UnifiedAreasLayout({
         : null
     : null;
 
+  // Only fit the map when the selected entity has a polygon — avoids zoom-out on areas with no geometry
+  const liveMapFitId = selectedNode
+    ? selectedNode.type === 'area' && (selectedNode.data as AreaWithType).geometry
+      ? (selectedNode.data as AreaWithType).id
+      : selectedNode.type === 'sub_area' && (selectedNode.data as SubArea).geometry
+        ? (selectedNode.data as SubArea).id
+        : null
+    : null;
+
   // When user clicks an entity on the live map, select the corresponding tree node
   const handleLiveMapEntitySelect = useCallback(
     (entityId: string, entityType: 'area' | 'sub_area') => {
@@ -772,7 +781,7 @@ export function UnifiedAreasLayout({
           ) : (
             <LiveMapView
               selectedEntityId={liveMapEntityId}
-              fitToEntityId={liveMapEntityId}
+              fitToEntityId={liveMapFitId}
               onEntitySelect={handleLiveMapEntitySelect}
             />
           )}
