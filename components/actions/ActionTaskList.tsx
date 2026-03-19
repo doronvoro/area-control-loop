@@ -391,7 +391,7 @@ export function ActionTaskList() {
                 <h3 className="font-bold text-base shrink-0 w-12">מבצע</h3>
                 <div className="flex items-center shrink-0">
                   <Select value={selectedWorkerId} onValueChange={setSelectedWorkerId}>
-                    <SelectTrigger className="h-11 w-64 actions-select-trigger">
+                    <SelectTrigger className="h-9 w-64 actions-select-trigger">
                       <SelectValue placeholder="בחר" />
                     </SelectTrigger>
                     <SelectContent position="popper" sideOffset={4}>
@@ -419,7 +419,7 @@ export function ActionTaskList() {
               <h3 className="font-bold text-base shrink-0 w-12">שטח</h3>
               <div className="flex items-center shrink-0">
                 <Select value={selectedAreaId} onValueChange={setSelectedAreaId}>
-                  <SelectTrigger className="h-11 w-64 actions-select-trigger">
+                  <SelectTrigger className="h-9 w-64 actions-select-trigger">
                     <SelectValue placeholder="בחר" />
                   </SelectTrigger>
                   <SelectContent position="popper" sideOffset={4}>
@@ -463,7 +463,7 @@ export function ActionTaskList() {
                   type="datetime-local"
                   value={reportDate}
                   onChange={(e) => setReportDate(e.target.value)}
-                  className="h-11 w-64 actions-select-trigger"
+                  className="h-9 w-64 actions-select-trigger actions-date-input"
                 />
               </div>
             </div>

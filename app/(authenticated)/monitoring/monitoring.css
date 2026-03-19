@@ -87,6 +87,10 @@
   background: linear-gradient(180deg, oklch(0.55 0.16 152), oklch(0.42 0.12 152));
 }
 
+.section-date::before {
+  background: linear-gradient(180deg, oklch(0.55 0.14 55), oklch(0.45 0.12 45));
+}
+
 .section-entries::before {
   background: linear-gradient(180deg, oklch(0.65 0.18 85), oklch(0.55 0.15 70));
 }
@@ -127,6 +131,11 @@
 .section-icon-area {
   background: oklch(0.935 0.025 152);
   color: oklch(0.448 0.119 152);
+}
+
+.section-icon-date {
+  background: oklch(0.95 0.04 55);
+  color: oklch(0.45 0.14 55);
 }
 
 .section-icon-entries {
@@ -502,6 +511,12 @@
 .monitoring-select-trigger:focus {
   border-color: oklch(0.448 0.119 152 / 60%) !important;
   box-shadow: 0 0 0 3px oklch(0.448 0.119 152 / 12%) !important;
+}
+
+/* Date input: icon on left, text on right */
+.monitoring-date-input {
+  display: flex;
+  flex-direction: row-reverse;
 }
 
 /* --- Loading Skeleton --- */

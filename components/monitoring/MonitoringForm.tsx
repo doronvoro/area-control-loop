@@ -969,7 +969,7 @@ export function MonitoringForm({
                           <FormLabel className="font-semibold text-sm">לקוח *</FormLabel>
                           <Select onValueChange={field.onChange} value={field.value}>
                             <FormControl>
-                              <SelectTrigger className="h-11 monitoring-select-trigger">
+                              <SelectTrigger className="h-9 monitoring-select-trigger">
                                 <SelectValue placeholder="בחר לקוח" />
                               </SelectTrigger>
                             </FormControl>
@@ -1000,7 +1000,7 @@ export function MonitoringForm({
                             disabled={!watchedCustomerId || loadingInspectors}
                           >
                             <FormControl>
-                              <SelectTrigger className="h-11 monitoring-select-trigger">
+                              <SelectTrigger className="h-9 monitoring-select-trigger">
                                 <SelectValue placeholder={
                                   !watchedCustomerId ? 'בחר לקוח תחילה' : 'בחר'
                                 } />
@@ -1040,7 +1040,7 @@ export function MonitoringForm({
                             disabled={!watchedCustomerId || loadingInspectors}
                           >
                             <FormControl>
-                              <SelectTrigger className="h-11 w-56 monitoring-select-trigger">
+                              <SelectTrigger className="h-9 w-64 monitoring-select-trigger">
                                 <SelectValue placeholder="בחר" />
                               </SelectTrigger>
                             </FormControl>
@@ -1062,32 +1062,6 @@ export function MonitoringForm({
                   </div>
                 </div>
               )}
-            </div>
-
-            {/* Report Date */}
-            <div className="monitoring-section px-5 py-3.5">
-              <div className="section-header-inline">
-                <div className="section-icon shrink-0">
-                  <Calendar className="h-4 w-4" />
-                </div>
-                <h3 className="font-bold text-base shrink-0">מועד</h3>
-                <FormField
-                  control={form.control}
-                  name="report_date"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormControl>
-                        <Input
-                          type="datetime-local"
-                          className="h-11 monitoring-select-trigger"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
             </div>
 
             {/* Section 2: Area Selection */}
@@ -1112,7 +1086,7 @@ export function MonitoringForm({
                           disabled={!watchedCustomerId || loadingAreas}
                         >
                           <FormControl>
-                            <SelectTrigger className="h-11 w-56 monitoring-select-trigger">
+                            <SelectTrigger className="h-9 w-64 monitoring-select-trigger">
                               <SelectValue placeholder={
                                 !watchedCustomerId ? 'בחר לקוח תחילה' : 'בחר'
                               } />
@@ -1152,6 +1126,32 @@ export function MonitoringForm({
                     ) : null;
                   })()}
                 </div>
+              </div>
+            </div>
+
+            {/* Report Date */}
+            <div className="monitoring-section section-date px-5 py-3.5">
+              <div className="section-header-inline">
+                <div className="section-icon section-icon-date shrink-0">
+                  <Calendar className="h-4 w-4" />
+                </div>
+                <h3 className="font-bold text-base shrink-0">מועד</h3>
+                <FormField
+                  control={form.control}
+                  name="report_date"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormControl>
+                        <Input
+                          type="datetime-local"
+                          className="h-9 w-64 monitoring-select-trigger monitoring-date-input"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </div>
             </div>
 
