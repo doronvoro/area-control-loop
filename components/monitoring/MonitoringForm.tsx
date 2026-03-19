@@ -40,6 +40,7 @@ import {
   Leaf,
   X,
   RotateCcw,
+  Calendar,
 } from 'lucide-react';
 import { ReportSeverity, SEVERITY_OPTIONS, ActionTypeName, ACTION_TYPE_OPTIONS } from '@/types/database';
 import { MultiSelect } from '@/components/ui/multi-select';
@@ -66,6 +67,7 @@ const monitoringSchema = z.object({
   customer_id: z.string().min(1, 'נדרש לבחור לקוח'),
   inspector_id: z.string().min(1, 'נדרש לבחור פקח'),
   area_id: z.string().min(1, 'נדרש לבחור שטח'),
+  report_date: z.string().optional(),
   entries: z.array(subAreaEntrySchema).min(1, 'נדרשת לפחות רשומה אחת'),
 });
 
@@ -159,6 +161,7 @@ export function MonitoringForm({
       customer_id: !isAdmin && customerIdForData ? customerIdForData : '',
       inspector_id: '',
       area_id: '',
+      report_date: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16),
       entries: [{
         sub_area_ids: [],
         finding_ids: [],
@@ -737,6 +740,7 @@ export function MonitoringForm({
           customer_id: data.customer_id,
           inspector_id: data.inspector_id,
           area_id: data.area_id,
+          report_date: data.report_date || null,
           entries,
         }),
       });
@@ -1025,6 +1029,32 @@ export function MonitoringForm({
                   </div>
                 </div>
               )}
+            </div>
+
+            {/* Report Date */}
+            <div className="monitoring-section px-5 py-3.5">
+              <div className="section-header-inline">
+                <div className="section-icon shrink-0">
+                  <Calendar className="h-4 w-4" />
+                </div>
+                <h3 className="font-bold text-base shrink-0">מועד</h3>
+                <FormField
+                  control={form.control}
+                  name="report_date"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormControl>
+                        <Input
+                          type="datetime-local"
+                          className="h-11 monitoring-select-trigger"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
             </div>
 
             {/* Section 2: Area Selection */}

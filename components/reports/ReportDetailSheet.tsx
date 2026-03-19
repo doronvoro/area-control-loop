@@ -56,6 +56,7 @@ interface ReportDetail {
   description: string | null;
   status: string;
   created_at: string;
+  report_date: string | null;
   report_number: number;
   area_type_id: string;
   area_type: { name: string; display_name: string } | null;
@@ -144,13 +145,27 @@ export function ReportDetailSheet({
               </CardHeader>
               <CardContent className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">תאריך:</span>
+                  <span className="text-muted-foreground">נוצר:</span>
                   <span>
                     {new Date(report.created_at).toLocaleDateString('he-IL')}{' '}
                     {new Date(report.created_at).toLocaleTimeString('he-IL', {
                       hour: '2-digit',
                       minute: '2-digit',
                     })}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">מועד:</span>
+                  <span>
+                    {report.report_date ? (
+                      <>
+                        {new Date(report.report_date).toLocaleDateString('he-IL')}{' '}
+                        {new Date(report.report_date).toLocaleTimeString('he-IL', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </>
+                    ) : '-'}
                   </span>
                 </div>
                 <div className="flex justify-between">

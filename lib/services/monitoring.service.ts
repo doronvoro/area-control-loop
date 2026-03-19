@@ -15,6 +15,7 @@ export interface MonitoringEntryInput extends EntryWithTreatments {
 export interface CreateMonitoringBatchParams {
   areaId: string;
   workerId?: string;
+  reportDate?: string;
   entries: MonitoringEntryInput[];
 }
 
@@ -22,6 +23,7 @@ export interface CreateMonitoringSingleParams {
   areaReportId?: string;
   areaId?: string;
   workerId?: string;
+  reportDate?: string;
   entry: MonitoringEntryInput;
 }
 
@@ -71,14 +73,14 @@ export async function createMonitoringBatch(
   adminClient: SupabaseClient,
   params: CreateMonitoringBatchParams
 ): Promise<{ results: any[]; report_number: number | null; report_area_id: string }> {
-  const { areaId, workerId, entries } = params;
+  const { areaId, workerId, reportDate, entries } = params;
 
   const reportAreaId = await findOrCreateReportArea(
     supabase,
     adminClient,
     areaId,
     AreaTypeId.MONITORING,
-    { workerId }
+    { workerId, reportDate }
   );
 
   const expandedEntries = expandEntries(entries);
@@ -105,7 +107,7 @@ export async function createMonitoringSingle(
   adminClient: SupabaseClient,
   params: CreateMonitoringSingleParams
 ): Promise<any> {
-  const { areaReportId, areaId, workerId, entry } = params;
+  const { areaReportId, areaId, workerId, reportDate, entry } = params;
 
   let finalAreaReportId = areaReportId;
 
@@ -115,7 +117,7 @@ export async function createMonitoringSingle(
       adminClient,
       areaId,
       AreaTypeId.MONITORING,
-      { workerId }
+      { workerId, reportDate }
     );
   }
 

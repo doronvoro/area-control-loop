@@ -24,6 +24,7 @@ export interface ActionEntryInput {
 export interface CreateActionBatchParams {
   areaId: string;
   workerId?: string;
+  reportDate?: string;
   entries: ActionEntryInput[];
 }
 
@@ -95,14 +96,14 @@ export async function createActionBatch(
   adminClient: SupabaseClient,
   params: CreateActionBatchParams
 ): Promise<any[]> {
-  const { areaId, workerId, entries } = params;
+  const { areaId, workerId, reportDate, entries } = params;
 
   const reportAreaId = await findOrCreateReportArea(
     supabase,
     adminClient,
     areaId,
     AreaTypeId.ACTION,
-    { reuseExisting: true, workerId }
+    { reuseExisting: true, workerId, reportDate }
   );
 
   const results: any[] = [];

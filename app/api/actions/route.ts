@@ -48,6 +48,7 @@ export async function POST(request: Request) {
       const results = await createActionBatch(ctx.supabase, ctx.adminClient, {
         areaId: body.area_id,
         workerId: body.worker_id,
+        reportDate: body.report_date,
         entries: body.entries,
       });
       return NextResponse.json(results, { status: 201 });

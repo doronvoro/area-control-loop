@@ -30,6 +30,7 @@ interface StandaloneAction {
 interface RequestBody {
   area_id: string;
   worker_id?: string;
+  report_date?: string;
   completed_tasks?: CompletedTask[];
   standalone_actions?: StandaloneAction[];
 }
@@ -47,7 +48,7 @@ export async function POST(request: Request) {
     if (authError) return authError;
 
     const body: RequestBody = await request.json();
-    const { area_id, worker_id, completed_tasks = [], standalone_actions = [] } = body;
+    const { area_id, worker_id, report_date, completed_tasks = [], standalone_actions = [] } = body;
 
     if (!area_id) {
       return NextResponse.json({ error: 'area_id is required' }, { status: 400 });
@@ -70,6 +71,7 @@ export async function POST(request: Request) {
         workerId: effectiveWorkerId || undefined,
         namePrefix: 'דוח פעולה',
         description: 'דוח פעולה',
+        reportDate: report_date,
       }
     );
 

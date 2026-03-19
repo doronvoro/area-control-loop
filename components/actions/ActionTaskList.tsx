@@ -12,6 +12,7 @@ import {
 import { TaskCard, ActionTask, CompletedTaskData } from './TaskCard';
 import { StandaloneActionForm, StandaloneActionData } from './StandaloneActionForm';
 import { ReportDetailSheet } from '@/components/reports/ReportDetailSheet';
+import { Input } from '@/components/ui/input';
 import {
   Zap,
   ClipboardCheck,
@@ -23,6 +24,7 @@ import {
   User,
   MapPin,
   Check,
+  Calendar,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -64,6 +66,9 @@ export function ActionTaskList() {
   const [formData, setFormData] = useState<FormData | null>(null);
   const [subAreas, setSubAreas] = useState<any[]>([]);
   const [selectedWorkerId, setSelectedWorkerId] = useState<string>('');
+  const [reportDate, setReportDate] = useState<string>(
+    new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)
+  );
   const [allTaskCounts, setAllTaskCounts] = useState<Record<string, number>>({});
 
   // Fetch tasks
@@ -248,6 +253,7 @@ export function ActionTaskList() {
           body: JSON.stringify({
             area_id: aId,
             worker_id: selectedWorkerId || undefined,
+            report_date: reportDate || null,
             completed_tasks: tasksForArea,
             standalone_actions: standaloneForArea,
           }),
@@ -441,6 +447,24 @@ export function ActionTaskList() {
                 {selectedAreaId !== 'all' && (
                   <span className="actions-field-check"><Check className="h-2.5 w-2.5" /></span>
                 )}
+              </div>
+            </div>
+          </div>
+
+          {/* Report Date */}
+          <div className="actions-section section-date px-5 py-3.5">
+            <div className="actions-section-header-inline">
+              <div className="actions-section-icon section-icon-date shrink-0">
+                <Calendar className="h-4 w-4" />
+              </div>
+              <h3 className="font-bold text-base shrink-0 w-12">מועד</h3>
+              <div className="flex items-center shrink-0">
+                <Input
+                  type="datetime-local"
+                  value={reportDate}
+                  onChange={(e) => setReportDate(e.target.value)}
+                  className="h-11 w-64 actions-select-trigger"
+                />
               </div>
             </div>
           </div>

@@ -65,6 +65,7 @@ interface ReportAreaData {
   description?: string;
   status: string;
   created_at: string;
+  report_date?: string | null;
   report_number?: number;
   area?: { id: string; name: string };
   worker?: { id: string; name: string };
@@ -262,6 +263,17 @@ export function ReportsTable({ reportAreas }: ReportsTableProps) {
             minute: '2-digit',
           })}
         </TableCell>
+        <TableCell className="tabular-nums">
+          {report.report_date ? (
+            <>
+              {new Date(report.report_date).toLocaleDateString('he-IL')}{' '}
+              {new Date(report.report_date).toLocaleTimeString('he-IL', {
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
+            </>
+          ) : '-'}
+        </TableCell>
         <TableCell>{report.area?.name || '-'}</TableCell>
         <TableCell>{report.worker?.name || '-'}</TableCell>
         <TableCell>
@@ -409,9 +421,10 @@ export function ReportsTable({ reportAreas }: ReportsTableProps) {
                       className="flex items-center font-medium hover:text-foreground transition-colors"
                     >
                       {getSortIcon('date')}
-                      תאריך
+                      נוצר
                     </button>
                   </TableHead>
+                  <TableHead>מועד</TableHead>
                   <TableHead>שטח</TableHead>
                   <TableHead>עובד</TableHead>
                   <TableHead>סוג</TableHead>

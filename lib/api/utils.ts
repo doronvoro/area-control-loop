@@ -38,6 +38,7 @@ export async function findOrCreateReportArea(
     workerId?: string;
     namePrefix?: string;
     description?: string;
+    reportDate?: string;
   }
 ): Promise<string> {
   const {
@@ -45,6 +46,7 @@ export async function findOrCreateReportArea(
     workerId,
     namePrefix = areaTypeId === AreaTypeId.MONITORING ? 'דוח ניטור' : 'דוח פעולה',
     description = areaTypeId === AreaTypeId.MONITORING ? 'דוח ניטור' : 'דוח פעולה',
+    reportDate,
   } = options || {};
 
   // Check for existing report area if reuse is enabled
@@ -74,6 +76,7 @@ export async function findOrCreateReportArea(
       name: `${namePrefix} - ${areaData?.name || 'אזור'}`,
       description,
       worker_id: workerId || null,
+      report_date: reportDate || null,
     })
     .select('id')
     .single();

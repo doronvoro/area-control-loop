@@ -437,6 +437,7 @@ export interface Database {
           completion_percentage: number;
           report_number: number;
           worker_id: string | null;
+          report_date: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -450,6 +451,7 @@ export interface Database {
           completion_percentage?: number;
           report_number?: number;
           worker_id?: string | null;
+          report_date?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -463,6 +465,7 @@ export interface Database {
           completion_percentage?: number;
           report_number?: number;
           worker_id?: string | null;
+          report_date?: string | null;
           created_at?: string;
           updated_at?: string;
         };

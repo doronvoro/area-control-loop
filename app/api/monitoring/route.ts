@@ -54,13 +54,14 @@ export async function POST(request: Request) {
       const results = await createMonitoringBatch(ctx.supabase, ctx.adminClient, {
         areaId: body.area_id,
         workerId: body.worker_id || body.inspector_id,
+        reportDate: body.report_date,
         entries: body.entries,
       });
       return NextResponse.json(results, { status: 201 });
     }
 
     // Single entry
-    const { area_id, area_report_id, worker_id, ...entryData } = body;
+    const { area_id, area_report_id, worker_id, report_date, ...entryData } = body;
     if (!area_report_id && !area_id) {
       return NextResponse.json({ error: 'area_id or area_report_id is required' }, { status: 400 });
     }
@@ -69,6 +70,7 @@ export async function POST(request: Request) {
       areaReportId: area_report_id,
       areaId: area_id,
       workerId: worker_id,
+      reportDate: report_date,
       entry: entryData,
     });
     return NextResponse.json(result, { status: 201 });

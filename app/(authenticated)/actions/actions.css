@@ -185,6 +185,10 @@
   background: linear-gradient(180deg, oklch(0.55 0.16 152), oklch(0.42 0.12 152));
 }
 
+.section-date::before {
+  background: linear-gradient(180deg, oklch(0.55 0.14 55), oklch(0.45 0.12 45));
+}
+
 .section-tasks::before {
   background: linear-gradient(180deg, oklch(0.60 0.16 55), oklch(0.50 0.14 45));
 }
@@ -255,6 +259,11 @@
 .section-icon-area-select {
   background: oklch(0.935 0.025 152);
   color: oklch(0.448 0.119 152);
+}
+
+.section-icon-date {
+  background: oklch(0.95 0.04 55);
+  color: oklch(0.45 0.14 55);
 }
 
 .section-icon-tasks {

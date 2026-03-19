@@ -10,7 +10,7 @@ export async function GET() {
 
     const { data: reportAreas, error } = await ctx.supabase
       .from('report_areas')
-      .select(`id, name, description, status, created_at, report_number,
+      .select(`id, name, description, status, created_at, report_date, report_number,
         area_type:report_area_types(name, display_name),
         area:areas(id, name),
         worker:workers(id, name)`)

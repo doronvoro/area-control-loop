@@ -57,6 +57,7 @@ const actionSchema = z.object({
   customer_id: z.string().optional(),
   worker_id: z.string().min(1, 'נדרש לבחור עובד פעולה'),
   area_id: z.string().min(1, 'נדרש לבחור שטח'),
+  report_date: z.string().optional(),
   entries: z.array(subAreaEntrySchema).min(1, 'נדרשת לפחות רשומה אחת'),
 });
 
@@ -108,6 +109,7 @@ export function ActionForm({
       customer_id: '',
       worker_id: currentWorkerId || '',
       area_id: '',
+      report_date: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16),
       entries: [
         {
           source: 'standalone',
@@ -508,6 +510,7 @@ export function ActionForm({
         body: JSON.stringify({
           area_id: data.area_id,
           worker_id: data.worker_id,
+          report_date: data.report_date || null,
           entries: data.entries.flatMap((entry) => {
             const subAreaId = entry.sub_area_id === ENTIRE_AREA ? null : entry.sub_area_id;
             const treatments = entry.treatments.map((t) => ({
@@ -540,6 +543,7 @@ export function ActionForm({
         customer_id: '',
         worker_id: currentWorkerId || '',
         area_id: '',
+        report_date: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16),
         entries: [
           {
             source: 'standalone',
@@ -654,6 +658,21 @@ export function ActionForm({
                       ))}
                     </SelectContent>
                   </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Report Date */}
+            <FormField
+              control={form.control}
+              name="report_date"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>מועד</FormLabel>
+                  <FormControl>
+                    <Input type="datetime-local" {...field} />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
