@@ -363,7 +363,7 @@ CREATE POLICY "Users can view monitoring reports for their areas"
     )
   );
 
--- Inspectors can create monitoring reports
+-- Inspectors (and 'super_worker' type) can create monitoring reports
 CREATE POLICY "Inspectors can create monitoring reports"
   ON monitoring_area_report FOR INSERT
   WITH CHECK (
@@ -371,11 +371,11 @@ CREATE POLICY "Inspectors can create monitoring reports"
       SELECT 1 FROM workers
       JOIN worker_types ON worker_types.id = workers.type_id
       WHERE workers.user_id = auth.uid()
-      AND worker_types.name = 'inspector'
+      AND worker_types.name IN ('inspector', 'super_worker')
     )
   );
 
--- Inspectors can update monitoring reports
+-- Inspectors (and 'super_worker' type) can update monitoring reports
 CREATE POLICY "Inspectors can update monitoring reports"
   ON monitoring_area_report FOR UPDATE
   USING (
@@ -383,7 +383,7 @@ CREATE POLICY "Inspectors can update monitoring reports"
       SELECT 1 FROM workers
       JOIN worker_types ON worker_types.id = workers.type_id
       WHERE workers.user_id = auth.uid()
-      AND worker_types.name = 'inspector'
+      AND worker_types.name IN ('inspector', 'super_worker')
     )
   );
 
@@ -436,7 +436,7 @@ CREATE POLICY "Users can view action reports for their areas"
     )
   );
 
--- Action workers can create action reports
+-- Action workers (and 'super_worker' type) can create action reports
 CREATE POLICY "Action workers can create action reports"
   ON actions_area_report FOR INSERT
   WITH CHECK (
@@ -444,11 +444,11 @@ CREATE POLICY "Action workers can create action reports"
       SELECT 1 FROM workers
       JOIN worker_types ON worker_types.id = workers.type_id
       WHERE workers.user_id = auth.uid()
-      AND worker_types.name = 'action_worker'
+      AND worker_types.name IN ('action_worker', 'super_worker')
     )
   );
 
--- Action workers can update action reports
+-- Action workers (and 'super_worker' type) can update action reports
 CREATE POLICY "Action workers can update action reports"
   ON actions_area_report FOR UPDATE
   USING (
@@ -456,7 +456,7 @@ CREATE POLICY "Action workers can update action reports"
       SELECT 1 FROM workers
       JOIN worker_types ON worker_types.id = workers.type_id
       WHERE workers.user_id = auth.uid()
-      AND worker_types.name = 'action_worker'
+      AND worker_types.name IN ('action_worker', 'super_worker')
     )
   );
 

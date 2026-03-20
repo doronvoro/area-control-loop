@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getApiContext, resolveCustomerId } from '@/lib/api/auth-context';
 import { handleApiError } from '@/lib/api-utils';
-import { getWorkerTypeId } from '@/lib/api/utils';
+import { getWorkerTypeIds } from '@/lib/api/utils';
 
 export async function GET() {
   try {
@@ -19,32 +19,32 @@ export async function GET() {
     let initialWorkers: any[] = [];
 
     if (customerIdForData) {
-      const actionWorkerTypeId = await getWorkerTypeId(ctx.supabase, 'action_worker');
+      const actionWorkerTypeIds = await getWorkerTypeIds(ctx.supabase, ['action_worker', 'super_worker']);
 
       const [areasRes, workersRes] = await Promise.all([
         ctx.supabase
           .from('customer_areas')
           .select('areas(*, crops(*))')
           .eq('customer_id', customerIdForData),
-        actionWorkerTypeId
+        actionWorkerTypeIds.length > 0
           ? ctx.supabase
               .from('workers')
               .select('*, worker_types(*)')
               .eq('customer_id', customerIdForData)
-              .eq('type_id', actionWorkerTypeId)
+              .in('type_id', actionWorkerTypeIds)
           : Promise.resolve({ data: [] }),
       ]);
 
       initialAreas = (areasRes.data || []).map((ca: any) => ca.areas).filter(Boolean);
       initialWorkers = workersRes.data || [];
     } else if (ctx.isAdmin) {
-      const actionWorkerTypeId = await getWorkerTypeId(ctx.supabase, 'action_worker');
+      const actionWorkerTypeIds = await getWorkerTypeIds(ctx.supabase, ['action_worker', 'super_worker']);
 
-      if (actionWorkerTypeId) {
+      if (actionWorkerTypeIds.length > 0) {
         const { data: allWorkers } = await ctx.supabase
           .from('workers')
           .select('*, worker_types(*)')
-          .eq('type_id', actionWorkerTypeId);
+          .in('type_id', actionWorkerTypeIds);
         initialWorkers = allWorkers || [];
       }
     }

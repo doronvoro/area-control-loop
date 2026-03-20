@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getApiContext, checkPermission, resolveCustomerId } from '@/lib/api/auth-context';
 import { handleApiError } from '@/lib/api-utils';
-import { getWorkerTypeId, createUserWithRole } from '@/lib/api/utils';
+import { getWorkerTypeId, getWorkerTypeIds, createUserWithRole } from '@/lib/api/utils';
 
 export async function GET(request: Request) {
   try {
@@ -22,9 +22,10 @@ export async function GET(request: Request) {
       }
 
       if (type) {
-        const typeId = await getWorkerTypeId(ctx.supabase, type);
-        if (typeId) {
-          query = query.eq('type_id', typeId);
+        const typeNames = type === 'super_worker' ? ['super_worker'] : [type, 'super_worker'];
+        const typeIds = await getWorkerTypeIds(ctx.supabase, typeNames);
+        if (typeIds.length > 0) {
+          query = query.in('type_id', typeIds);
         }
       }
 
@@ -55,9 +56,10 @@ export async function GET(request: Request) {
       .eq('customer_id', targetCustomerId);
 
     if (type) {
-      const typeId = await getWorkerTypeId(ctx.supabase, type);
-      if (typeId) {
-        query = query.eq('type_id', typeId);
+      const typeNames = type === 'super_worker' ? ['super_worker'] : [type, 'super_worker'];
+      const typeIds = await getWorkerTypeIds(ctx.supabase, typeNames);
+      if (typeIds.length > 0) {
+        query = query.in('type_id', typeIds);
       }
     }
 

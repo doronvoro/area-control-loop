@@ -160,8 +160,9 @@ COMMENT ON FUNCTION can_access_area IS 'Check if user can access an area through
 -- -----------------------------------------------------------------------------
 -- WORKER TYPE CHECK
 -- -----------------------------------------------------------------------------
--- Check if user is a specific type of worker (inspector, action_worker).
+-- Check if user is a specific type of worker (inspector, action_worker, both).
 -- Created in: 20260208000000_consolidate_rls_helpers.sql
+-- Updated in: 20260320000000_add_both_worker_type.sql
 -- -----------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION is_worker_type(p_user_id UUID, p_worker_type TEXT)
 RETURNS BOOLEAN AS $$
@@ -173,7 +174,7 @@ RETURNS BOOLEAN AS $$
   );
 $$ LANGUAGE sql STABLE;
 
-COMMENT ON FUNCTION is_worker_type IS 'Check if user is a specific worker type (inspector, action_worker).';
+COMMENT ON FUNCTION is_worker_type IS 'Check if user is a specific worker type (inspector, action_worker, both).';
 
 
 -- -----------------------------------------------------------------------------

@@ -24,6 +24,20 @@ export async function getWorkerTypeId(
 }
 
 /**
+ * Look up worker_type IDs by multiple names.
+ * Used to include 'both' type workers alongside specific types.
+ */
+export async function getWorkerTypeIds(
+  supabase: SupabaseClient,
+  typeNames: string[]
+): Promise<string[]> {
+  const { data } = await (supabase.from('worker_types') as any)
+    .select('id')
+    .in('name', typeNames);
+  return (data || []).map((d: { id: string }) => d.id);
+}
+
+/**
  * Find an existing report area or create a new one.
  * - reuseExisting: true (default for actions) — returns existing report_area if found
  * - reuseExisting: false (default for monitoring) — always creates a new report_area

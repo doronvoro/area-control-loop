@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getApiContext, resolveCustomerId } from '@/lib/api/auth-context';
 import { handleApiError } from '@/lib/api-utils';
-import { getWorkerTypeId } from '@/lib/api/utils';
+import { getWorkerTypeIds } from '@/lib/api/utils';
 
 export async function GET() {
   try {
@@ -20,19 +20,19 @@ export async function GET() {
     let initialAreas: any[] = [];
 
     if (!ctx.isAdmin && customerIdForData) {
-      const inspectorTypeId = await getWorkerTypeId(ctx.supabase, 'inspector');
+      const inspectorTypeIds = await getWorkerTypeIds(ctx.supabase, ['inspector', 'super_worker']);
 
       const [areasRes, inspectorsRes] = await Promise.all([
         ctx.supabase
           .from('customer_areas')
           .select('areas(*, crops(*))')
           .eq('customer_id', customerIdForData),
-        inspectorTypeId
+        inspectorTypeIds.length > 0
           ? ctx.supabase
               .from('workers')
               .select('*, worker_types(*)')
               .eq('customer_id', customerIdForData)
-              .eq('type_id', inspectorTypeId)
+              .in('type_id', inspectorTypeIds)
           : Promise.resolve({ data: [] }),
       ]);
 
