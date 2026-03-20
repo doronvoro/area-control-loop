@@ -44,6 +44,7 @@ export async function fetchReportDetail(
         `id, severity, created_at, actions_area_report_id,
         sub_area:sub_areas(id, name, display),
         finding:findings(id, name, description),
+        linked_action:actions_area_report!fk_monitoring_actions_area_report(area_report_id),
         treatments:monitoring_treatments(
           id, dosage, notes, status,
           material:materials(id, name),
