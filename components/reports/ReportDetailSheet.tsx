@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { ACTION_TYPE_LABELS, ActionTypeName } from '@/types/database';
 import {
   Sheet,
+  SheetClose,
   SheetContent,
   SheetHeader,
   SheetTitle,
@@ -25,14 +26,30 @@ import {
   Timer,
   Beaker,
   ClipboardList,
+  Trash2,
+  X,
 } from 'lucide-react';
 import { SEVERITY_LABELS, ReportSeverity } from '@/types/database';
 import { STATUS_LABELS, TREATMENT_STATUS_LABELS } from '@/lib/reports/labels';
+import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import { showToast } from '@/lib/toast';
 
 interface ReportDetailSheetProps {
   reportId: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onDeleted?: () => void;
 }
 
 interface Treatment {
@@ -78,6 +95,7 @@ interface ReportDetail {
   worker: { id: string; name: string } | null;
   monitoringEntries: ReportEntry[] | null;
   actionEntries: ReportEntry[] | null;
+  hasLinkedActions: boolean;
 }
 
 function getStatusColor(status: string) {
@@ -121,10 +139,12 @@ export function ReportDetailSheet({
   reportId,
   open,
   onOpenChange,
+  onDeleted,
 }: ReportDetailSheetProps) {
   const [report, setReport] = useState<ReportDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (!reportId || !open) {
@@ -155,6 +175,29 @@ export function ReportDetailSheet({
     fetchReport();
   }, [reportId, open]);
 
+  const canDelete = report
+    ? report.area_type_id === 'action' || !report.hasLinkedActions
+    : false;
+
+  async function handleDelete() {
+    if (!reportId) return;
+    try {
+      setDeleting(true);
+      const response = await fetch(`/api/reports/${reportId}`, { method: 'DELETE' });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'שגיאה במחיקת הדוח');
+      }
+      showToast.success('הדוח נמחק בהצלחה');
+      onOpenChange(false);
+      onDeleted?.();
+    } catch (err: any) {
+      showToast.error(err.message || 'שגיאה במחיקת הדוח');
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   const isMonitoring = report?.area_type_id === 'monitoring';
   const entries = isMonitoring
     ? report?.monitoringEntries || []
@@ -162,7 +205,7 @@ export function ReportDetailSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="left" className="w-full sm:max-w-xl overflow-y-auto p-0">
+      <SheetContent side="left" className="w-full sm:max-w-xl overflow-y-auto p-0" showCloseButton={false}>
         {/* Header */}
         <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b">
           <SheetHeader className="p-5 pb-4">
@@ -177,14 +220,20 @@ export function ReportDetailSheet({
                   </SheetDescription>
                 )}
               </div>
-              {report && (
-                <span
-                  className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold ${getStatusColor(report.status)}`}
-                >
-                  {getStatusIcon(report.status)}
-                  {STATUS_LABELS[report.status] || report.status}
-                </span>
-              )}
+              <div className="flex items-center gap-4">
+                {report && (
+                  <span
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold ${getStatusColor(report.status)}`}
+                  >
+                    {getStatusIcon(report.status)}
+                    {STATUS_LABELS[report.status] || report.status}
+                  </span>
+                )}
+                <SheetClose className="rounded-md border p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
+                  <X className="h-4 w-4" />
+                  <span className="sr-only">סגור</span>
+                </SheetClose>
+              </div>
             </div>
           </SheetHeader>
         </div>
@@ -334,6 +383,41 @@ export function ReportDetailSheet({
                   <p className="text-sm">אין נתונים נוספים לדוח זה</p>
                 </div>
               )}
+            </div>
+
+            {/* Delete Button */}
+            <Separator />
+            <div className="p-5">
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="w-full text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                    disabled={!canDelete}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    {canDelete ? 'מחק דוח' : 'לא ניתן למחוק - מקושר לדוח פעולה'}
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>מחיקת דוח</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      האם למחוק את דוח מס׳ {report.report_number}? פעולה זו אינה ניתנת לביטול.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>ביטול</AlertDialogCancel>
+                    <AlertDialogAction
+                      variant="destructive"
+                      onClick={handleDelete}
+                      disabled={deleting}
+                    >
+                      {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'מחק'}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </div>
           </div>
         )}

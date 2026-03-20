@@ -74,9 +74,10 @@ interface ReportAreaData {
 
 interface ReportsTableProps {
   reportAreas: ReportAreaData[];
+  onReportDeleted?: () => void;
 }
 
-export function ReportsTable({ reportAreas }: ReportsTableProps) {
+export function ReportsTable({ reportAreas, onReportDeleted }: ReportsTableProps) {
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -464,6 +465,7 @@ export function ReportsTable({ reportAreas }: ReportsTableProps) {
         reportId={selectedReportId}
         open={sheetOpen}
         onOpenChange={setSheetOpen}
+        onDeleted={onReportDeleted}
       />
     </>
   );

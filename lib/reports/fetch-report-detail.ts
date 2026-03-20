@@ -36,11 +36,12 @@ export async function fetchReportDetail(
 
   // Fetch monitoring entries if this is a monitoring report
   let monitoringEntries = null;
+  let hasLinkedActions = false;
   if (reportArea.area_type_id === 'monitoring') {
     const { data, error } = await supabase
       .from('monitoring_area_report')
       .select(
-        `id, severity, created_at,
+        `id, severity, created_at, actions_area_report_id,
         sub_area:sub_areas(id, name, display),
         finding:findings(id, name, description),
         treatments:monitoring_treatments(
@@ -98,6 +99,7 @@ export async function fetchReportDetail(
       }
     }
 
+    hasLinkedActions = (data || []).some((entry: any) => entry.actions_area_report_id != null);
     monitoringEntries = data;
   }
 
@@ -127,5 +129,6 @@ export async function fetchReportDetail(
     ...reportArea,
     monitoringEntries,
     actionEntries,
+    hasLinkedActions,
   };
 }
