@@ -25,6 +25,7 @@ import {
   MapPin,
   Check,
   Calendar,
+  Plus,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -574,18 +575,9 @@ export function ActionTaskList() {
                 בחר שטח מהרשימה למעלה כדי לצפות במשימות הפעולה
               </div>
             </div>
-          ) : tasks.length === 0 && pendingCount === 0 ? (
-            <div className="actions-empty-state">
-              <div className="actions-empty-icon">
-                <PackageCheck className="h-6 w-6" />
-              </div>
-              <div className="text-base font-semibold text-foreground">אין משימות ממתינות</div>
-              <div className="text-sm text-muted-foreground max-w-sm">
-                כל המלצות הניטור טופלו, או שאין דוחות ניטור פעילים
-              </div>
-            </div>
           ) : (
             <div className="space-y-4">
+              {/* Monitoring-based tasks */}
               {Object.entries(tasksByArea).map(([areaId, areaTasks]) => (
                 <div key={areaId} className="actions-section section-tasks p-4">
                   <div className="area-group-header mb-3">
@@ -613,21 +605,47 @@ export function ActionTaskList() {
                   </div>
                 </div>
               ))}
+
+              {/* Empty monitoring state */}
+              {tasks.length === 0 && pendingCount === 0 && !showStandaloneForm && (
+                <div className="actions-empty-state">
+                  <div className="actions-empty-icon">
+                    <PackageCheck className="h-6 w-6" />
+                  </div>
+                  <div className="text-base font-semibold text-foreground">אין משימות ממתינות מניטור</div>
+                  <div className="text-sm text-muted-foreground max-w-sm">
+                    כל המלצות הניטור טופלו, או שאין דוחות ניטור פעילים
+                  </div>
+                </div>
+              )}
+
+              {/* Standalone action form */}
+              {showStandaloneForm && formData ? (
+                <StandaloneActionForm
+                  areaId={selectedAreaId}
+                  cropId={areaList.find(a => a.id === selectedAreaId)?.crops?.id || ''}
+                  subAreas={subAreas}
+                  findings={formData.findings || []}
+                  unitTypes={formData.unitTypes || []}
+                  onSubmit={handleStandaloneSubmit}
+                  onCancel={() => setShowStandaloneForm(false)}
+                  disabled={submitting}
+                />
+              ) : null}
+
+              {/* Add standalone action button */}
+              {!showStandaloneForm && formData && (
+                <button
+                  className="actions-add-standalone-btn"
+                  onClick={() => setShowStandaloneForm(true)}
+                  disabled={submitting}
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>הוסף פעולה</span>
+                </button>
+              )}
             </div>
           )}
-
-          {/* Standalone action */}
-          {showStandaloneForm && selectedAreaId !== 'all' && formData ? (
-            <StandaloneActionForm
-              areaId={selectedAreaId}
-              subAreas={subAreas}
-              findings={formData.findings || []}
-              unitTypes={formData.unitTypes || []}
-              onSubmit={handleStandaloneSubmit}
-              onCancel={() => setShowStandaloneForm(false)}
-              disabled={submitting}
-            />
-          ) : null}
 
         </div>
       </div>

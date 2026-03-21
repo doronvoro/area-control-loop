@@ -12,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { RefreshCw, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
+import { RefreshCw, ChevronDown, ChevronUp, Loader2, Trash2 } from 'lucide-react';
 import { useApiData } from '@/hooks/useApiData';
 import type { CropSyncStatus } from '@/app/api/pesticide-registry/sync-status/route';
 
@@ -21,8 +21,10 @@ interface SyncStatusResponse {
 }
 
 export function RegistrySyncManager() {
+  const [loaded, setLoaded] = useState(false);
   const { data, loading, error, refetch } = useApiData<SyncStatusResponse>(
-    '/api/pesticide-registry/sync-status'
+    '/api/pesticide-registry/sync-status',
+    { skip: !loaded }
   );
   const [selectedCrops, setSelectedCrops] = useState<Set<string>>(new Set());
   const [syncing, setSyncing] = useState(false);
@@ -78,6 +80,20 @@ export function RegistrySyncManager() {
     }
   };
 
+  const handleDeleteDuplicateCrop = async (cropId: string, cropName: string) => {
+    if (!confirm(`למחוק את הגידול הכפול "${cropName}"? (id: ${cropId})`)) return;
+    try {
+      const response = await fetch(`/api/crops?id=${cropId}`, { method: 'DELETE' });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || 'שגיאה במחיקה');
+      }
+      await refetch();
+    } catch (err: any) {
+      alert(`שגיאה: ${err.message}`);
+    }
+  };
+
   const statusBadge = (status: CropSyncStatus['status']) => {
     switch (status) {
       case 'synced':
@@ -88,6 +104,17 @@ export function RegistrySyncManager() {
         return <Badge variant="secondary">אין נתוני מרשם</Badge>;
     }
   };
+
+  if (!loaded) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Button onClick={() => setLoaded(true)} size="lg">
+          <RefreshCw className="ml-2 h-5 w-5" />
+          טען סטטוס סנכרון
+        </Button>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -177,6 +204,9 @@ export function RegistrySyncManager() {
             <div className="space-y-1">
               <p className="font-medium">סנכרון הושלם בהצלחה!</p>
               <p>ממצאים חדשים: {syncResult.findingsCreated} | חומרים חדשים: {syncResult.materialsCreated} | קשרי גידול-ממצא: {syncResult.cropFindingsCreated} | המלצות: {syncResult.recommendationsCreated}</p>
+              {(syncResult.duplicatesRemoved?.cropFindings > 0 || syncResult.duplicatesRemoved?.recommendations > 0) && (
+                <p className="text-orange-700">כפילויות שהוסרו: קשרי גידול-ממצא: {syncResult.duplicatesRemoved.cropFindings} | המלצות: {syncResult.duplicatesRemoved.recommendations}</p>
+              )}
               {syncResult.errors?.length > 0 && (
                 <p className="text-yellow-700">
                   שגיאות: {syncResult.errors.map((e: any) => `${e.crop}: ${e.error}`).join(', ')}
@@ -215,6 +245,7 @@ export function RegistrySyncManager() {
                 selected={selectedCrops.has(crop.id)}
                 onToggle={() => toggleCrop(crop.id)}
                 statusBadge={statusBadge}
+                onDeleteDuplicate={handleDeleteDuplicateCrop}
               />
             ))}
           </TableBody>
@@ -229,16 +260,23 @@ function CropRow({
   selected,
   onToggle,
   statusBadge,
+  onDeleteDuplicate,
 }: {
   crop: CropSyncStatus;
   selected: boolean;
   onToggle: () => void;
   statusBadge: (status: CropSyncStatus['status']) => React.ReactNode;
+  onDeleteDuplicate: (cropId: string, cropName: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const hasDuplicates =
+    (crop.synced.duplicateCropFindings || 0) > 0 ||
+    (crop.synced.duplicateRecommendations || 0) > 0;
   const hasDetails =
     crop.synced.missingFindings.length > 0 ||
-    crop.synced.missingMaterials.length > 0;
+    crop.synced.missingMaterials.length > 0 ||
+    crop.isDuplicate ||
+    hasDuplicates;
 
   const isNoData = crop.status === 'no_registry_data';
 
@@ -255,6 +293,20 @@ function CropRow({
         <TableCell className="font-medium">
           <div className="flex items-center gap-2">
             {crop.name}
+            {crop.isDuplicate && crop.canDeleteDuplicate && (
+              <Button
+                variant="destructive"
+                size="sm"
+                className="h-6 px-2 text-xs"
+                onClick={() => onDeleteDuplicate(crop.id, crop.name)}
+              >
+                <Trash2 className="ml-1 h-3 w-3" />
+                מחק כפילות
+              </Button>
+            )}
+            {crop.isDuplicate && !crop.canDeleteDuplicate && (
+              <Badge className="bg-red-100 text-red-800 hover:bg-red-100 text-xs">כפול</Badge>
+            )}
             {hasDetails && (
               <Button
                 variant="ghost"
@@ -311,6 +363,11 @@ function CropRow({
                   ({crop.synced.missingCropFindings} חסרים)
                 </span>
               )}
+              {(crop.synced.duplicateCropFindings || 0) > 0 && (
+                <span className="text-orange-500 mr-1">
+                  ({crop.synced.duplicateCropFindings} כפולים)
+                </span>
+              )}
             </span>
           )}
         </TableCell>
@@ -323,6 +380,11 @@ function CropRow({
               {crop.synced.missingRecommendations > 0 && (
                 <span className="text-red-500 mr-1">
                   ({crop.synced.missingRecommendations} חסרים)
+                </span>
+              )}
+              {(crop.synced.duplicateRecommendations || 0) > 0 && (
+                <span className="text-orange-500 mr-1">
+                  ({crop.synced.duplicateRecommendations} כפולים)
                 </span>
               )}
             </span>
@@ -344,6 +406,38 @@ function CropRow({
                 <div>
                   <span className="font-medium text-red-600">חומרים חסרים: </span>
                   {crop.synced.missingMaterials.join(', ')}
+                </div>
+              )}
+              {crop.isDuplicate && (
+                <div className="flex items-center gap-3">
+                  <div>
+                    <span className="font-medium text-red-600">גידול כפול: </span>
+                    {crop.canDeleteDuplicate ? (
+                      <span>אין הפניות לגידול זה. ניתן למחוק.</span>
+                    ) : (
+                      <span>
+                        הפניות: שטחים={crop.duplicateRefs?.areas || 0}, קשרי ממצאים={crop.duplicateRefs?.cropFindings || 0}, המלצות={crop.duplicateRefs?.recommendations || 0}
+                      </span>
+                    )}
+                  </div>
+                  {crop.canDeleteDuplicate && (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => onDeleteDuplicate(crop.id, crop.name)}
+                    >
+                      <Trash2 className="ml-1 h-3 w-3" />
+                      מחק כפילות
+                    </Button>
+                  )}
+                </div>
+              )}
+              {hasDuplicates && (
+                <div>
+                  <span className="font-medium text-orange-600">כפילויות: </span>
+                  {(crop.synced.duplicateCropFindings || 0) > 0 && `קשרי גידול-ממצא: ${crop.synced.duplicateCropFindings} `}
+                  {(crop.synced.duplicateRecommendations || 0) > 0 && `המלצות: ${crop.synced.duplicateRecommendations}`}
+                  {' '}(יוסרו בסנכרון)
                 </div>
               )}
             </div>

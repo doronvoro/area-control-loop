@@ -153,8 +153,6 @@ export function WorkersList({
             <TableHeader>
               <TableRow>
                 <TableHead>שם</TableHead>
-                <TableHead>אימייל</TableHead>
-                <TableHead>לקוח</TableHead>
                 <TableHead>סוג עובד</TableHead>
                 <TableHead>נוצר</TableHead>
                 <TableHead className="w-[100px]">פעולות</TableHead>
@@ -164,10 +162,6 @@ export function WorkersList({
               {filteredWorkers.map((worker) => (
                 <TableRow key={worker.id}>
                   <TableCell className="font-medium">{worker.name}</TableCell>
-                  <TableCell dir="ltr" className="text-left">
-                    {worker.email || '-'}
-                  </TableCell>
-                  <TableCell>{worker.customers?.name || '-'}</TableCell>
                   <TableCell>{worker.worker_types?.display_name || '-'}</TableCell>
                   <TableCell>
                     {worker.created_at

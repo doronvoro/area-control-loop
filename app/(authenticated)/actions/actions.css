@@ -539,6 +539,36 @@
   box-shadow: 0 2px 8px oklch(0.55 0.15 85 / 10%);
 }
 
+/* --- Add Standalone Action Button (full-width) --- */
+.actions-add-standalone-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.875rem 1rem;
+  border-radius: 0.875rem;
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: oklch(0.50 0.15 55);
+  background: oklch(0.98 0.01 55 / 50%);
+  border: 1.5px dashed oklch(0.82 0.06 55 / 60%);
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.actions-add-standalone-btn:hover:not(:disabled) {
+  background: oklch(0.96 0.04 55 / 80%);
+  border-color: oklch(0.70 0.10 55 / 60%);
+  box-shadow: 0 2px 8px oklch(0.55 0.15 55 / 10%);
+  color: oklch(0.40 0.15 55);
+}
+
+.actions-add-standalone-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* --- Enhanced select triggers --- */
 .actions-select-trigger {
   border-radius: 0.625rem !important;

@@ -7,6 +7,9 @@ import { parseDosage } from '@/lib/pesticide-registry';
 export interface CropSyncStatus {
   id: string;
   name: string;
+  isDuplicate?: boolean;
+  canDeleteDuplicate?: boolean;
+  duplicateRefs?: { areas: number; reports: number; cropFindings: number; recommendations: number };
   registry: {
     totalRows: number;
     uniqueFindings: string[];
@@ -21,6 +24,8 @@ export interface CropSyncStatus {
     missingCropFindings: number;
     recommendations: number;
     missingRecommendations: number;
+    duplicateCropFindings: number;
+    duplicateRecommendations: number;
   };
   status: 'synced' | 'partial' | 'no_registry_data';
 }
@@ -50,6 +55,18 @@ export async function GET() {
 
     console.log(`[sync-status] Found ${(crops || []).length} crops`);
 
+    // Detect duplicate crop names
+    const cropNameCount = new Map<string, number>();
+    for (const crop of crops || []) {
+      cropNameCount.set(crop.name, (cropNameCount.get(crop.name) || 0) + 1);
+    }
+    const duplicateCropNames = new Set(
+      [...cropNameCount.entries()].filter(([, count]) => count > 1).map(([name]) => name)
+    );
+    if (duplicateCropNames.size > 0) {
+      console.warn(`[sync-status] Duplicate crop names found: ${[...duplicateCropNames].join(', ')}`);
+    }
+
     const results: CropSyncStatus[] = [];
 
     for (const crop of crops || []) {
@@ -74,6 +91,7 @@ export async function GET() {
             materials: 0, missingMaterials: [],
             cropFindings: 0, missingCropFindings: 0,
             recommendations: 0, missingRecommendations: 0,
+            duplicateCropFindings: 0, duplicateRecommendations: 0,
           },
           status: 'no_registry_data',
         });
@@ -193,15 +211,75 @@ export async function GET() {
 
       console.log(`[sync-status] Crop "${crop.name}": recommendations=${rmCount}, expectedKeys=${expectedKeys.size}, missingRecommendations=${missingRecommendations}`);
 
+      // Count duplicate crop_findings for this crop
+      const cfKeys = new Set<string>();
+      let duplicateCfCount = 0;
+      for (const cf of cropFindings || []) {
+        const key = `${crop.id}|${cf.finding_id}`;
+        if (cfKeys.has(key)) {
+          duplicateCfCount++;
+        } else {
+          cfKeys.add(key);
+        }
+      }
+
+      // Count duplicate recommend_material for this crop
+      const { data: allRm } = await (supabase.from('recommend_material') as any)
+        .select('finding_id, action_type_id, material_id, unit_type_id')
+        .eq('crop_id', crop.id)
+        .limit(50000);
+
+      const rmKeys = new Set<string>();
+      let duplicateRmCount = 0;
+      for (const rm of allRm || []) {
+        const key = `${rm.finding_id || ''}|${rm.action_type_id || ''}|${rm.material_id}|${rm.unit_type_id || ''}`;
+        if (rmKeys.has(key)) {
+          duplicateRmCount++;
+        } else {
+          rmKeys.add(key);
+        }
+      }
+
+      if (duplicateCfCount > 0 || duplicateRmCount > 0) {
+        console.warn(`[sync-status] Crop "${crop.name}": duplicates found — crop_findings=${duplicateCfCount}, recommend_material=${duplicateRmCount}`);
+      }
+
       const hasMissing =
         missingFindings.length > 0 ||
         missingMaterials.length > 0 ||
         missingCropFindingsCount > 0 ||
-        missingRecommendations > 0;
+        missingRecommendations > 0 ||
+        duplicateCfCount > 0 ||
+        duplicateRmCount > 0;
+
+      // For duplicate crops, check if this one can be safely deleted
+      let canDeleteDuplicate = false;
+      let duplicateRefs: { areas: number; reports: number; cropFindings: number; recommendations: number } | undefined;
+      if (duplicateCropNames.has(crop.name)) {
+        const { count: areaRefs } = await (supabase.from('areas') as any)
+          .select('id', { count: 'exact', head: true })
+          .eq('crop_id', crop.id);
+        const { count: subAreaRefs } = await (supabase.from('sub_areas') as any)
+          .select('id', { count: 'exact', head: true })
+          .eq('crop_id', crop.id);
+        const cfCount = (cropFindings || []).length;
+
+        duplicateRefs = {
+          areas: (areaRefs || 0) + (subAreaRefs || 0),
+          reports: 0, // reports reference areas, not crops directly
+          cropFindings: cfCount,
+          recommendations: rmCount,
+        };
+        // Safe to delete if no areas, crop_findings, or recommendations reference this crop
+        canDeleteDuplicate = duplicateRefs.areas === 0 && cfCount === 0 && rmCount === 0;
+      }
 
       results.push({
         id: crop.id,
         name: crop.name,
+        isDuplicate: duplicateCropNames.has(crop.name),
+        canDeleteDuplicate,
+        duplicateRefs,
         registry: {
           totalRows: totalRows,
           uniqueFindings,
@@ -216,6 +294,8 @@ export async function GET() {
           missingCropFindings: missingCropFindingsCount,
           recommendations: rmCount,
           missingRecommendations,
+          duplicateCropFindings: duplicateCfCount,
+          duplicateRecommendations: duplicateRmCount,
         },
         status: hasMissing ? 'partial' : 'synced',
       });

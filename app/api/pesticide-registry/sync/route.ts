@@ -96,6 +96,7 @@ export async function POST(request: NextRequest) {
       materialsCreated: 0,
       cropFindingsCreated: 0,
       recommendationsCreated: 0,
+      duplicatesRemoved: { cropFindings: 0, recommendations: 0 },
       errors: [] as Array<{ crop: string; error: string }>,
     };
 
@@ -135,6 +136,122 @@ export async function POST(request: NextRequest) {
         }
 
         console.log(`[sync] Found ${registryRows.length} registry rows for "${crop.name}"`);
+
+        // --- Deduplicate crop_findings for this crop ---
+        // Keeps the OLDEST row (first created), deletes newer duplicates
+        const { data: allCf } = await (supabase.from('crop_findings') as any)
+          .select('id, crop_id, finding_id, created_at')
+          .eq('crop_id', crop.id)
+          .order('created_at', { ascending: true });
+
+        if (allCf && allCf.length > 0) {
+          const cfSeen = new Map<string, { id: string; created_at: string }>();
+          const cfDuplicateIds: string[] = [];
+          for (const cf of allCf) {
+            const key = `${cf.crop_id}|${cf.finding_id}`;
+            if (cfSeen.has(key)) {
+              cfDuplicateIds.push(cf.id);
+              console.log(`[sync] "${crop.name}": crop_finding duplicate — keeping id=${cfSeen.get(key)!.id} (${cfSeen.get(key)!.created_at}), deleting id=${cf.id} (${cf.created_at}), finding_id=${cf.finding_id}`);
+            } else {
+              cfSeen.set(key, { id: cf.id, created_at: cf.created_at });
+            }
+          }
+          if (cfDuplicateIds.length > 0) {
+            // Check if any duplicate's finding_id is used in monitoring/action reports
+            const cfFindingIds = [...new Set(
+              allCf.filter((cf: any) => cfDuplicateIds.includes(cf.id)).map((cf: any) => cf.finding_id)
+            )];
+            const { count: monitoringRefs } = await (supabase.from('monitoring_area_report') as any)
+              .select('id', { count: 'exact', head: true })
+              .in('finding_id', cfFindingIds);
+            const { count: actionRefs } = await (supabase.from('actions_area_report') as any)
+              .select('id', { count: 'exact', head: true })
+              .in('finding_id', cfFindingIds);
+
+            console.log(`[sync] "${crop.name}": ${cfDuplicateIds.length} duplicate crop_findings found. Report refs: monitoring=${monitoringRefs || 0}, actions=${actionRefs || 0}`);
+
+            // Safe to delete duplicates — we keep one copy per key, and reports reference
+            // findings directly (not crop_findings). The kept row preserves the link.
+            const { error: delErr } = await (supabase.from('crop_findings') as any)
+              .delete()
+              .in('id', cfDuplicateIds);
+            if (delErr) {
+              console.error(`[sync] Error removing crop_findings duplicates for ${crop.name}:`, delErr.message);
+            } else {
+              console.log(`[sync] "${crop.name}": removed ${cfDuplicateIds.length} duplicate crop_findings`);
+              summary.duplicatesRemoved.cropFindings += cfDuplicateIds.length;
+            }
+          }
+        }
+
+        // --- Deduplicate recommend_material for this crop ---
+        // Keeps the MOST RECENTLY UPDATED row, deletes older duplicates
+        const { data: allRm } = await (supabase.from('recommend_material') as any)
+          .select('id, crop_id, finding_id, action_type_id, material_id, unit_type_id, updated_at, dosage')
+          .eq('crop_id', crop.id)
+          .order('updated_at', { ascending: false })
+          .limit(50000);
+
+        if (allRm && allRm.length > 0) {
+          const rmSeen = new Map<string, { id: string; updated_at: string }>();
+          const rmDuplicateIds: string[] = [];
+          for (const rm of allRm) {
+            const key = `${rm.crop_id}|${rm.finding_id || ''}|${rm.action_type_id || ''}|${rm.material_id}|${rm.unit_type_id || ''}`;
+            if (rmSeen.has(key)) {
+              rmDuplicateIds.push(rm.id);
+              console.log(`[sync] "${crop.name}": recommend_material duplicate — keeping id=${rmSeen.get(key)!.id} (${rmSeen.get(key)!.updated_at}), deleting id=${rm.id} (${rm.updated_at}), key=${key}`);
+            } else {
+              rmSeen.set(key, { id: rm.id, updated_at: rm.updated_at });
+            }
+          }
+          if (rmDuplicateIds.length > 0) {
+            // Check if any duplicate's finding_id or material_id is used in reports
+            const dupRows = allRm.filter((rm: any) => rmDuplicateIds.includes(rm.id));
+            const rmFindingIds = [...new Set(dupRows.map((rm: any) => rm.finding_id).filter(Boolean))];
+            const rmMaterialIds = [...new Set(dupRows.map((rm: any) => rm.material_id).filter(Boolean))];
+
+            let monRefCount = 0;
+            let actRefCount = 0;
+            if (rmFindingIds.length > 0) {
+              const { count: mc } = await (supabase.from('monitoring_area_report') as any)
+                .select('id', { count: 'exact', head: true })
+                .in('finding_id', rmFindingIds);
+              const { count: ac } = await (supabase.from('actions_area_report') as any)
+                .select('id', { count: 'exact', head: true })
+                .in('finding_id', rmFindingIds);
+              monRefCount = mc || 0;
+              actRefCount = ac || 0;
+            }
+
+            // Check material refs in treatments
+            let treatmentRefs = 0;
+            if (rmMaterialIds.length > 0) {
+              const { count: mtc } = await (supabase.from('monitoring_treatments') as any)
+                .select('id', { count: 'exact', head: true })
+                .in('material_id', rmMaterialIds);
+              const { count: atc } = await (supabase.from('action_treatments') as any)
+                .select('id', { count: 'exact', head: true })
+                .in('material_id', rmMaterialIds);
+              treatmentRefs = (mtc || 0) + (atc || 0);
+            }
+
+            console.log(`[sync] "${crop.name}": ${rmDuplicateIds.length} duplicate recommend_material found. Report refs: monitoring=${monRefCount}, actions=${actRefCount}, treatments=${treatmentRefs}`);
+
+            // Safe to delete duplicates — we keep one copy per key, reports reference
+            // findings/materials directly (not recommend_material rows).
+            for (let i = 0; i < rmDuplicateIds.length; i += 50) {
+              const batch = rmDuplicateIds.slice(i, i + 50);
+              const { error: delErr } = await (supabase.from('recommend_material') as any)
+                .delete()
+                .in('id', batch);
+              if (delErr) {
+                console.error(`[sync] Error removing recommend_material duplicates for ${crop.name}:`, delErr.message);
+              }
+            }
+            console.log(`[sync] "${crop.name}": removed ${rmDuplicateIds.length} duplicate recommend_material`);
+            summary.duplicatesRemoved.recommendations += rmDuplicateIds.length;
+          }
+        }
 
         // Sync findings
         const uniquePests: string[] = [...new Set(registryRows.map((r: any) => r.pest_name).filter(Boolean) as string[])];
@@ -313,7 +430,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    console.log(`[sync] Completed. findings=${summary.findingsCreated}, materials=${summary.materialsCreated}, cropFindings=${summary.cropFindingsCreated}, recommendations=${summary.recommendationsCreated}, errors=${summary.errors.length}`);
+    console.log(`[sync] Completed. findings=${summary.findingsCreated}, materials=${summary.materialsCreated}, cropFindings=${summary.cropFindingsCreated}, recommendations=${summary.recommendationsCreated}, duplicatesRemoved=${JSON.stringify(summary.duplicatesRemoved)}, errors=${summary.errors.length}`);
 
     return NextResponse.json({ success: true, summary });
   } catch (error: any) {

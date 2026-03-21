@@ -1558,6 +1558,26 @@ export function MonitoringForm({
                                             )}
                                           />
                                         </div>
+
+                                        {/* Notes input */}
+                                        <FormField
+                                          control={form.control}
+                                          name={`entries.${index}.treatments.${tIndex}.notes`}
+                                          render={({ field: notesField }) => (
+                                            <FormItem>
+                                              <FormLabel className="font-semibold text-xs">הערות</FormLabel>
+                                              <FormControl>
+                                                <Input
+                                                  {...notesField}
+                                                  value={notesField.value || ''}
+                                                  placeholder="הערות..."
+                                                  className="h-10 monitoring-select-trigger"
+                                                />
+                                              </FormControl>
+                                              <FormMessage />
+                                            </FormItem>
+                                          )}
+                                        />
                                       </div>
                                     );
                                   })}

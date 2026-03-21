@@ -35,8 +35,17 @@ export async function GET(request: Request) {
       // Fetch emails from auth.users
       const workersWithEmail = await Promise.all(
         (data || []).map(async (worker: any) => {
-          const { data: userData } = await ctx.adminClient.auth.admin.getUserById(worker.user_id);
-          return { ...worker, email: userData?.user?.email || null };
+          try {
+            const { data: userData, error: userError } = await ctx.adminClient.auth.admin.getUserById(worker.user_id);
+            if (userError) {
+              console.error(`Failed to fetch user ${worker.user_id}:`, userError.message);
+              return { ...worker, email: null };
+            }
+            return { ...worker, email: userData?.user?.email || null };
+          } catch (e) {
+            console.error(`Error fetching user ${worker.user_id}:`, e);
+            return { ...worker, email: null };
+          }
         })
       );
 
