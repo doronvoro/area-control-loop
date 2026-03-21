@@ -24,6 +24,8 @@ import {
   ClipboardList,
   Trash2,
   X,
+  ChevronRight,
+  ChevronLeft,
 } from 'lucide-react';
 import { SEVERITY_LABELS, ReportSeverity } from '@/types/database';
 import { STATUS_LABELS, TREATMENT_STATUS_LABELS } from '@/lib/reports/labels';
@@ -46,6 +48,8 @@ interface ReportDetailSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onDeleted?: () => void;
+  reportIds?: string[];
+  onNavigate?: (reportId: string) => void;
 }
 
 interface Treatment {
@@ -137,17 +141,22 @@ export function ReportDetailSheet({
   open,
   onOpenChange,
   onDeleted,
+  reportIds,
+  onNavigate,
 }: ReportDetailSheetProps) {
   const [report, setReport] = useState<ReportDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [activeReportId, setActiveReportId] = useState<string | null>(null);
+  // Internal navigation override (for linked report navigation within the sheet)
+  const [navigatedReportId, setNavigatedReportId] = useState<string | null>(null);
 
-  // Sync activeReportId with prop
+  // Reset internal navigation when the prop changes or sheet closes
   useEffect(() => {
-    setActiveReportId(reportId);
-  }, [reportId]);
+    setNavigatedReportId(null);
+  }, [reportId, open]);
+
+  const activeReportId = navigatedReportId || reportId;
 
   useEffect(() => {
     if (!activeReportId || !open) {
@@ -201,6 +210,27 @@ export function ReportDetailSheet({
     }
   }
 
+  // Navigation between reports
+  const currentIndex = reportIds && activeReportId ? reportIds.indexOf(activeReportId) : -1;
+  const hasPrev = currentIndex > 0;
+  const hasNext = reportIds ? currentIndex < reportIds.length - 1 && currentIndex >= 0 : false;
+
+  function goToPrev() {
+    if (hasPrev && reportIds && onNavigate) {
+      const prevId = reportIds[currentIndex - 1];
+      onNavigate(prevId);
+      setNavigatedReportId(null);
+    }
+  }
+
+  function goToNext() {
+    if (hasNext && reportIds && onNavigate) {
+      const nextId = reportIds[currentIndex + 1];
+      onNavigate(nextId);
+      setNavigatedReportId(null);
+    }
+  }
+
   const isMonitoring = report?.area_type_id === 'monitoring';
   const entries = isMonitoring
     ? report?.monitoringEntries || []
@@ -226,6 +256,24 @@ export function ReportDetailSheet({
                   </span>
                 )}
               </div>
+              {reportIds && reportIds.length > 1 && (
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={goToNext}
+                    disabled={!hasNext}
+                    className="rounded-md border p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-30 disabled:pointer-events-none focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={goToPrev}
+                    disabled={!hasPrev}
+                    className="rounded-md border p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-30 disabled:pointer-events-none focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
               <SheetClose className="rounded-md border p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
                 <X className="h-4 w-4" />
                 <span className="sr-only">סגור</span>
@@ -331,7 +379,7 @@ export function ReportDetailSheet({
                                   key={treatment.id}
                                   treatment={treatment}
                                   linkedActionReportId={entry.linked_action?.area_report_id}
-                                  onNavigate={setActiveReportId}
+                                  onNavigate={setNavigatedReportId}
                                 />
                               ))}
                             </div>

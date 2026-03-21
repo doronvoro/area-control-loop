@@ -156,6 +156,25 @@ export function ReportsTable({ reportAreas, onReportDeleted }: ReportsTableProps
     return result;
   }, [reportAreas, childActionIds, searchQuery, filterType, filterStatus, sortField, sortDirection]);
 
+  // Build flat ordered list of visible report IDs (matching table render order)
+  const orderedReportIds = useMemo(() => {
+    const ids: string[] = [];
+    const rendered = new Set<string>();
+    for (const report of filteredAndSortedReports) {
+      if (rendered.has(report.id)) continue;
+      rendered.add(report.id);
+      ids.push(report.id);
+      if (expandedRows.has(report.id) && report.linked_action_report_ids?.length) {
+        for (const childId of report.linked_action_report_ids) {
+          if (rendered.has(childId)) continue;
+          rendered.add(childId);
+          if (reportMap.has(childId)) ids.push(childId);
+        }
+      }
+    }
+    return ids;
+  }, [filteredAndSortedReports, expandedRows, reportMap]);
+
   function handleRowClick(reportId: string) {
     setSelectedReportId(reportId);
     setSheetOpen(true);
@@ -234,7 +253,8 @@ export function ReportsTable({ reportAreas, onReportDeleted }: ReportsTableProps
         key={report.id}
         className={cn(
           'cursor-pointer',
-          isChild ? 'bg-muted/40 hover:bg-muted/60' : 'hover:bg-muted/50'
+          isChild ? 'bg-muted/40 hover:bg-muted/60' : 'hover:bg-muted/50',
+          sheetOpen && selectedReportId === report.id && 'bg-primary/10 hover:bg-primary/15'
         )}
         onClick={() => handleRowClick(report.id)}
       >
@@ -466,6 +486,8 @@ export function ReportsTable({ reportAreas, onReportDeleted }: ReportsTableProps
         open={sheetOpen}
         onOpenChange={setSheetOpen}
         onDeleted={onReportDeleted}
+        reportIds={orderedReportIds}
+        onNavigate={setSelectedReportId}
       />
     </>
   );
