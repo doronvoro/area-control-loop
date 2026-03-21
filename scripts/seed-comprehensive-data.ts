@@ -175,9 +175,9 @@ async function seedComprehensiveData() {
     ];
 
     let workersAdded = 0;
+    const { data: existingUsers } = await supabase.auth.admin.listUsers();
     for (const worker of newWorkers) {
       // Check if user exists
-      const { data: existingUsers } = await supabase.auth.admin.listUsers();
       const existingUser = existingUsers?.users?.find(u => u.email === worker.email);
 
       let userId: string;

@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { getApiContext, resolveCustomerId } from '@/lib/api/auth-context';
 import { handleApiError } from '@/lib/api-utils';
 import { getWorkerTypeIds } from '@/lib/api/utils';
+import { getFindings, getUnitTypes, getCustomers } from '@/lib/services/lookup.service';
+import { getCustomerAreasWithCrops } from '@/lib/services/customer-area.service';
 
 export async function GET() {
   try {
@@ -9,10 +11,10 @@ export async function GET() {
     const customerIdForData = resolveCustomerId(ctx);
 
     // Fetch common lookup data
-    const [customersResult, findingsResult, unitTypesResult] = await Promise.all([
-      ctx.isAdmin ? ctx.supabase.from('customers').select('*').order('name') : { data: [] },
-      ctx.supabase.from('findings').select('*').order('name'),
-      ctx.supabase.from('unit_types').select('*').order('name'),
+    const [customers, findings, unitTypes] = await Promise.all([
+      ctx.isAdmin ? getCustomers(ctx.supabase) : Promise.resolve([]),
+      getFindings(ctx.supabase),
+      getUnitTypes(ctx.supabase),
     ]);
 
     let initialAreas: any[] = [];
@@ -21,11 +23,8 @@ export async function GET() {
     if (customerIdForData) {
       const actionWorkerTypeIds = await getWorkerTypeIds(ctx.supabase, ['action_worker', 'super_worker']);
 
-      const [areasRes, workersRes] = await Promise.all([
-        ctx.supabase
-          .from('customer_areas')
-          .select('areas(*, crops(*))')
-          .eq('customer_id', customerIdForData),
+      const [areas, workersRes] = await Promise.all([
+        getCustomerAreasWithCrops(ctx.supabase, customerIdForData),
         actionWorkerTypeIds.length > 0
           ? ctx.supabase
               .from('workers')
@@ -35,7 +34,7 @@ export async function GET() {
           : Promise.resolve({ data: [] }),
       ]);
 
-      initialAreas = (areasRes.data || []).map((ca: any) => ca.areas).filter(Boolean);
+      initialAreas = areas;
       initialWorkers = workersRes.data || [];
     } else if (ctx.isAdmin) {
       const actionWorkerTypeIds = await getWorkerTypeIds(ctx.supabase, ['action_worker', 'super_worker']);
@@ -51,11 +50,11 @@ export async function GET() {
 
     return NextResponse.json({
       isAdmin: ctx.isAdmin,
-      customers: customersResult.data || [],
+      customers,
       initialAreas,
       initialWorkers,
-      findings: findingsResult.data || [],
-      unitTypes: unitTypesResult.data || [],
+      findings,
+      unitTypes,
       currentWorkerId: ctx.worker?.id || null,
     });
   } catch (error) {

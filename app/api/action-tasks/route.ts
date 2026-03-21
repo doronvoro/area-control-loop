@@ -3,6 +3,7 @@ import { getApiContext, requireWorkerAdminOrCustomer, resolveCustomerId } from '
 import { handleApiError } from '@/lib/api-utils';
 import { AreaTypeId } from '@/types/database';
 import { ENTIRE_AREA_DISPLAY } from '@/lib/constants';
+import { getAccessibleAreaIds } from '@/lib/services/customer-area.service';
 
 export async function GET(request: Request) {
   try {
@@ -16,23 +17,7 @@ export async function GET(request: Request) {
 
     // Determine which areas the user can access
     const customerId = resolveCustomerId(ctx);
-
-    // Get ALL accessible area IDs (for the dropdown list)
-    let allAccessibleAreaIds: string[] = [];
-
-    if (ctx.isAdmin) {
-      // Admin sees all areas
-      const { data: allAreas } = await ctx.supabase
-        .from('areas')
-        .select('id');
-      allAccessibleAreaIds = (allAreas || []).map((a: any) => a.id);
-    } else if (customerId) {
-      const { data: customerAreas } = await ctx.supabase
-        .from('customer_areas')
-        .select('area_id')
-        .eq('customer_id', customerId);
-      allAccessibleAreaIds = (customerAreas || []).map((ca: any) => ca.area_id);
-    }
+    const allAccessibleAreaIds = await getAccessibleAreaIds(ctx.supabase, ctx.isAdmin, customerId);
 
     // Determine which areas to fetch tasks for
     const taskAreaIds = areaId ? [areaId] : allAccessibleAreaIds;

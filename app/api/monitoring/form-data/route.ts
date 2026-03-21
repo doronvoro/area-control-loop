@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { getApiContext, resolveCustomerId } from '@/lib/api/auth-context';
 import { handleApiError } from '@/lib/api-utils';
 import { getWorkerTypeIds } from '@/lib/api/utils';
+import { getFindings, getUnitTypes, getCustomers } from '@/lib/services/lookup.service';
+import { getCustomerAreasWithCrops } from '@/lib/services/customer-area.service';
 
 export async function GET() {
   try {
@@ -9,10 +11,10 @@ export async function GET() {
     const customerIdForData = resolveCustomerId(ctx);
 
     // Fetch data based on role
-    const [customersResult, findingsResult, unitTypesResult] = await Promise.all([
-      ctx.isAdmin ? ctx.supabase.from('customers').select('*').order('name') : { data: [] },
-      ctx.supabase.from('findings').select('*').order('name'),
-      ctx.supabase.from('unit_types').select('*').order('name'),
+    const [customers, findings, unitTypes] = await Promise.all([
+      ctx.isAdmin ? getCustomers(ctx.supabase) : Promise.resolve([]),
+      getFindings(ctx.supabase),
+      getUnitTypes(ctx.supabase),
     ]);
 
     // For non-admin users, pre-fetch inspectors and areas for their customer
@@ -22,11 +24,8 @@ export async function GET() {
     if (!ctx.isAdmin && customerIdForData) {
       const inspectorTypeIds = await getWorkerTypeIds(ctx.supabase, ['inspector', 'super_worker']);
 
-      const [areasRes, inspectorsRes] = await Promise.all([
-        ctx.supabase
-          .from('customer_areas')
-          .select('areas(*, crops(*))')
-          .eq('customer_id', customerIdForData),
+      const [areas, inspectorsRes] = await Promise.all([
+        getCustomerAreasWithCrops(ctx.supabase, customerIdForData),
         inspectorTypeIds.length > 0
           ? ctx.supabase
               .from('workers')
@@ -36,17 +35,17 @@ export async function GET() {
           : Promise.resolve({ data: [] }),
       ]);
 
-      initialAreas = (areasRes.data || []).map((ca: any) => ca.areas).filter(Boolean);
+      initialAreas = areas;
       initialInspectors = inspectorsRes.data || [];
     }
 
     return NextResponse.json({
       isAdmin: ctx.isAdmin,
-      customers: customersResult.data || [],
+      customers,
       initialInspectors,
       initialAreas,
-      findings: findingsResult.data || [],
-      unitTypes: unitTypesResult.data || [],
+      findings,
+      unitTypes,
       customerIdForData,
     });
   } catch (error) {

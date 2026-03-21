@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getApiContext, checkPermission } from '@/lib/api/auth-context';
 import { handleApiError } from '@/lib/api-utils';
+import { getCrops } from '@/lib/services/lookup.service';
 
 interface Customer {
   id: string;
@@ -68,10 +69,7 @@ export async function GET() {
     }
 
     // Fetch all crops for forms
-    const { data: crops } = await ctx.supabase
-      .from('crops')
-      .select('id, name, description')
-      .order('name');
+    const crops = await getCrops(ctx.supabase);
 
     // Get permissions
     const permissions = {

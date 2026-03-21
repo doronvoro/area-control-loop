@@ -1,29 +1,15 @@
-import { createClient } from '@/lib/supabase/server';
 import { NextRequest, NextResponse } from 'next/server';
-import { getApiContext, checkRole } from '@/lib/api/auth-context';
+import { getApiContext, requireAdminOrCustomerOwner } from '@/lib/api/auth-context';
 import { handleApiError } from '@/lib/api-utils';
+import { getFindings } from '@/lib/services/lookup.service';
 
 export async function GET() {
   try {
-    const supabase = await createClient();
-    const { data, error } = await supabase
-      .from('findings')
-      .select('*')
-      .order('name');
-
-    if (error) throw error;
-
-    return NextResponse.json(data);
+    const ctx = await getApiContext();
+    return NextResponse.json(await getFindings(ctx.supabase));
   } catch (error) {
     return handleApiError(error);
   }
-}
-
-async function requireAdminOrCustomerOwner(ctx: Awaited<ReturnType<typeof getApiContext>>) {
-  if (!ctx.isAdmin && !(await checkRole(ctx, 'customer_owner'))) {
-    return NextResponse.json({ error: 'אין הרשאה' }, { status: 403 });
-  }
-  return null;
 }
 
 export async function POST(request: NextRequest) {

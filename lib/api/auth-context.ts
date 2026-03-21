@@ -123,6 +123,16 @@ export async function checkRole(ctx: ApiContext, roleName: string): Promise<bool
 }
 
 /**
+ * Check if the user is admin or customer_owner — returns 403 response if neither.
+ */
+export async function requireAdminOrCustomerOwner(ctx: ApiContext): Promise<NextResponse | null> {
+  if (!ctx.isAdmin && !(await checkRole(ctx, 'customer_owner'))) {
+    return NextResponse.json({ error: 'אין הרשאה' }, { status: 403 });
+  }
+  return null;
+}
+
+/**
  * Resolve the customer ID from context, with optional override.
  * Tries: explicit override → customer.id → worker.customer_id
  */
