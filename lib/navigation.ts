@@ -12,6 +12,7 @@ import {
   Shield,
   ClipboardList,
   ListChecks,
+  RefreshCw,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -50,6 +51,7 @@ export const managementGroup: NavGroup = {
     { href: '/admin/findings', label: 'ניהול ממצאים', icon: Bug },
     { href: '/admin/recommend-materials', label: 'המלצות חומרים', icon: FlaskConical },
     { href: '/admin/pesticide-registry', label: 'ייבוא מרשם הדברה', icon: FileUp },
+    { href: '/admin/registry-sync', label: 'סנכרון מרשם', icon: RefreshCw },
   ],
 };
 

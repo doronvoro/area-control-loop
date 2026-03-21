@@ -253,19 +253,48 @@ export async function importRegistry(
     if (seenKeys.has(key)) continue;
     seenKeys.add(key);
 
-    const { error } = await (supabase.from('recommend_material') as any).upsert(
-      {
-        crop_id: cropId,
-        finding_id: findingId,
-        action_type_id: null,
-        material_id: materialId,
-        unit_type_id: unitTypeId,
-        dosage: parsed.value,
-        source: 'registry',
-        registry_id: regRow.id,
-      },
-      { onConflict: 'crop_id,finding_id,action_type_id,material_id,unit_type_id' }
-    );
+    // Check if exists first (upsert doesn't work with expression-based unique indexes for NULLs)
+    let existsQuery = (supabase.from('recommend_material') as any)
+      .select('id')
+      .eq('crop_id', cropId)
+      .eq('material_id', materialId);
+
+    if (findingId) {
+      existsQuery = existsQuery.eq('finding_id', findingId);
+    } else {
+      existsQuery = existsQuery.is('finding_id', null);
+    }
+    existsQuery = existsQuery.is('action_type_id', null);
+    if (unitTypeId) {
+      existsQuery = existsQuery.eq('unit_type_id', unitTypeId);
+    } else {
+      existsQuery = existsQuery.is('unit_type_id', null);
+    }
+
+    const { data: existingRm } = await existsQuery.maybeSingle();
+
+    let error;
+    if (existingRm) {
+      ({ error } = await (supabase.from('recommend_material') as any)
+        .update({
+          dosage: parsed.value,
+          source: 'registry',
+          registry_id: regRow.id,
+        })
+        .eq('id', existingRm.id));
+    } else {
+      ({ error } = await (supabase.from('recommend_material') as any)
+        .insert({
+          crop_id: cropId,
+          finding_id: findingId,
+          action_type_id: null,
+          material_id: materialId,
+          unit_type_id: unitTypeId,
+          dosage: parsed.value,
+          source: 'registry',
+          registry_id: regRow.id,
+        }));
+    }
 
     if (error) {
       errors.push({ row: 0, error: `recommend_material: ${error.message}` });
