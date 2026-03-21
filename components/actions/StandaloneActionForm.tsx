@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { getSubAreaLabel } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import {
@@ -10,9 +10,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { SearchableSelect } from '@/components/ui/searchable-select';
+import { MultiSelect } from '@/components/ui/multi-select';
 import { SearchableMaterialSelect } from '@/components/monitoring/SearchableMaterialSelect';
-import { ENTIRE_AREA, ENTIRE_AREA_DISPLAY } from '@/lib/constants';
+import { ENTIRE_AREA } from '@/lib/constants';
 import { ACTION_TYPE_OPTIONS, ReportSeverity, SEVERITY_OPTIONS } from '@/types/database';
 import { Check, Lock, LockOpen, Loader2, Trash2 } from 'lucide-react';
 
@@ -28,6 +28,8 @@ interface SubArea {
   id: string;
   name: string;
   display: string | null;
+  parent_sub_area_id?: string | null;
+  level?: number;
 }
 
 interface Finding {
@@ -59,7 +61,7 @@ interface StandaloneActionFormProps {
   subAreas: SubArea[];
   findings: Finding[];
   unitTypes: UnitType[];
-  onSubmit: (data: StandaloneActionData) => void;
+  onSubmit: (data: StandaloneActionData[]) => void;
   onCancel: () => void;
   disabled?: boolean;
 }
@@ -74,8 +76,8 @@ export function StandaloneActionForm({
   onCancel,
   disabled,
 }: StandaloneActionFormProps) {
-  const [subAreaId, setSubAreaId] = useState('');
-  const [findingId, setFindingId] = useState('');
+  const [subAreaIds, setSubAreaIds] = useState<string[]>([]);
+  const [findingIds, setFindingIds] = useState<string[]>([]);
   const [severity, setSeverity] = useState<string | undefined>(undefined);
   const [actionTypeId, setActionTypeId] = useState('');
   const [materialId, setMaterialId] = useState('');
@@ -99,9 +101,36 @@ export function StandaloneActionForm({
   const [loadingFindings, setLoadingFindings] = useState(false);
   const [unlockedFindings, setUnlockedFindings] = useState(false);
 
-  // Fetch crop-filtered findings when sub-area changes
+  // Build parentMap / levelMap for sub-area tree hierarchy
+  const subAreaParentMap = useMemo(() => {
+    const map: Record<string, string | null> = {};
+    for (const sa of subAreas) {
+      map[sa.id] = sa.parent_sub_area_id || null;
+    }
+    return map;
+  }, [subAreas]);
+
+  const subAreaLevelMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const sa of subAreas) {
+      map[sa.id] = (sa.level || 1) - 1;
+    }
+    return map;
+  }, [subAreas]);
+
+  // Sub-area options for MultiSelect
+  const subAreaOptions = useMemo(() =>
+    subAreas.map((sa) => ({
+      value: sa.id,
+      label: getSubAreaLabel(sa),
+      shortLabel: sa.name,
+    })),
+    [subAreas]
+  );
+
+  // Fetch crop-filtered findings when sub-areas change
   useEffect(() => {
-    if (!subAreaId || !cropId) {
+    if (subAreaIds.length === 0 || !cropId) {
       setCropFindings(null);
       return;
     }
@@ -115,20 +144,32 @@ export function StandaloneActionForm({
           setCropFindings(Array.isArray(data) ? data : null);
         }
       } catch {
-        // Non-critical — all findings still available
+        // Non-critical
       } finally {
         setLoadingFindings(false);
       }
     };
 
     fetchCropFindings();
-  }, [subAreaId, cropId]);
+  }, [subAreaIds.length > 0, cropId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Reset finding when sub-area changes
-  useEffect(() => {
-    setFindingId('');
+  // Reset findings when sub-areas change
+  const handleSubAreaIdsChange = (ids: string[]) => {
+    setSubAreaIds(ids);
+    setFindingIds([]);
     setUnlockedFindings(false);
-  }, [subAreaId]);
+  };
+
+  // Finding options — crop-filtered or all
+  const findingOptions = useMemo(() => {
+    const displayFindings = unlockedFindings ? findings : (cropFindings || findings);
+    return [...displayFindings]
+      .sort((a, b) => (a.description || a.name || '').localeCompare(b.description || b.name || '', 'he'))
+      .map((f) => ({
+        value: f.id,
+        label: f.description || f.name,
+      }));
+  }, [unlockedFindings, findings, cropFindings]);
 
   const fetchAllMaterials = useCallback(async () => {
     if (allMaterials) return;
@@ -143,30 +184,42 @@ export function StandaloneActionForm({
     }
   }, [allMaterials]);
 
-  // Fetch materials via cascade
+  // Use first selected finding for cascade (material/dosage depend on a single finding)
+  const primaryFindingId = findingIds[0] || '';
+
+  // Fetch materials via cascade (falls back to all materials if no cropId)
   const fetchMaterials = useCallback(async (atId: string) => {
-    if (!findingId) return;
+    if (!primaryFindingId) return;
     setLoadingMaterials(true);
     try {
-      const params = new URLSearchParams({ type: 'materials', cropId: cropId || '', findingId });
-      if (atId) params.set('actionTypeId', atId);
-      const res = await fetch(`/api/cascade?${params}`);
-      if (res.ok) {
-        const data = await res.json();
-        setCascadeMaterials(Array.isArray(data) ? data : []);
+      if (!cropId) {
+        // No crop — fetch all materials directly
+        const res = await fetch('/api/materials');
+        if (res.ok) {
+          const data = await res.json();
+          setCascadeMaterials(Array.isArray(data) ? data : []);
+        }
+      } else {
+        const params = new URLSearchParams({ type: 'materials', cropId, findingId: primaryFindingId });
+        if (atId) params.set('actionTypeId', atId);
+        const res = await fetch(`/api/cascade?${params}`);
+        if (res.ok) {
+          const data = await res.json();
+          setCascadeMaterials(Array.isArray(data) ? data : []);
+        }
       }
     } catch {
       // Non-critical
     } finally {
       setLoadingMaterials(false);
     }
-  }, [findingId, cropId]);
+  }, [primaryFindingId, cropId]);
 
   // Fetch dosage recommendation when material changes
   const fetchDosage = useCallback(async (atId: string, matId: string) => {
-    if (!findingId || !matId) return;
+    if (!primaryFindingId || !matId) return;
     try {
-      const params = new URLSearchParams({ type: 'dosage', cropId: cropId || '', findingId, materialId: matId });
+      const params = new URLSearchParams({ type: 'dosage', cropId: cropId || '', findingId: primaryFindingId, materialId: matId });
       if (atId) params.set('actionTypeId', atId);
       const res = await fetch(`/api/cascade?${params}`);
       if (res.ok) {
@@ -180,16 +233,16 @@ export function StandaloneActionForm({
     } catch {
       // Non-critical
     }
-  }, [findingId, cropId]);
+  }, [primaryFindingId, cropId]);
 
   // Refetch materials when finding or action type changes
   useEffect(() => {
-    if (!actionTypeId || !findingId) {
+    if (!actionTypeId || !primaryFindingId) {
       setCascadeMaterials([]);
       return;
     }
     fetchMaterials(actionTypeId);
-  }, [actionTypeId, findingId, fetchMaterials]);
+  }, [actionTypeId, primaryFindingId, fetchMaterials]);
 
   // Handle action type change — reset dependent fields
   const handleActionTypeChange = (value: string) => {
@@ -208,22 +261,30 @@ export function StandaloneActionForm({
   };
 
   const handleSubmit = () => {
-    if (!subAreaId || !findingId) return;
+    if (subAreaIds.length === 0 || findingIds.length === 0) return;
 
-    onSubmit({
-      sub_area_id: subAreaId === ENTIRE_AREA ? null : subAreaId,
-      finding_id: findingId,
-      severity: severity || undefined,
-      action_type_id: actionTypeId || undefined,
-      material_id: materialId || undefined,
-      dosage: dosage ? parseFloat(dosage) : undefined,
-      unit_type_id: unitTypeId || undefined,
-      notes: notes || undefined,
-    });
+    // Expand multi-selections into individual actions
+    const actions: StandaloneActionData[] = [];
+    for (const saId of subAreaIds) {
+      for (const fId of findingIds) {
+        actions.push({
+          sub_area_id: saId === ENTIRE_AREA ? null : saId,
+          finding_id: fId,
+          severity: severity || undefined,
+          action_type_id: actionTypeId || undefined,
+          material_id: materialId || undefined,
+          dosage: dosage ? parseFloat(dosage) : undefined,
+          unit_type_id: unitTypeId || undefined,
+          notes: notes || undefined,
+        });
+      }
+    }
+
+    onSubmit(actions);
 
     // Reset form
-    setSubAreaId('');
-    setFindingId('');
+    setSubAreaIds([]);
+    setFindingIds([]);
     setSeverity(undefined);
     setActionTypeId('');
     setMaterialId('');
@@ -240,25 +301,7 @@ export function StandaloneActionForm({
     (a.description || a.name || '').localeCompare(b.description || b.name || '', 'he')
   );
 
-  const isValid = subAreaId && findingId;
-
-  // Build sub-area options for SearchableSelect
-  const subAreaOptions = [
-    { value: ENTIRE_AREA, label: ENTIRE_AREA_DISPLAY },
-    ...subAreas.map((sa) => ({
-      value: sa.id,
-      label: getSubAreaLabel(sa),
-    })),
-  ];
-
-  // Build finding options — crop-filtered or all
-  const displayFindings = unlockedFindings ? findings : (cropFindings || findings);
-  const findingOptions = [...displayFindings]
-    .sort((a, b) => (a.description || a.name || '').localeCompare(b.description || b.name || '', 'he'))
-    .map((f) => ({
-      value: f.id,
-      label: f.description || f.name,
-    }));
+  const isValid = subAreaIds.length > 0 && findingIds.length > 0;
 
   return (
     <div className="actions-section section-tasks p-4 space-y-4">
@@ -278,20 +321,23 @@ export function StandaloneActionForm({
         </button>
       </div>
 
-      {/* Sub-area — searchable single select */}
+      {/* Sub-areas — MultiSelect (same as monitoring) */}
       <div className="space-y-1">
-        <label className="font-semibold text-xs text-muted-foreground">תת-שטח *</label>
-        <SearchableSelect
+        <label className="font-semibold text-xs text-muted-foreground">תתי-שטח *</label>
+        <MultiSelect
           options={subAreaOptions}
-          value={subAreaId}
-          onValueChange={setSubAreaId}
-          placeholder="בחר תת-שטח"
-          searchPlaceholder="חיפוש תת-שטח..."
+          value={subAreaIds}
+          onValueChange={handleSubAreaIdsChange}
+          placeholder="בחר תתי-שטח"
+          selectAllLabel="בחר את כל השטח"
+          parentMap={subAreaParentMap}
+          levelMap={subAreaLevelMap}
           disabled={disabled}
+          className="monitoring-select-trigger"
         />
       </div>
 
-      {/* Finding — searchable single select with lock/unlock */}
+      {/* Findings — MultiSelect with lock/unlock (same as monitoring) */}
       <div className="space-y-1">
         <div className="flex items-center gap-1.5">
           <label className="font-semibold text-xs text-muted-foreground">
@@ -311,13 +357,14 @@ export function StandaloneActionForm({
             </button>
           )}
         </div>
-        <SearchableSelect
+        <MultiSelect
           options={findingOptions}
-          value={findingId}
-          onValueChange={setFindingId}
-          placeholder={!subAreaId ? 'בחר תת-שטח תחילה' : 'בחר ממצא'}
-          searchPlaceholder="חיפוש ממצא..."
-          disabled={disabled || !subAreaId || loadingFindings}
+          value={findingIds}
+          onValueChange={setFindingIds}
+          placeholder={subAreaIds.length === 0 ? 'בחר תתי-שטח תחילה' : 'בחר ממצאים'}
+          showSelectAll={false}
+          disabled={disabled || subAreaIds.length === 0 || loadingFindings}
+          className="monitoring-select-trigger"
         />
       </div>
 

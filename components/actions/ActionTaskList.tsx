@@ -193,9 +193,10 @@ export function ActionTaskList() {
     clearSuccessBanner();
   };
 
-  // Handle adding a standalone action (add to batch)
-  const handleStandaloneSubmit = (data: StandaloneActionData) => {
-    setStandaloneActions((prev) => [...prev, data]);
+  // Handle adding standalone actions (add to batch — may be multiple from multi-select)
+  const handleStandaloneSubmit = (data: StandaloneActionData | StandaloneActionData[]) => {
+    const items = Array.isArray(data) ? data : [data];
+    setStandaloneActions((prev) => [...prev, ...items]);
     setShowStandaloneForm(false);
     clearSuccessBanner();
   };

@@ -1,5 +1,26 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 
+export interface ReconciliationSummary {
+  matched: number;
+  leaks: number;
+  excess: number;
+}
+
+export interface ExcessEntry {
+  id: string;
+  severity: string | null;
+  sub_area: { id: string; name: string; display: string | null } | null;
+  finding: { id: string; name: string; description: string | null } | null;
+  treatments: {
+    id: string;
+    dosage: number | null;
+    notes: string | null;
+    action_type_id: string | null;
+    material: { id: string; name: string } | null;
+    unit_type: { id: string; name: string } | null;
+  }[];
+}
+
 export interface ReportDetail {
   id: string;
   name: string;
@@ -13,6 +34,10 @@ export interface ReportDetail {
   worker: { id: string; name: string } | null;
   monitoringEntries: any[] | null;
   actionEntries: any[] | null;
+  reconciliation?: {
+    summary: ReconciliationSummary;
+    excessEntries: ExcessEntry[];
+  };
 }
 
 export async function fetchReportDetail(
@@ -37,6 +62,7 @@ export async function fetchReportDetail(
   // Fetch monitoring entries if this is a monitoring report
   let monitoringEntries = null;
   let hasLinkedActions = false;
+  let reconciliation: ReportDetail['reconciliation'] = undefined;
   if (reportArea.area_type_id === 'monitoring') {
     const { data, error } = await supabase
       .from('monitoring_area_report')
@@ -46,10 +72,15 @@ export async function fetchReportDetail(
         finding:findings(id, name, description),
         linked_action:actions_area_report!fk_monitoring_actions_area_report(area_report_id),
         treatments:monitoring_treatments(
-          id, dosage, notes, status,
+          id, dosage, notes, status, treatment_match, action_treatment_id,
           material:materials(id, name),
           unit_type:unit_types(id, name),
-          action_type_id
+          action_type_id,
+          action_treatment:action_treatments(
+            id, dosage, notes, action_type_id,
+            material:materials(id, name),
+            unit_type:unit_types(id, name)
+          )
         )`
       )
       .eq('area_report_id', id);
@@ -102,6 +133,62 @@ export async function fetchReportDetail(
 
     hasLinkedActions = (data || []).some((entry: any) => entry.actions_area_report_id != null);
     monitoringEntries = data;
+
+    // Compute reconciliation if there are linked actions
+    if (hasLinkedActions && data) {
+      const linkedActionEntryIds = new Set(
+        data
+          .map((entry: any) => entry.actions_area_report_id)
+          .filter(Boolean)
+      );
+
+      // Get the parent action report IDs from the linked action entries
+      const { data: linkedActionEntries } = await supabase
+        .from('actions_area_report')
+        .select('area_report_id')
+        .in('id', [...linkedActionEntryIds]);
+
+      const actionReportAreaIds = [
+        ...new Set((linkedActionEntries || []).map((e: any) => e.area_report_id)),
+      ];
+
+      // Fetch ALL action entries from those action reports to find excess
+      let excessEntries: ExcessEntry[] = [];
+      if (actionReportAreaIds.length > 0) {
+        const { data: allActionEntries } = await supabase
+          .from('actions_area_report')
+          .select(
+            `id, severity,
+            sub_area:sub_areas(id, name, display),
+            finding:findings(id, name, description),
+            treatments:action_treatments(
+              id, dosage, notes, action_type_id,
+              material:materials(id, name),
+              unit_type:unit_types(id, name)
+            )`
+          )
+          .in('area_report_id', actionReportAreaIds);
+
+        // Excess = action entries not linked to any monitoring entry
+        excessEntries = (allActionEntries || [])
+          .filter((ae: any) => !linkedActionEntryIds.has(ae.id))
+          .map((ae: any) => ({
+            id: ae.id,
+            severity: ae.severity,
+            sub_area: ae.sub_area,
+            finding: ae.finding,
+            treatments: ae.treatments || [],
+          }));
+      }
+
+      const matched = data.filter((e: any) => e.actions_area_report_id != null).length;
+      const leaks = data.filter((e: any) => e.actions_area_report_id == null).length;
+
+      reconciliation = {
+        summary: { matched, leaks, excess: excessEntries.length },
+        excessEntries,
+      };
+    }
   }
 
   // Fetch action entries if this is an action report
@@ -131,5 +218,6 @@ export async function fetchReportDetail(
     monitoringEntries,
     actionEntries,
     hasLinkedActions,
+    reconciliation,
   };
 }

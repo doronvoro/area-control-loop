@@ -26,6 +26,11 @@ import {
   X,
   ChevronRight,
   ChevronLeft,
+  ArrowLeftRight,
+  CircleMinus,
+  CirclePlus,
+  Equal,
+  Pencil,
 } from 'lucide-react';
 import { SEVERITY_LABELS, ReportSeverity } from '@/types/database';
 import { STATUS_LABELS, TREATMENT_STATUS_LABELS } from '@/lib/reports/labels';
@@ -52,6 +57,15 @@ interface ReportDetailSheetProps {
   onNavigate?: (reportId: string) => void;
 }
 
+interface ActionTreatmentDetail {
+  id: string;
+  dosage: number | null;
+  notes: string | null;
+  action_type_id: string | null;
+  material: { id: string; name: string } | null;
+  unit_type: { id: string; name: string } | null;
+}
+
 interface Treatment {
   id: string;
   dosage: number | null;
@@ -61,6 +75,29 @@ interface Treatment {
   material: { id: string; name: string } | null;
   unit_type: { id: string; name: string } | null;
   action_type_id: string | null;
+  treatment_match?: boolean | null;
+  action_treatment_id?: string | null;
+  action_treatment?: ActionTreatmentDetail | null;
+}
+
+interface ExcessEntry {
+  id: string;
+  severity: string | null;
+  sub_area: { id: string; name: string; display: string | null } | null;
+  finding: { id: string; name: string; description: string | null } | null;
+  treatments: {
+    id: string;
+    dosage: number | null;
+    notes: string | null;
+    action_type_id: string | null;
+    material: { id: string; name: string } | null;
+    unit_type: { id: string; name: string } | null;
+  }[];
+}
+
+interface ReconciliationData {
+  summary: { matched: number; leaks: number; excess: number };
+  excessEntries: ExcessEntry[];
 }
 
 interface RecommendedTreatment {
@@ -97,6 +134,7 @@ interface ReportDetail {
   monitoringEntries: ReportEntry[] | null;
   actionEntries: ReportEntry[] | null;
   hasLinkedActions: boolean;
+  reconciliation?: ReconciliationData;
 }
 
 function getStatusColor(status: string) {
@@ -231,10 +269,32 @@ export function ReportDetailSheet({
     }
   }
 
+  const [groupBy, setGroupBy] = useState<'none' | 'sub_area' | 'finding'>('none');
+
   const isMonitoring = report?.area_type_id === 'monitoring';
   const entries = isMonitoring
     ? report?.monitoringEntries || []
     : report?.actionEntries || [];
+
+  // Group entries by selected field
+  const groupedEntries = (() => {
+    if (groupBy === 'none') return null;
+    const groups = new Map<string, { label: string; entries: ReportEntry[] }>();
+    for (const entry of entries) {
+      let key: string;
+      let label: string;
+      if (groupBy === 'sub_area') {
+        key = entry.sub_area?.id || '__none__';
+        label = entry.sub_area?.display || entry.sub_area?.name || 'כל השטח';
+      } else {
+        key = entry.finding?.id || '__none__';
+        label = entry.finding?.name || 'ללא ממצא';
+      }
+      if (!groups.has(key)) groups.set(key, { label, entries: [] });
+      groups.get(key)!.entries.push(entry);
+    }
+    return [...groups.values()];
+  })();
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -332,63 +392,111 @@ export function ReportDetailSheet({
 
             <Separator />
 
-            {/* Report Entries */}
-            <div className="p-5">
-              {entries.length > 0 ? (
-                <div className="space-y-3">
-                  {entries.map((entry) => (
-                    <div
-                      key={entry.id}
-                      className="rounded-lg border bg-card shadow-sm overflow-hidden"
-                    >
-                      {/* Entry Header */}
-                      <div className="flex items-center justify-between px-4 py-3 bg-muted/30">
-                        <div className="flex items-center gap-2">
-                          <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
-                          <span className="font-medium text-sm">
-                            {entry.sub_area?.display || entry.sub_area?.name || 'כל השטח'}
-                          </span>
-                        </div>
-                        {entry.severity && (
-                          <span
-                            className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${getSeverityStyle(entry.severity)}`}
-                          >
-                            {SEVERITY_LABELS[entry.severity as ReportSeverity] || entry.severity}
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Entry Body */}
-                      <div className="px-4 py-3 space-y-2">
-                        <div className="flex items-center gap-2">
-                          <Bug className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          <span className="text-sm font-medium">{entry.finding?.name || '-'}</span>
-                        </div>
-                        {entry.finding?.description && entry.finding.description !== entry.finding.name && (
-                          <p className="text-xs text-muted-foreground pr-5">
-                            {entry.finding.description}
-                          </p>
-                        )}
-
-                        {/* Treatments */}
-                        {entry.treatments && entry.treatments.length > 0 && (
-                          <div className="mt-2 pt-2 border-t border-dashed">
-                            <div className="space-y-2">
-                              {entry.treatments.map((treatment) => (
-                                <TreatmentCard
-                                  key={treatment.id}
-                                  treatment={treatment}
-                                  linkedActionReportId={entry.linked_action?.area_report_id}
-                                  onNavigate={setNavigatedReportId}
-                                />
-                              ))}
-                            </div>
-                          </div>
-                        )}
+            {/* Reconciliation Summary Bar */}
+            {isMonitoring && report.reconciliation && (
+              <>
+                <div className="px-5 py-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <ArrowLeftRight className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm font-semibold">השוואת ניטור מול ביצוע</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 dark:bg-emerald-950/30 dark:border-emerald-800">
+                      <Equal className="h-4 w-4 text-emerald-600" />
+                      <div className="flex flex-col">
+                        <span className="text-lg font-bold text-emerald-700 dark:text-emerald-400">{report.reconciliation.summary.matched}</span>
+                        <span className="text-[10px] text-emerald-600 dark:text-emerald-500">התאמה</span>
                       </div>
                     </div>
+                    <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 dark:bg-red-950/30 dark:border-red-800">
+                      <CircleMinus className="h-4 w-4 text-red-600" />
+                      <div className="flex flex-col">
+                        <span className="text-lg font-bold text-red-700 dark:text-red-400">{report.reconciliation.summary.leaks}</span>
+                        <span className="text-[10px] text-red-600 dark:text-red-500">חוסר</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 dark:bg-amber-950/30 dark:border-amber-800">
+                      <CirclePlus className="h-4 w-4 text-amber-600" />
+                      <div className="flex flex-col">
+                        <span className="text-lg font-bold text-amber-700 dark:text-amber-400">{report.reconciliation.summary.excess}</span>
+                        <span className="text-[10px] text-amber-600 dark:text-amber-500">עודף</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <Separator />
+              </>
+            )}
+
+            {/* Report Entries */}
+            <div className="p-5">
+              {/* Group By Toggle */}
+              {entries.length > 0 && (
+                <div className="flex items-center gap-1.5 mb-3">
+                  <span className="text-xs text-muted-foreground ml-1">קיבוץ:</span>
+                  {([
+                    { value: 'none' as const, label: 'ללא' },
+                    { value: 'sub_area' as const, label: 'תת-שטח' },
+                    { value: 'finding' as const, label: 'ממצא' },
+                  ]).map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setGroupBy(opt.value)}
+                      className={`rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors ${
+                        groupBy === opt.value
+                          ? 'bg-primary text-primary-foreground border-primary'
+                          : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
                   ))}
                 </div>
+              )}
+
+              {entries.length > 0 ? (
+                groupedEntries ? (
+                  <div className="space-y-4">
+                    {groupedEntries.map((group) => (
+                      <div key={group.label}>
+                        <div className="flex items-center gap-2 mb-2">
+                          {groupBy === 'sub_area' ? (
+                            <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
+                          ) : (
+                            <Bug className="h-3.5 w-3.5 text-muted-foreground" />
+                          )}
+                          <span className="text-sm font-semibold">{group.label}</span>
+                          <span className="text-xs text-muted-foreground">({group.entries.length})</span>
+                        </div>
+                        <div className="space-y-3">
+                          {group.entries.map((entry) => (
+                            <EntryCard
+                              key={entry.id}
+                              entry={entry}
+                              isMonitoring={isMonitoring}
+                              reconciliation={report.reconciliation}
+                              onNavigate={setNavigatedReportId}
+                              hideSubArea={groupBy === 'sub_area'}
+                              hideFinding={groupBy === 'finding'}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {entries.map((entry) => (
+                      <EntryCard
+                        key={entry.id}
+                        entry={entry}
+                        isMonitoring={isMonitoring}
+                        reconciliation={report.reconciliation}
+                        onNavigate={setNavigatedReportId}
+                      />
+                    ))}
+                  </div>
+                )
               ) : (
                 <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
                   <ClipboardList className="h-10 w-10 mb-2 opacity-30" />
@@ -396,6 +504,75 @@ export function ReportDetailSheet({
                 </div>
               )}
             </div>
+
+            {/* Excess Entries */}
+            {isMonitoring && report.reconciliation && report.reconciliation.excessEntries.length > 0 && (
+              <>
+                <Separator />
+                <div className="p-5">
+                  <div className="flex items-center gap-2 mb-3">
+                    <CirclePlus className="h-4 w-4 text-amber-600" />
+                    <span className="text-sm font-semibold">פריטי עודף בדוח פעולה</span>
+                    <span className="text-xs text-muted-foreground">(בוצעו ללא המלצת ניטור)</span>
+                  </div>
+                  <div className="space-y-3">
+                    {report.reconciliation.excessEntries.map((entry) => (
+                      <div
+                        key={entry.id}
+                        className="rounded-lg border border-amber-300 bg-card shadow-sm overflow-hidden dark:border-amber-800"
+                      >
+                        <div className="flex items-center justify-between px-4 py-3 bg-amber-50/50 dark:bg-amber-950/20">
+                          <div className="flex items-center gap-2">
+                            <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
+                            <span className="font-medium text-sm">
+                              {entry.sub_area?.display || entry.sub_area?.name || 'כל השטח'}
+                            </span>
+                          </div>
+                          <span className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800">
+                            <CirclePlus className="h-3 w-3" />
+                            עודף
+                          </span>
+                        </div>
+                        <div className="px-4 py-3 space-y-2">
+                          <div className="flex items-center gap-2">
+                            <Bug className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                            <span className="text-sm font-medium">{entry.finding?.name || '-'}</span>
+                          </div>
+                          {entry.treatments && entry.treatments.length > 0 && (
+                            <div className="mt-2 pt-2 border-t border-dashed">
+                              <div className="space-y-2">
+                                {entry.treatments.map((t) => (
+                                  <div key={t.id} className="rounded-lg bg-muted/30 border border-border/50 p-3">
+                                    <div className="flex items-center gap-2 text-sm">
+                                      <FlaskConical className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                      <span className="font-semibold">
+                                        {t.action_type_id
+                                          ? ACTION_TYPE_LABELS[t.action_type_id as ActionTypeName] || t.action_type_id
+                                          : 'סוג פעולה לא ידוע'}
+                                      </span>
+                                      {t.material && (
+                                        <span className="text-muted-foreground">
+                                          {t.material.name}
+                                          {t.dosage && t.unit_type && (
+                                            <span className="font-semibold text-foreground">
+                                              {' '}- {t.dosage} {t.unit_type.name}
+                                            </span>
+                                          )}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
 
             {/* Delete Button */}
             <Separator />
@@ -460,11 +637,128 @@ function MetaItem({
   );
 }
 
-function TreatmentCard({ treatment, linkedActionReportId, onNavigate }: { treatment: Treatment; linkedActionReportId?: string; onNavigate?: (reportId: string) => void }) {
+function getTreatmentMatchLabel(treatment: Treatment): { label: string; style: string; icon: React.ReactNode } {
+  if (!treatment.action_treatment_id) {
+    // No linked action treatment = skipped
+    return {
+      label: 'לא בוצע',
+      style: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-800',
+      icon: <CircleMinus className="h-3 w-3" />,
+    };
+  }
+  if (treatment.treatment_match === true) {
+    return {
+      label: 'זהה',
+      style: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800',
+      icon: <Equal className="h-3 w-3" />,
+    };
+  }
+  // Has action treatment but doesn't match = modified
+  return {
+    label: 'שונה',
+    style: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800',
+    icon: <Pencil className="h-3 w-3" />,
+  };
+}
+
+function EntryCard({ entry, isMonitoring, reconciliation, onNavigate, hideSubArea, hideFinding }: {
+  entry: ReportEntry;
+  isMonitoring: boolean;
+  reconciliation?: ReconciliationData;
+  onNavigate: (reportId: string) => void;
+  hideSubArea?: boolean;
+  hideFinding?: boolean;
+}) {
+  const reconStatus = isMonitoring && reconciliation
+    ? (entry as any).actions_area_report_id ? 'matched' : 'leak'
+    : null;
+
+  return (
+    <div
+      className={`rounded-lg border bg-card shadow-sm overflow-hidden ${
+        reconStatus === 'leak' ? 'border-red-300 dark:border-red-800' : ''
+      }`}
+    >
+      {/* Entry Header */}
+      <div className={`flex items-center justify-between px-4 py-3 ${
+        reconStatus === 'leak'
+          ? 'bg-red-50/50 dark:bg-red-950/20'
+          : 'bg-muted/30'
+      }`}>
+        {!hideSubArea && (
+          <div className="flex items-center gap-2">
+            <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="font-medium text-sm">
+              {entry.sub_area?.display || entry.sub_area?.name || 'כל השטח'}
+            </span>
+          </div>
+        )}
+        <div className={`flex items-center gap-2 ${hideSubArea ? 'mr-auto' : ''}`}>
+          {reconStatus && (
+            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+              reconStatus === 'matched'
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800'
+                : 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-800'
+            }`}>
+              {reconStatus === 'matched' ? <Equal className="h-3 w-3" /> : <CircleMinus className="h-3 w-3" />}
+              {reconStatus === 'matched' ? 'התאמה' : 'חוסר'}
+            </span>
+          )}
+          {entry.severity && (
+            <span
+              className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${getSeverityStyle(entry.severity)}`}
+            >
+              {SEVERITY_LABELS[entry.severity as ReportSeverity] || entry.severity}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Entry Body */}
+      <div className="px-4 py-3 space-y-2">
+        {!hideFinding && (
+          <>
+            <div className="flex items-center gap-2">
+              <Bug className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <span className="text-sm font-medium">{entry.finding?.name || '-'}</span>
+            </div>
+            {entry.finding?.description && entry.finding.description !== entry.finding.name && (
+              <p className="text-xs text-muted-foreground pr-5">
+                {entry.finding.description}
+              </p>
+            )}
+          </>
+        )}
+
+        {/* Treatments */}
+        {entry.treatments && entry.treatments.length > 0 && (
+          <div className="mt-2 pt-2 border-t border-dashed">
+            <div className="space-y-2">
+              {entry.treatments.map((treatment) => (
+                <TreatmentCard
+                  key={treatment.id}
+                  treatment={treatment}
+                  linkedActionReportId={entry.linked_action?.area_report_id}
+                  onNavigate={onNavigate}
+                  showComparison={reconStatus === 'matched'}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TreatmentCard({ treatment, linkedActionReportId, onNavigate, showComparison }: { treatment: Treatment; linkedActionReportId?: string; onNavigate?: (reportId: string) => void; showComparison?: boolean }) {
   const statusColor =
     treatment.status === 'completed'
       ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800'
       : 'bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-900/40 dark:text-slate-400 dark:border-slate-700';
+
+  const matchInfo = showComparison ? getTreatmentMatchLabel(treatment) : null;
+  const at = treatment.action_treatment;
 
   const statusBadge = (
     <span
@@ -500,16 +794,46 @@ function TreatmentCard({ treatment, linkedActionReportId, onNavigate }: { treatm
             </span>
           )}
         </div>
-        {linkedActionReportId && onNavigate ? (
-          <button type="button" onClick={() => onNavigate(linkedActionReportId)}>
-            {statusBadge}
-          </button>
-        ) : (
-          statusBadge
-        )}
+        <div className="flex items-center gap-1.5">
+          {matchInfo && (
+            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${matchInfo.style}`}>
+              {matchInfo.icon}
+              {matchInfo.label}
+            </span>
+          )}
+          {linkedActionReportId && onNavigate ? (
+            <button type="button" onClick={() => onNavigate(linkedActionReportId)}>
+              {statusBadge}
+            </button>
+          ) : (
+            statusBadge
+          )}
+        </div>
       </div>
       {treatment.notes && (
         <p className="text-xs text-muted-foreground pr-0.5">{treatment.notes}</p>
+      )}
+
+      {/* Show action treatment differences when modified */}
+      {showComparison && at && treatment.treatment_match === false && (
+        <div className="mt-1 rounded-md bg-amber-50/50 border border-amber-200/50 px-3 py-2 dark:bg-amber-950/20 dark:border-amber-800/50">
+          <div className="text-[10px] font-semibold text-amber-700 dark:text-amber-400 mb-1">בוצע בפועל:</div>
+          <div className="flex items-center gap-2 text-xs text-amber-800 dark:text-amber-300">
+            <span className="font-semibold">
+              {at.action_type_id
+                ? ACTION_TYPE_LABELS[at.action_type_id as ActionTypeName] || at.action_type_id
+                : '-'}
+            </span>
+            {at.material && (
+              <span>
+                {at.material.name}
+                {at.dosage && at.unit_type && (
+                  <span className="font-semibold"> - {at.dosage} {at.unit_type.name}</span>
+                )}
+              </span>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );
