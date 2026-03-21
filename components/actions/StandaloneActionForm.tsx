@@ -13,16 +13,9 @@ import {
 import { MultiSelect } from '@/components/ui/multi-select';
 import { SearchableMaterialSelect } from '@/components/monitoring/SearchableMaterialSelect';
 import { ENTIRE_AREA } from '@/lib/constants';
-import { ACTION_TYPE_OPTIONS, ActionTypeName, ReportSeverity, SEVERITY_OPTIONS } from '@/types/database';
+import { ACTION_TYPE_OPTIONS, ActionTypeName, SEVERITY_OPTIONS, SEVERITY_CONFIG } from '@/types/database';
+import { useSubAreaMaps } from '@/hooks/useSubAreaMaps';
 import { Check, Lock, LockOpen, Loader2, Trash2 } from 'lucide-react';
-
-// Same severity config as MonitoringForm
-const SEVERITY_CONFIG: Record<string, { label: string; dotClass: string; chipClass: string }> = {
-  [ReportSeverity.LOW]: { label: 'נמוכה', dotClass: 'severity-dot-low', chipClass: 'severity-low' },
-  [ReportSeverity.MEDIUM]: { label: 'בינונית', dotClass: 'severity-dot-medium', chipClass: 'severity-medium' },
-  [ReportSeverity.HIGH]: { label: 'גבוהה', dotClass: 'severity-dot-high', chipClass: 'severity-high' },
-  [ReportSeverity.CRITICAL]: { label: 'קריטית', dotClass: 'severity-dot-critical', chipClass: 'severity-critical' },
-};
 
 interface SubArea {
   id: string;
@@ -101,22 +94,8 @@ export function StandaloneActionForm({
   const [loadingFindings, setLoadingFindings] = useState(false);
   const [unlockedFindings, setUnlockedFindings] = useState(false);
 
-  // Build parentMap / levelMap for sub-area tree hierarchy
-  const subAreaParentMap = useMemo(() => {
-    const map: Record<string, string | null> = {};
-    for (const sa of subAreas) {
-      map[sa.id] = sa.parent_sub_area_id || null;
-    }
-    return map;
-  }, [subAreas]);
-
-  const subAreaLevelMap = useMemo(() => {
-    const map: Record<string, number> = {};
-    for (const sa of subAreas) {
-      map[sa.id] = (sa.level || 1) - 1;
-    }
-    return map;
-  }, [subAreas]);
+  // Build parentMap + levelMap for sub-area tree hierarchy
+  const { parentMap: subAreaParentMap, levelMap: subAreaLevelMap } = useSubAreaMaps(subAreas);
 
   // Sub-area options for MultiSelect
   const subAreaOptions = useMemo(() =>

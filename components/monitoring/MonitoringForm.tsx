@@ -44,7 +44,8 @@ import {
   Lock,
   LockOpen,
 } from 'lucide-react';
-import { ReportSeverity, SEVERITY_OPTIONS, ActionTypeName, ACTION_TYPE_OPTIONS } from '@/types/database';
+import { ReportSeverity, SEVERITY_OPTIONS, SEVERITY_CONFIG, ActionTypeName, ACTION_TYPE_OPTIONS } from '@/types/database';
+import { useSubAreaMaps } from '@/hooks/useSubAreaMaps';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { ENTIRE_AREA, ENTIRE_AREA_DISPLAY, isEntireArea } from '@/lib/constants';
 import { ReportDetailSheet } from '@/components/reports/ReportDetailSheet';
@@ -84,13 +85,6 @@ interface MonitoringFormProps {
   unitTypes: any[];
   customerIdForData: string | null;
 }
-
-const SEVERITY_CONFIG: Record<string, { label: string; dotClass: string; chipClass: string }> = {
-  [ReportSeverity.LOW]: { label: 'נמוכה', dotClass: 'severity-dot-low', chipClass: 'severity-low' },
-  [ReportSeverity.MEDIUM]: { label: 'בינונית', dotClass: 'severity-dot-medium', chipClass: 'severity-medium' },
-  [ReportSeverity.HIGH]: { label: 'גבוהה', dotClass: 'severity-dot-high', chipClass: 'severity-high' },
-  [ReportSeverity.CRITICAL]: { label: 'קריטית', dotClass: 'severity-dot-critical', chipClass: 'severity-critical' },
-};
 
 export function MonitoringForm({
   isAdmin,
@@ -476,23 +470,8 @@ export function MonitoringForm({
     }
   };
 
-  // Build parentMap for multi-select hierarchy support
-  const subAreaParentMap = useMemo(() => {
-    const map: Record<string, string | null> = {};
-    for (const sa of subAreas) {
-      map[sa.id] = sa.parent_sub_area_id || null;
-    }
-    return map;
-  }, [subAreas]);
-
-  // Build levelMap for tree indentation (convert 1-based level to 0-based)
-  const subAreaLevelMap = useMemo(() => {
-    const map: Record<string, number> = {};
-    for (const sa of subAreas) {
-      map[sa.id] = (sa.level || 1) - 1;
-    }
-    return map;
-  }, [subAreas]);
+  // Build parentMap + levelMap for multi-select hierarchy support
+  const { parentMap: subAreaParentMap, levelMap: subAreaLevelMap } = useSubAreaMaps(subAreas);
 
   // Entry-specific handlers
   const handleSubAreaIdsChange = (subAreaIds: string[], index: number) => {

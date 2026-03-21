@@ -26,6 +26,14 @@ export const SEVERITY_LABELS: Record<ReportSeverity, string> = {
   [ReportSeverity.CRITICAL]: 'קריטית',
 };
 
+// Severity UI config with CSS classes (for chips, dots, etc.)
+export const SEVERITY_CONFIG: Record<string, { label: string; dotClass: string; chipClass: string }> = {
+  [ReportSeverity.LOW]: { label: 'נמוכה', dotClass: 'severity-dot-low', chipClass: 'severity-low' },
+  [ReportSeverity.MEDIUM]: { label: 'בינונית', dotClass: 'severity-dot-medium', chipClass: 'severity-medium' },
+  [ReportSeverity.HIGH]: { label: 'גבוהה', dotClass: 'severity-dot-high', chipClass: 'severity-high' },
+  [ReportSeverity.CRITICAL]: { label: 'קריטית', dotClass: 'severity-dot-critical', chipClass: 'severity-critical' },
+};
+
 // Severity options for dropdowns/selects
 export const SEVERITY_OPTIONS = [
   { value: ReportSeverity.LOW, label: SEVERITY_LABELS[ReportSeverity.LOW] },
