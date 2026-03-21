@@ -344,6 +344,7 @@ function MultiSelect({
             />
           </div>
 
+          <div className="multi-select-options">
           {/* Select Entire Area */}
           {showSelectAll && !searchQuery && (
             <>
@@ -448,6 +449,7 @@ function MultiSelect({
               </label>
             )
           })}
+          </div>
 
           {/* Done button */}
           <div className="bg-border -mx-0 my-1 h-px" />

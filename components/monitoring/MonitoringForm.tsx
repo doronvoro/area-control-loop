@@ -424,11 +424,12 @@ export function MonitoringForm({
     }
   };
 
-  const fetchMaterialsForTreatment = async (cropId: string, findingId: string, actionTypeId: string, entryIndex: number, treatmentIndex: number) => {
+  const fetchMaterialsForTreatment = async (cropId: string, findingIds: string[], actionTypeId: string, entryIndex: number, treatmentIndex: number) => {
     const key = `${entryIndex}-${treatmentIndex}`;
     setTreatmentLoadingMaterials(prev => ({ ...prev, [key]: true }));
     try {
-      const params = new URLSearchParams({ type: 'materials', cropId, findingId });
+      const params = new URLSearchParams({ type: 'materials', cropId });
+      if (findingIds.length > 0) params.set('findingIds', findingIds.join(','));
       if (actionTypeId) params.set('actionTypeId', actionTypeId);
       const res = await fetch(`/api/cascade?${params}`);
       if (res.ok) {
@@ -537,7 +538,6 @@ export function MonitoringForm({
   const handleFindingIdsChange = (findingIds: string[], index: number) => {
     form.setValue(`entries.${index}.finding_ids`, findingIds);
     const cropId = entryCropIds[index];
-    const primaryFindingId = findingIds[0];
 
     // Reset treatments when findings change and auto-add one with default action type (ריסוס)
     form.setValue(`entries.${index}.treatments`, [
@@ -545,9 +545,9 @@ export function MonitoringForm({
     ]);
     cleanupTreatmentStateForEntry(index);
 
-    if (primaryFindingId && cropId) {
-      // Preload materials for the auto-added treatment using the first finding
-      fetchMaterialsForTreatment(cropId, primaryFindingId, defaultActionTypeId, index, 0);
+    if (findingIds.length > 0 && cropId) {
+      // Preload materials for the auto-added treatment using all selected findings
+      fetchMaterialsForTreatment(cropId, findingIds, defaultActionTypeId, index, 0);
     }
   };
 
@@ -572,7 +572,6 @@ export function MonitoringForm({
     form.setValue(`entries.${entryIndex}.treatments.${treatmentIndex}.action_type_id`, actionTypeId);
     const cropId = entryCropIds[entryIndex];
     const findingIds = form.getValues(`entries.${entryIndex}.finding_ids`) || [];
-    const primaryFindingId = findingIds[0];
     const key = `${entryIndex}-${treatmentIndex}`;
 
     form.setValue(`entries.${entryIndex}.treatments.${treatmentIndex}.material_id`, '');
@@ -581,8 +580,8 @@ export function MonitoringForm({
     setTreatmentRecommendedDosage(prev => ({ ...prev, [key]: '' }));
     setTreatmentRecommendedUnitTypeId(prev => ({ ...prev, [key]: '' }));
 
-    if (cropId && primaryFindingId) {
-      fetchMaterialsForTreatment(cropId, primaryFindingId, actionTypeId || '', entryIndex, treatmentIndex);
+    if (cropId && findingIds.length > 0) {
+      fetchMaterialsForTreatment(cropId, findingIds, actionTypeId || '', entryIndex, treatmentIndex);
     } else {
       setTreatmentMaterials(prev => ({ ...prev, [key]: [] }));
     }
@@ -612,9 +611,8 @@ export function MonitoringForm({
     // Preload materials for the new treatment
     const cropId = entryCropIds[entryIndex];
     const findingIds = form.getValues(`entries.${entryIndex}.finding_ids`) || [];
-    const primaryFindingId = findingIds[0];
-    if (cropId && primaryFindingId) {
-      fetchMaterialsForTreatment(cropId, primaryFindingId, defaultActionTypeId, entryIndex, newTreatmentIndex);
+    if (cropId && findingIds.length > 0) {
+      fetchMaterialsForTreatment(cropId, findingIds, defaultActionTypeId, entryIndex, newTreatmentIndex);
     }
   };
 

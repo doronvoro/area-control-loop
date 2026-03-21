@@ -167,6 +167,7 @@ export function ActionTaskList() {
     if (success) clearSuccessBanner();
     setCompletedTasks([]);
     setStandaloneActions([]);
+    setShowStandaloneForm(false);
   }, [selectedAreaId, selectedWorkerId]);
 
   // Group tasks by area

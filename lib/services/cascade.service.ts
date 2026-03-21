@@ -5,6 +5,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 export interface CascadeParams {
   cropId: string;
   findingId?: string | null;
+  /** Multiple finding IDs — materials are merged (union) across all findings. */
+  findingIds?: string[];
   actionTypeId?: string | null;
   materialId?: string | null;
 }
@@ -120,26 +122,32 @@ export async function getCascadeMaterials(
   supabase: SupabaseClient,
   params: CascadeParams
 ): Promise<any[]> {
-  const { cropId, findingId, actionTypeId } = params;
+  const { cropId, findingId, findingIds, actionTypeId } = params;
 
-  const { data, error } = await queryWithCropFallback(
-    supabase, cropId, 'material_id, materials(*), dosage, unit_type_id, unit_types(*)',
-    findingId || null, actionTypeId || null, null
-  );
+  // Resolve the list of finding IDs to query
+  const idsToQuery = findingIds?.length ? findingIds : findingId ? [findingId] : [null];
 
-  if (error) throw error;
-
-  // Deduplicate materials, attaching recommended dosage/unit info
+  // Query materials for each finding and merge (union)
   const materialsMap = new Map();
-  data?.forEach((rm: any) => {
-    if (rm.materials && !materialsMap.has(rm.material_id)) {
-      materialsMap.set(rm.material_id, {
-        ...rm.materials,
-        recommended_dosage: rm.dosage,
-        recommended_unit_type: rm.unit_types?.name || null,
-      });
-    }
-  });
+
+  for (const fId of idsToQuery) {
+    const { data, error } = await queryWithCropFallback(
+      supabase, cropId, 'material_id, materials(*), dosage, unit_type_id, unit_types(*)',
+      fId || null, actionTypeId || null, null
+    );
+
+    if (error) throw error;
+
+    data?.forEach((rm: any) => {
+      if (rm.materials && !materialsMap.has(rm.material_id)) {
+        materialsMap.set(rm.material_id, {
+          ...rm.materials,
+          recommended_dosage: rm.dosage,
+          recommended_unit_type: rm.unit_types?.name || null,
+        });
+      }
+    });
+  }
 
   // Fall back to all materials if no recommendations found
   if (materialsMap.size === 0) {

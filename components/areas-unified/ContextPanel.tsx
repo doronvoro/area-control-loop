@@ -139,7 +139,7 @@ export function ContextPanel({
       return (
         <IndoorAreaEditor
           area={area}
-  
+          subAreas={subAreas}
           permissions={permissions}
           onRefresh={onRefresh}
         />

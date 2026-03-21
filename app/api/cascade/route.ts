@@ -15,6 +15,8 @@ export async function GET(request: Request) {
     const type = searchParams.get('type');
     const cropId = searchParams.get('cropId');
     const findingId = searchParams.get('findingId');
+    const findingIdsParam = searchParams.get('findingIds');
+    const findingIds = findingIdsParam ? findingIdsParam.split(',').filter(Boolean) : undefined;
     const actionTypeId = searchParams.get('actionTypeId');
     const materialId = searchParams.get('materialId');
 
@@ -31,7 +33,7 @@ export async function GET(request: Request) {
         if (!cropId) {
           return NextResponse.json({ error: 'cropId is required for materials' }, { status: 400 });
         }
-        const materials = await getCascadeMaterials(ctx.supabase, { cropId, findingId, actionTypeId });
+        const materials = await getCascadeMaterials(ctx.supabase, { cropId, findingId, findingIds, actionTypeId });
         return NextResponse.json(materials);
       }
 

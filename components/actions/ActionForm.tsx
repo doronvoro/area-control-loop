@@ -321,12 +321,12 @@ export function ActionForm({
       form.setValue('entries', entries);
       // Pre-load cascade data for each entry
       entries.forEach((entry: any, entryIndex: number) => {
-        const primaryFindingId = entry.finding_ids?.[0];
-        if (entry.crop_id && primaryFindingId) {
+        const entryFindingIds = entry.finding_ids || [];
+        if (entry.crop_id && entryFindingIds.length > 0) {
           // Pre-load materials for each treatment with an action type
           entry.treatments.forEach((treatment: any, treatmentIndex: number) => {
             if (treatment.action_type_id) {
-              fetchMaterialsForTreatment(entry.crop_id, primaryFindingId, treatment.action_type_id, entryIndex, treatmentIndex);
+              fetchMaterialsForTreatment(entry.crop_id, entryFindingIds, treatment.action_type_id, entryIndex, treatmentIndex);
             }
           });
         }
@@ -336,11 +336,14 @@ export function ActionForm({
     }
   };
 
-  const fetchMaterialsForTreatment = useCallback(async (cropId: string, findingId: string, actionTypeId: string, entryIndex: number, treatmentIndex: number) => {
+  const fetchMaterialsForTreatment = useCallback(async (cropId: string, findingIds: string[], actionTypeId: string, entryIndex: number, treatmentIndex: number) => {
     const key = `${entryIndex}-${treatmentIndex}`;
     setTreatmentLoadingMaterials((prev) => ({ ...prev, [key]: true }));
     try {
-      const response = await fetch(`/api/cascade?type=materials&cropId=${cropId}&findingId=${findingId}&actionTypeId=${actionTypeId}`);
+      const params = new URLSearchParams({ type: 'materials', cropId });
+      if (findingIds.length > 0) params.set('findingIds', findingIds.join(','));
+      if (actionTypeId) params.set('actionTypeId', actionTypeId);
+      const response = await fetch(`/api/cascade?${params}`);
       if (response.ok) {
         const data = await response.json();
         setTreatmentMaterials((prev) => ({ ...prev, [key]: data }));
@@ -433,7 +436,6 @@ export function ActionForm({
   const handleTreatmentActionTypeChange = (actionTypeId: string, entryIndex: number, treatmentIndex: number) => {
     const cropId = form.getValues(`entries.${entryIndex}.crop_id`);
     const findingIds = form.getValues(`entries.${entryIndex}.finding_ids`) || [];
-    const primaryFindingId = findingIds[0];
     const key = `${entryIndex}-${treatmentIndex}`;
 
     form.setValue(`entries.${entryIndex}.treatments.${treatmentIndex}.action_type_id`, actionTypeId);
@@ -444,8 +446,8 @@ export function ActionForm({
     form.setValue(`entries.${entryIndex}.treatments.${treatmentIndex}.dosage`, '');
     form.setValue(`entries.${entryIndex}.treatments.${treatmentIndex}.unit_type_id`, '');
 
-    if (cropId && primaryFindingId && actionTypeId) {
-      fetchMaterialsForTreatment(cropId, primaryFindingId, actionTypeId, entryIndex, treatmentIndex);
+    if (cropId && findingIds.length > 0 && actionTypeId) {
+      fetchMaterialsForTreatment(cropId, findingIds, actionTypeId, entryIndex, treatmentIndex);
     } else {
       setTreatmentMaterials((prev) => ({ ...prev, [key]: [] }));
     }

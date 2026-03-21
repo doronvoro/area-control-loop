@@ -13,7 +13,7 @@ import {
 import { MultiSelect } from '@/components/ui/multi-select';
 import { SearchableMaterialSelect } from '@/components/monitoring/SearchableMaterialSelect';
 import { ENTIRE_AREA } from '@/lib/constants';
-import { ACTION_TYPE_OPTIONS, ReportSeverity, SEVERITY_OPTIONS } from '@/types/database';
+import { ACTION_TYPE_OPTIONS, ActionTypeName, ReportSeverity, SEVERITY_OPTIONS } from '@/types/database';
 import { Check, Lock, LockOpen, Loader2, Trash2 } from 'lucide-react';
 
 // Same severity config as MonitoringForm
@@ -79,7 +79,7 @@ export function StandaloneActionForm({
   const [subAreaIds, setSubAreaIds] = useState<string[]>([]);
   const [findingIds, setFindingIds] = useState<string[]>([]);
   const [severity, setSeverity] = useState<string | undefined>(undefined);
-  const [actionTypeId, setActionTypeId] = useState('');
+  const [actionTypeId, setActionTypeId] = useState<string>(ActionTypeName.SPRAY);
   const [materialId, setMaterialId] = useState('');
   const [dosage, setDosage] = useState('');
   const [unitTypeId, setUnitTypeId] = useState('');
@@ -184,12 +184,9 @@ export function StandaloneActionForm({
     }
   }, [allMaterials]);
 
-  // Use first selected finding for cascade (material/dosage depend on a single finding)
-  const primaryFindingId = findingIds[0] || '';
-
-  // Fetch materials via cascade (falls back to all materials if no cropId)
+  // Fetch materials via cascade using all selected findings (union)
   const fetchMaterials = useCallback(async (atId: string) => {
-    if (!primaryFindingId) return;
+    if (findingIds.length === 0) return;
     setLoadingMaterials(true);
     try {
       if (!cropId) {
@@ -200,7 +197,8 @@ export function StandaloneActionForm({
           setCascadeMaterials(Array.isArray(data) ? data : []);
         }
       } else {
-        const params = new URLSearchParams({ type: 'materials', cropId, findingId: primaryFindingId });
+        const params = new URLSearchParams({ type: 'materials', cropId });
+        params.set('findingIds', findingIds.join(','));
         if (atId) params.set('actionTypeId', atId);
         const res = await fetch(`/api/cascade?${params}`);
         if (res.ok) {
@@ -213,9 +211,10 @@ export function StandaloneActionForm({
     } finally {
       setLoadingMaterials(false);
     }
-  }, [primaryFindingId, cropId]);
+  }, [findingIds, cropId]);
 
   // Fetch dosage recommendation when material changes
+  const primaryFindingId = findingIds[0] || '';
   const fetchDosage = useCallback(async (atId: string, matId: string) => {
     if (!primaryFindingId || !matId) return;
     try {
@@ -235,14 +234,14 @@ export function StandaloneActionForm({
     }
   }, [primaryFindingId, cropId]);
 
-  // Refetch materials when finding or action type changes
+  // Refetch materials when findings or action type changes
   useEffect(() => {
-    if (!actionTypeId || !primaryFindingId) {
+    if (findingIds.length === 0) {
       setCascadeMaterials([]);
       return;
     }
     fetchMaterials(actionTypeId);
-  }, [actionTypeId, primaryFindingId, fetchMaterials]);
+  }, [actionTypeId, findingIds, fetchMaterials]);
 
   // Handle action type change — reset dependent fields
   const handleActionTypeChange = (value: string) => {
@@ -286,7 +285,7 @@ export function StandaloneActionForm({
     setSubAreaIds([]);
     setFindingIds([]);
     setSeverity(undefined);
-    setActionTypeId('');
+    setActionTypeId(ActionTypeName.SPRAY);
     setMaterialId('');
     setDosage('');
     setUnitTypeId('');
