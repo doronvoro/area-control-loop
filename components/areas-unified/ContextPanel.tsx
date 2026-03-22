@@ -186,7 +186,7 @@ export function ContextPanel({
       return (
         <IndoorAreaEditor
           area={area}
-  
+          subAreas={subAreas}
           permissions={permissions}
           selectedSubAreaId={subArea.id}
           onRefresh={onRefresh}
