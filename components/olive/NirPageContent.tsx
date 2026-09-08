@@ -398,7 +398,7 @@ export function NirPageContent({ initialAreaId }: { initialAreaId: string | null
                   return (
                     <tr key={report.id} className="border-b last:border-0">
                       <td className="p-2 whitespace-nowrap">
-                        {report.report_date || '—'}
+                        {report.report_date ? String(report.report_date).slice(0, 10) : '—'}
                         <span className="olive-muted block text-xs">
                           {daysSinceLabel(report.report_date, new Date()) ?? ''}
                         </span>

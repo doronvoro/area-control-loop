@@ -328,11 +328,18 @@ export function isDateInWindow(startDm: string, endDm: string, now: Date): boole
   return today >= startVal || today <= endVal;
 }
 
-/** "היום" / "אתמול" / "לפני N ימים". Null for a missing or future date. */
+/**
+ * "היום" / "אתמול" / "לפני N ימים". Null for a missing or future date.
+ *
+ * Accepts either a plain YYYY-MM-DD or a full ISO timestamp. report_areas.
+ * report_date is timestamptz, not date, so it arrives as
+ * "2026-09-07T00:00:00+00:00" — appending T00:00:00 to that produced an
+ * Invalid Date and every plot silently reported no measurement.
+ */
 export function daysSinceLabel(dateStr: string | null, now: Date): string | null {
   if (!dateStr) return null;
 
-  const then = new Date(`${dateStr}T00:00:00`);
+  const then = new Date(`${dateStr.slice(0, 10)}T00:00:00`);
   if (Number.isNaN(then.getTime())) return null;
 
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());

@@ -493,3 +493,27 @@ describe('numeric values arriving as PostgREST strings', () => {
     expect(yieldLoadInfo('')).toBeNull();
   });
 });
+
+// ─── timestamptz date handling ───────────────────────────────────────────────
+
+describe('daysSinceLabel with timestamptz input', () => {
+  /**
+   * report_areas.report_date is timestamptz, not date, so PostgREST returns
+   * "2026-10-14T00:00:00+00:00". Appending "T00:00:00" to that yields an
+   * Invalid Date, which returned null and made every plot report that no
+   * measurement had ever been taken — while the measurement was right there.
+   */
+  it('accepts a full ISO timestamp, not just YYYY-MM-DD', () => {
+    expect(daysSinceLabel('2026-10-15T00:00:00+00:00', NOW)).toBe('היום');
+    expect(daysSinceLabel('2026-10-14T00:00:00+00:00', NOW)).toBe('אתמול');
+    expect(daysSinceLabel('2026-10-10T21:30:00+00:00', NOW)).toBe('לפני 5 ימים');
+  });
+
+  it('still accepts a plain date', () => {
+    expect(daysSinceLabel('2026-10-14', NOW)).toBe('אתמול');
+  });
+
+  it('is still null for genuinely unparseable input', () => {
+    expect(daysSinceLabel('not-a-date', NOW)).toBeNull();
+  });
+});

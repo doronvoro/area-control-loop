@@ -66,7 +66,8 @@ export function toNirLike(report: ApiNirReport | null | undefined): NirLike | nu
   if (!report?.detail) return null;
 
   return {
-    report_date: report.report_date ?? report.created_at?.slice(0, 10) ?? null,
+    // report_date is timestamptz; keep only the calendar day.
+    report_date: (report.report_date ?? report.created_at)?.slice(0, 10) ?? null,
     oil: numeric(report.detail.oil),
     water: numeric(report.detail.water),
     dry: numeric(report.detail.dry),
