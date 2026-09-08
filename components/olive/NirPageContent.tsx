@@ -1,10 +1,20 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Loader2, Trash2, Pencil, X } from 'lucide-react';
+import {
+  Loader2,
+  Trash2,
+  Pencil,
+  X,
+  Check,
+  MapPin,
+  Compass,
+  FlaskConical,
+  AlertTriangle,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -32,11 +42,17 @@ import type { ApiPlot } from '@/lib/olive/adapt';
 /**
  * NIR entry.
  *
- * One flat form — 12 fields, no nesting. Deliberately NOT modelled on
- * MonitoringForm.tsx, which is 1,600 lines of customer → inspector → area →
- * sub-area → finding → treatment with nested field arrays. A ripeness reading
- * has none of that structure, and spec §3.1 wants it fast on a phone.
+ * Laid out like the monitoring form — hero, progress steps, sectioned cards,
+ * sticky submit — but the data model underneath stays flat. A ripeness reading
+ * has no findings and no treatments, so there is nothing here to nest.
+ *
+ * The one thing this form has that monitoring does not: a live readout. Oil,
+ * water and the derived dry-matter figure are scored against parameter_rules as
+ * they are typed, so the sampler sees the harvest verdict before saving rather
+ * than after navigating to the dashboard.
  */
+
+const NONE = '__none__';
 
 const numericField = z
   .string()
@@ -59,6 +75,21 @@ const nirSchema = z.object({
 
 type NirFormData = z.infer<typeof nirSchema>;
 
+const STEPS = [
+  { label: 'חלקה', icon: MapPin },
+  { label: 'דגימה', icon: Compass },
+  { label: 'מדידות', icon: FlaskConical },
+];
+
+const MEASUREMENTS: { name: keyof NirFormData; label: string; step: string }[] = [
+  { name: 'oil', label: 'אחוז שמן %', step: '0.1' },
+  { name: 'water', label: 'אחוז מים %', step: '0.1' },
+  { name: 'green', label: 'אחוז צבע ירוק %', step: '1' },
+  { name: 'acid', label: 'חומציות %', step: '0.01' },
+  { name: 'maturity', label: 'אינדקס הבשלה', step: '0.1' },
+  { name: 'irrig_amount', label: 'השקיה (קוב/דונם/יום)', step: '0.25' },
+];
+
 function todayString(): string {
   const now = new Date();
   return [
@@ -68,11 +99,24 @@ function todayString(): string {
   ].join('-');
 }
 
-/** '' → undefined so a blank field is stored as NULL rather than 0. */
+/** '' → null so a blank field is stored as NULL rather than 0. */
 function optionalNumber(value?: string) {
   if (value === undefined || value.trim() === '') return null;
   return Number(value);
 }
+
+const EMPTY_FORM = {
+  report_date: todayString(),
+  sub_area_id: NONE,
+  direction: NONE,
+  oil: '',
+  water: '',
+  green: '',
+  acid: '',
+  maturity: '',
+  irrig_amount: '',
+  notes: '',
+};
 
 export function NirPageContent({ initialAreaId }: { initialAreaId: string | null }) {
   const [plots, setPlots] = useState<ApiPlot[]>([]);
@@ -81,27 +125,22 @@ export function NirPageContent({ initialAreaId }: { initialAreaId: string | null
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // report_area_id of the measurement being edited, or null when creating.
+  const [success, setSuccess] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [justCompleted, setJustCompleted] = useState<Set<number>>(new Set());
+  const prevStep = useRef(0);
 
   const form = useForm<NirFormData>({
     resolver: zodResolver(nirSchema),
-    defaultValues: {
-      area_id: initialAreaId ?? '',
-      report_date: todayString(),
-      sub_area_id: '',
-      direction: '',
-      oil: '',
-      water: '',
-      green: '',
-      acid: '',
-      maturity: '',
-      irrig_amount: '',
-      notes: '',
-    },
+    defaultValues: { area_id: initialAreaId ?? '', ...EMPTY_FORM },
   });
 
-  const selectedAreaId = form.watch('area_id');
+  const areaId = form.watch('area_id');
+  const subAreaId = form.watch('sub_area_id');
+  const direction = form.watch('direction');
+  const oil = form.watch('oil');
+  const water = form.watch('water');
+  const watched = form.watch();
 
   const loadData = useCallback(async () => {
     try {
@@ -111,14 +150,9 @@ export function NirPageContent({ initialAreaId }: { initialAreaId: string | null
         fetch('/api/olive/dashboard'),
         fetch('/api/olive/nir'),
       ]);
-
       if (!plotsRes.ok) throw new Error('שגיאה בטעינת החלקות');
       setPlots(await plotsRes.json());
-
-      if (dashRes.ok) {
-        const dash = await dashRes.json();
-        setRules(dash.parameterRules || []);
-      }
+      if (dashRes.ok) setRules((await dashRes.json()).parameterRules || []);
       if (nirRes.ok) setReports(await nirRes.json());
     } catch (err: any) {
       setError(err.message || 'שגיאה בטעינת הנתונים');
@@ -140,15 +174,51 @@ export function NirPageContent({ initialAreaId }: { initialAreaId: string | null
     [plots]
   );
 
-  const takts = useMemo(() => {
-    const plot = plots.find((p) => p.id === selectedAreaId);
-    return plot?.takts ?? [];
-  }, [plots, selectedAreaId]);
+  const takts = useMemo(() => plots.find((p) => p.id === areaId)?.takts ?? [], [plots, areaId]);
+
+  const hasSampleLocation =
+    (!!subAreaId && subAreaId !== NONE) || (!!direction && direction !== NONE);
+  const hasMeasurement = MEASUREMENTS.some((m) => {
+    const value = watched[m.name] as string | undefined;
+    return !!value && value.trim() !== '';
+  });
+
+  const currentStep = !areaId ? 0 : !hasSampleLocation && !hasMeasurement ? 1 : 2;
+
+  // Pulse a step circle the moment it is satisfied.
+  useEffect(() => {
+    if (currentStep > prevStep.current) {
+      const newly = new Set<number>();
+      for (let i = prevStep.current; i < currentStep; i++) newly.add(i);
+      setJustCompleted(newly);
+      const timer = setTimeout(() => setJustCompleted(new Set()), 600);
+      prevStep.current = currentStep;
+      return () => clearTimeout(timer);
+    }
+    prevStep.current = currentStep;
+  }, [currentStep]);
+
+  /** Live verdict for what has been typed. dry mirrors the DB's generated column. */
+  const readout = useMemo(() => {
+    const oilNum = optionalNumber(oil);
+    const waterNum = optionalNumber(water);
+    const dryNum =
+      oilNum !== null && waterNum !== null && waterNum < 100
+        ? Math.round((oilNum / (100 - waterNum)) * 100 * 100) / 100
+        : null;
+
+    return [
+      { label: 'שמן', value: oilNum, match: evaluateParameter(rules, 'oil', oilNum) },
+      { label: 'מים', value: waterNum, match: evaluateParameter(rules, 'water', waterNum) },
+      { label: 'שמן בחו״י', value: dryNum, match: evaluateParameter(rules, 'dry', dryNum) },
+    ].filter((row) => row.value !== null);
+  }, [oil, water, rules]);
 
   const onSubmit = async (values: NirFormData) => {
     try {
       setSaving(true);
       setError(null);
+      setSuccess(null);
 
       const response = await fetch('/api/olive/nir', {
         method: editingId ? 'PUT' : 'POST',
@@ -156,8 +226,8 @@ export function NirPageContent({ initialAreaId }: { initialAreaId: string | null
         body: JSON.stringify({
           ...(editingId ? { report_area_id: editingId } : { area_id: values.area_id }),
           report_date: values.report_date,
-          sub_area_id: values.sub_area_id || null,
-          direction: values.direction || null,
+          sub_area_id: values.sub_area_id === NONE ? null : values.sub_area_id || null,
+          direction: values.direction === NONE ? null : values.direction || null,
           oil: optionalNumber(values.oil),
           water: optionalNumber(values.water),
           green: optionalNumber(values.green),
@@ -173,19 +243,14 @@ export function NirPageContent({ initialAreaId }: { initialAreaId: string | null
         throw new Error(body.error || 'שגיאה בשמירת הבדיקה');
       }
 
+      const plotName = plots.find((p) => p.id === values.area_id)?.name ?? '';
+      setSuccess(editingId ? 'הבדיקה עודכנה' : `הבדיקה נשמרה — ${plotName}`);
       showToast.success(editingId ? 'הבדיקה עודכנה' : 'הבדיקה נשמרה');
-      // Keep the plot and date — a sampler usually records several readings in a row.
-      form.reset({
-        ...form.getValues(),
-        oil: '',
-        water: '',
-        green: '',
-        acid: '',
-        maturity: '',
-        irrig_amount: '',
-        notes: '',
-      });
+
+      // Keep the plot and date: a sampler records several readings in a row.
+      form.reset({ ...form.getValues(), ...EMPTY_FORM, report_date: values.report_date });
       setEditingId(null);
+      prevStep.current = 1;
       await loadData();
     } catch (err: any) {
       setError(err.message || 'שגיאה בשמירת הבדיקה');
@@ -195,20 +260,21 @@ export function NirPageContent({ initialAreaId }: { initialAreaId: string | null
   };
 
   const startEdit = (report: any) => {
-    const d = report.detail || {};
+    const detail = report.detail || {};
     setEditingId(report.id);
     setError(null);
+    setSuccess(null);
     form.reset({
       area_id: report.area?.id ?? '',
       report_date: report.report_date ? String(report.report_date).slice(0, 10) : todayString(),
-      sub_area_id: d.sub_area_id ?? '',
-      direction: d.direction ?? '',
-      oil: d.oil != null ? String(d.oil) : '',
-      water: d.water != null ? String(d.water) : '',
-      green: d.green != null ? String(d.green) : '',
-      acid: d.acid != null ? String(d.acid) : '',
-      maturity: d.maturity != null ? String(d.maturity) : '',
-      irrig_amount: d.irrig_amount != null ? String(d.irrig_amount) : '',
+      sub_area_id: detail.sub_area_id ?? NONE,
+      direction: detail.direction ?? NONE,
+      oil: detail.oil != null ? String(detail.oil) : '',
+      water: detail.water != null ? String(detail.water) : '',
+      green: detail.green != null ? String(detail.green) : '',
+      acid: detail.acid != null ? String(detail.acid) : '',
+      maturity: detail.maturity != null ? String(detail.maturity) : '',
+      irrig_amount: detail.irrig_amount != null ? String(detail.irrig_amount) : '',
       notes: report.description ?? '',
     });
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -216,19 +282,8 @@ export function NirPageContent({ initialAreaId }: { initialAreaId: string | null
 
   const cancelEdit = () => {
     setEditingId(null);
-    form.reset({
-      area_id: initialAreaId ?? '',
-      report_date: todayString(),
-      sub_area_id: '',
-      direction: '',
-      oil: '',
-      water: '',
-      green: '',
-      acid: '',
-      maturity: '',
-      irrig_amount: '',
-      notes: '',
-    });
+    setSuccess(null);
+    form.reset({ area_id: initialAreaId ?? '', ...EMPTY_FORM });
   };
 
   const handleDelete = async (reportAreaId: string) => {
@@ -240,6 +295,7 @@ export function NirPageContent({ initialAreaId }: { initialAreaId: string | null
         throw new Error(body.error || 'שגיאה במחיקה');
       }
       showToast.success('הבדיקה נמחקה');
+      if (editingId === reportAreaId) cancelEdit();
       await loadData();
     } catch (err: any) {
       showToast.error(err.message || 'שגיאה במחיקה');
@@ -255,176 +311,331 @@ export function NirPageContent({ initialAreaId }: { initialAreaId: string | null
     );
   }
 
-  const measurementFields: { name: keyof NirFormData; label: string; step: string }[] = [
-    { name: 'oil', label: 'אחוז שמן %', step: '0.1' },
-    { name: 'water', label: 'אחוז מים %', step: '0.1' },
-    { name: 'green', label: 'אחוז צבע ירוק %', step: '1' },
-    { name: 'acid', label: 'חומציות %', step: '0.01' },
-    { name: 'maturity', label: 'אינדקס הבשלה', step: '0.1' },
-    { name: 'irrig_amount', label: 'השקיה (קוב/דונם/יום)', step: '0.25' },
-  ];
-
   return (
-    <div className="space-y-5">
-      {error && (
-        <div className="rounded-lg border border-destructive/30 p-3 text-sm text-destructive">
-          {error}
-        </div>
-      )}
-
-      <section className="olive-card p-4">
-        <h2 className="mb-3 font-bold">{editingId ? 'עריכת בדיקה' : 'רישום בדיקה'}</h2>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <div className="grid gap-3 md:grid-cols-2">
-              <FormField
-                control={form.control}
-                name="area_id"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>חלקה</FormLabel>
-                    <FormControl>
-                      <SearchableSelect
-                        options={plotOptions}
-                        value={field.value}
-                        onValueChange={field.onChange}
-                        placeholder="בחר חלקה"
-                        searchPlaceholder="חיפוש בדיקה לפי חלקה..."
-                        // The plot a measurement belongs to is fixed once saved;
-                        // moving it would mean a different measurement.
-                        disabled={editingId !== null}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="report_date"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>תאריך</FormLabel>
-                    <FormControl>
-                      <Input type="date" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="sub_area_id"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>טאקט</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value || ''}>
-                      <FormControl>
-                        <SelectTrigger className="h-9">
-                          <SelectValue placeholder={takts.length ? 'בחר טאקט' : 'אין טאקטים'} />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent position="popper" sideOffset={4}>
-                        {takts.map((takt: any) => (
-                          <SelectItem key={takt.id} value={takt.id}>
-                            {takt.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="direction"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>כיוון דגימה</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value || ''}>
-                      <FormControl>
-                        <SelectTrigger className="h-9">
-                          <SelectValue placeholder="בחר כיוון" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent position="popper" sideOffset={4}>
-                        {NIR_DIRECTIONS.map((dir) => (
-                          <SelectItem key={dir} value={dir}>
-                            {dir}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+    <div className="space-y-6">
+      <div className="olive-form-container mx-auto max-w-4xl">
+        {/* Hero */}
+        <div className="olive-form-hero px-6 py-5 md:px-8 md:py-6">
+          <div className="olive-hero-pattern" />
+          <div className="relative z-10 flex items-center justify-center gap-3">
+            <div className="flex size-10 items-center justify-center rounded-xl bg-white/15 backdrop-blur-sm">
+              <FlaskConical className="size-5 text-white" />
             </div>
+            <h2 className="olive-hero-title text-2xl tracking-tight md:text-3xl">
+              {editingId ? 'עריכת בדיקת NIR' : 'בדיקת NIR חדשה'}
+            </h2>
+          </div>
+        </div>
 
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {measurementFields.map((f) => (
+        {/* Progress */}
+        <div className="olive-steps">
+          {STEPS.map((step, i) => (
+            <div key={step.label} className="olive-step">
+              <div className="flex flex-col items-center gap-1">
+                <div
+                  className={`olive-step-circle ${
+                    i < currentStep
+                      ? 'olive-step-complete'
+                      : i === currentStep
+                        ? 'olive-step-active'
+                        : 'olive-step-pending'
+                  } ${justCompleted.has(i) ? 'olive-step-just-completed' : ''}`}
+                >
+                  {i < currentStep ? (
+                    <Check className="size-3.5" />
+                  ) : (
+                    <step.icon className="size-3.5" />
+                  )}
+                </div>
+                <span
+                  className={`olive-step-label ${i === currentStep ? 'olive-step-label-active' : ''}`}
+                >
+                  {step.label}
+                </span>
+              </div>
+              {i < STEPS.length - 1 && (
+                <div
+                  className={`olive-step-connector ${
+                    i < currentStep ? 'olive-step-connector-complete' : ''
+                  }`}
+                />
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div className="p-4 md:p-6">
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+              {error && (
+                <div className="olive-error-banner flex items-center gap-3 p-4">
+                  <AlertTriangle className="size-5 shrink-0" />
+                  <p className="text-sm font-medium">{error}</p>
+                </div>
+              )}
+              {success && (
+                <div className="olive-success-banner flex items-center gap-3 p-4">
+                  <Check className="size-5 shrink-0" />
+                  <p className="text-sm font-bold">{success}</p>
+                </div>
+              )}
+
+              {/* 1 — plot and date */}
+              <section
+                className={`olive-section olive-section-plot px-5 py-4 ${
+                  currentStep > 0 ? 'olive-section-completed' : ''
+                }`}
+              >
+                <div className="olive-section-header">
+                  <div className="olive-section-icon olive-icon-plot">
+                    <MapPin className="size-4" />
+                  </div>
+                  <h3 className="text-base font-bold">חלקה ותאריך</h3>
+                  {areaId && (
+                    <span className="olive-field-check">
+                      <Check className="size-2.5" />
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <FormField
+                    control={form.control}
+                    name="area_id"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-sm font-semibold">חלקה *</FormLabel>
+                        <FormControl>
+                          <SearchableSelect
+                            options={plotOptions}
+                            value={field.value}
+                            onValueChange={field.onChange}
+                            placeholder="בחר חלקה"
+                            searchPlaceholder="חיפוש בדיקה לפי חלקה..."
+                            // The plot is fixed once saved — moving a reading to
+                            // another plot would make it a different reading.
+                            disabled={editingId !== null}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="report_date"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-sm font-semibold">תאריך *</FormLabel>
+                        <FormControl>
+                          <Input type="date" className="h-9" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </section>
+
+              {/* 2 — where the sample came from */}
+              <section
+                className={`olive-section olive-section-sample px-5 py-4 ${
+                  currentStep > 1 ? 'olive-section-completed' : ''
+                }`}
+              >
+                <div className="olive-section-header">
+                  <div className="olive-section-icon olive-icon-sample">
+                    <Compass className="size-4" />
+                  </div>
+                  <h3 className="text-base font-bold">מיקום הדגימה</h3>
+                  {hasSampleLocation && (
+                    <span className="olive-field-check">
+                      <Check className="size-2.5" />
+                    </span>
+                  )}
+                  <span className="olive-muted mr-auto text-xs">לא חובה</span>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <FormField
+                    control={form.control}
+                    name="sub_area_id"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-sm font-semibold">טאקט</FormLabel>
+                        <Select
+                          onValueChange={field.onChange}
+                          value={field.value || NONE}
+                          disabled={!areaId}
+                        >
+                          <FormControl>
+                            <SelectTrigger className="h-9">
+                              <SelectValue
+                                placeholder={
+                                  !areaId
+                                    ? 'בחר חלקה תחילה'
+                                    : takts.length
+                                      ? 'כל החלקה'
+                                      : 'אין טאקטים בחלקה זו'
+                                }
+                              />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent position="popper" sideOffset={4}>
+                            <SelectItem value={NONE}>כל החלקה</SelectItem>
+                            {takts.map((takt: any) => (
+                              <SelectItem key={takt.id} value={takt.id}>
+                                {takt.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="direction"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-sm font-semibold">כיוון דגימה</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || NONE}>
+                          <FormControl>
+                            <SelectTrigger className="h-9">
+                              <SelectValue placeholder="בחר כיוון" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent position="popper" sideOffset={4}>
+                            <SelectItem value={NONE}>—</SelectItem>
+                            {NIR_DIRECTIONS.map((dir) => (
+                              <SelectItem key={dir} value={dir}>
+                                {dir}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </section>
+
+              {/* 3 — the readings */}
+              <section className="olive-section olive-section-values px-5 py-4">
+                <div className="olive-section-header">
+                  <div className="olive-section-icon olive-icon-values">
+                    <FlaskConical className="size-4" />
+                  </div>
+                  <h3 className="text-base font-bold">מדידות</h3>
+                  {hasMeasurement && (
+                    <span className="olive-field-check">
+                      <Check className="size-2.5" />
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {MEASUREMENTS.map((m) => (
+                    <FormField
+                      key={m.name}
+                      control={form.control}
+                      name={m.name}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-sm font-semibold">{m.label}</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              step={m.step}
+                              inputMode="decimal"
+                              className="h-9"
+                              {...field}
+                              value={(field.value as string) ?? ''}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  ))}
+                </div>
+
+                {/* Live verdict — the reason this form exists */}
+                {readout.length > 0 && (
+                  <div className="olive-readout mt-4">
+                    <span className="olive-muted text-xs font-semibold">לפי הערכים שהוזנו:</span>
+                    {readout.map((row) => (
+                      <span key={row.label} className="flex items-center gap-1.5 text-xs">
+                        <span className="font-semibold">
+                          {row.label} {row.value}%
+                        </span>
+                        {row.match ? (
+                          <span
+                            className={`olive-pill ${PARAMETER_STATUS_CONFIG[row.match.status].pillClass}`}
+                          >
+                            {row.match.message}
+                          </span>
+                        ) : (
+                          <span className="olive-muted">—</span>
+                        )}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                <p className="olive-muted mt-3 text-xs">
+                  אחוז שמן בחומר יבש מחושב אוטומטית מהשמן והמים ואינו נרשם ידנית.
+                </p>
+
                 <FormField
-                  key={f.name}
                   control={form.control}
-                  name={f.name}
+                  name="notes"
                   render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{f.label}</FormLabel>
+                    <FormItem className="mt-4">
+                      <FormLabel className="text-sm font-semibold">הערות</FormLabel>
                       <FormControl>
-                        <Input
-                          type="number"
-                          step={f.step}
-                          inputMode="decimal"
-                          {...field}
-                          value={(field.value as string) ?? ''}
-                        />
+                        <Textarea rows={2} {...field} value={field.value ?? ''} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-              ))}
-            </div>
+              </section>
 
-            <p className="olive-muted text-xs">
-              אחוז שמן בחומר יבש מחושב אוטומטית מהשמן והמים ואינו נרשם ידנית.
-            </p>
+              {/* Sticky submit */}
+              <div className="olive-sticky-footer">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="olive-muted flex items-center gap-2 text-xs">
+                    <FlaskConical className="size-3.5" />
+                    <span>
+                      {reports.length} {reports.length === 1 ? 'בדיקה' : 'בדיקות'} בעונה
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {editingId && (
+                      <Button type="button" variant="ghost" onClick={cancelEdit}>
+                        <X className="ml-1 size-4" />
+                        בטל עריכה
+                      </Button>
+                    )}
+                    <button type="submit" className="olive-submit px-6 py-2.5" disabled={saving}>
+                      {saving && <Loader2 className="ml-2 inline size-4 animate-spin" />}
+                      {editingId ? 'עדכן בדיקה' : 'שמור בדיקה'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </form>
+          </Form>
+        </div>
+      </div>
 
-            <FormField
-              control={form.control}
-              name="notes"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>הערות</FormLabel>
-                  <FormControl>
-                    <Textarea rows={2} {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <div className="flex items-center gap-2">
-              <Button type="submit" disabled={saving}>
-                {saving && <Loader2 className="ml-2 size-4 animate-spin" />}
-                {editingId ? 'עדכן בדיקה' : 'שמור בדיקה'}
-              </Button>
-              {editingId && (
-                <Button type="button" variant="ghost" onClick={cancelEdit}>
-                  <X className="ml-1 size-4" />
-                  בטל עריכה
-                </Button>
-              )}
-            </div>
-          </form>
-        </Form>
-      </section>
-
-      <section className="olive-card overflow-hidden">
+      {/* Log */}
+      <section className="olive-card mx-auto max-w-4xl overflow-hidden">
         <h2 className="p-4 pb-2 font-bold">יומן בדיקות</h2>
         {reports.length === 0 ? (
           <p className="olive-muted p-4 pt-0 text-sm">אין בדיקות עדיין</p>
@@ -447,7 +658,12 @@ export function NirPageContent({ initialAreaId }: { initialAreaId: string | null
                   const detail = report.detail || {};
                   const oilMatch = evaluateParameter(rules, 'oil', detail.oil);
                   return (
-                    <tr key={report.id} className="border-b last:border-0">
+                    <tr
+                      key={report.id}
+                      className={`border-b last:border-0 ${
+                        editingId === report.id ? 'bg-muted/40' : ''
+                      }`}
+                    >
                       <td className="p-2 whitespace-nowrap">
                         {report.report_date ? String(report.report_date).slice(0, 10) : '—'}
                         <span className="olive-muted block text-xs">
