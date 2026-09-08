@@ -1,0 +1,23 @@
+-- Fix infinite recursion between the areas and report_areas RLS policies.
+--
+-- The cycle:
+--   areas."Users can view areas through report areas"
+--       USING (EXISTS (SELECT 1 FROM report_areas ra WHERE ra.area_id = areas.id))
+--   report_areas."Users can view accessible report areas"
+--       USING (EXISTS (SELECT 1 FROM areas a JOIN customer_areas ... WHERE a.id = report_areas.area_id ...))
+--
+-- Evaluating either policy triggers the other, so any authenticated SELECT that
+-- touches report_areas fails with:
+--   42P17: infinite recursion detected in policy for relation "report_areas"
+--
+-- This broke /api/map/areas, /api/map/monitoring-counts and /api/customer-areas
+-- for every non-admin path.
+--
+-- The areas policy is dropped rather than the report_areas one because it is
+-- both the redundant side and an unintended tenancy leak: it granted SELECT on
+-- ANY area having ANY report_areas row to ANY authenticated user, ignoring
+-- customer ownership entirely. Legitimate access is already covered by
+-- "Users can view accessible areas" (customer owners and their workers, via
+-- customer_areas) and "Admins can view all areas".
+
+DROP POLICY IF EXISTS "Users can view areas through report areas" ON public.areas;
