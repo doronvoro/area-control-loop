@@ -119,6 +119,12 @@ interface ReportEntry {
   linked_action?: { area_report_id: string } | null;
 }
 
+/** 1:1 detail row for the olive report types. Shape differs per type. */
+interface OliveDetail {
+  sub_area?: { id: string; name: string; display: string | null } | null;
+  [key: string]: unknown;
+}
+
 interface ReportDetail {
   id: string;
   name: string;
@@ -133,6 +139,8 @@ interface ReportDetail {
   worker: { id: string; name: string } | null;
   monitoringEntries: ReportEntry[] | null;
   actionEntries: ReportEntry[] | null;
+  nirDetail: OliveDetail | null;
+  harvestDetail: OliveDetail | null;
   hasLinkedActions: boolean;
   reconciliation?: ReconciliationData;
 }
@@ -272,9 +280,17 @@ export function ReportDetailSheet({
   const [groupBy, setGroupBy] = useState<'none' | 'sub_area' | 'finding'>('none');
 
   const isMonitoring = report?.area_type_id === 'monitoring';
+  const isAction = report?.area_type_id === 'action';
+  const isOlive = report?.area_type_id === 'nir' || report?.area_type_id === 'harvest';
+
+  // Explicit per type. This was previously binary — anything that was not
+  // monitoring fell through to actionEntries — so once the olive report types
+  // were added a NIR report rendered as an empty ACTION report.
   const entries = isMonitoring
     ? report?.monitoringEntries || []
-    : report?.actionEntries || [];
+    : isAction
+      ? report?.actionEntries || []
+      : [];
 
   // Group entries by selected field
   const groupedEntries = (() => {
@@ -497,6 +513,11 @@ export function ReportDetailSheet({
                     ))}
                   </div>
                 )
+              ) : isOlive ? (
+                <OliveReportDetail
+                  areaTypeId={report.area_type_id}
+                  detail={report.area_type_id === 'nir' ? report.nirDetail : report.harvestDetail}
+                />
               ) : (
                 <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
                   <ClipboardList className="h-10 w-10 mb-2 opacity-30" />
@@ -845,4 +866,71 @@ function formatDate(dateStr: string): string {
     hour: '2-digit',
     minute: '2-digit',
   })}`;
+}
+
+
+/**
+ * Detail panel for the two olive report types.
+ *
+ * Values are shown raw, without status pills: this sheet does not load
+ * parameter_rules, and the harvest decision belongs on /olive rather than
+ * being half-restated here.
+ */
+function OliveReportDetail({
+  areaTypeId,
+  detail,
+}: {
+  areaTypeId: string;
+  detail: OliveDetail | null;
+}) {
+  if (!detail) {
+    return (
+      <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
+        <ClipboardList className="h-10 w-10 mb-2 opacity-30" />
+        <p className="text-sm">לא נמצאו נתונים לדוח זה</p>
+      </div>
+    );
+  }
+
+  const fields: { label: string; value: unknown; suffix?: string }[] =
+    areaTypeId === 'nir'
+      ? [
+          { label: 'אחוז שמן', value: detail.oil, suffix: '%' },
+          { label: 'אחוז מים', value: detail.water, suffix: '%' },
+          { label: 'שמן בחומר יבש', value: detail.dry, suffix: '%' },
+          { label: 'אחוז צבע ירוק', value: detail.green, suffix: '%' },
+          { label: 'חומציות', value: detail.acid, suffix: '%' },
+          { label: 'אינדקס הבשלה', value: detail.maturity },
+          { label: 'השקיה', value: detail.irrig_amount, suffix: ' קוב/דונם' },
+          { label: 'כיוון דגימה', value: detail.direction },
+        ]
+      : [
+          { label: 'מעבר מספר', value: detail.pass_number },
+          { label: 'סוג מוסקת', value: detail.harvester_type },
+          { label: 'מפעיל', value: detail.operator },
+          { label: 'שטח שנמסק', value: detail.area_done_dunam, suffix: ' דונם' },
+          { label: 'סה״כ פרי', value: detail.fruit_kg, suffix: ' ק״ג' },
+          { label: 'סה״כ שמן', value: detail.oil_kg, suffix: ' ק״ג' },
+          { label: 'מעבר אחרון', value: detail.is_final ? 'כן' : 'לא' },
+        ];
+
+  return (
+    <div className="space-y-3">
+      {detail.sub_area && (
+        <p className="text-xs text-muted-foreground">טאקט: {detail.sub_area.name}</p>
+      )}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {fields.map((field) => (
+          <div key={field.label} className="rounded-lg border bg-muted/30 p-2.5 text-center">
+            <div className="text-[0.65rem] font-medium text-muted-foreground">{field.label}</div>
+            <div className="mt-0.5 text-sm font-bold">
+              {field.value === null || field.value === undefined || field.value === ''
+                ? '—'
+                : `${field.value}${field.suffix ?? ''}`}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }

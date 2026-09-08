@@ -8,13 +8,17 @@ export function ReportsPageContent() {
   const [reportAreas, setReportAreas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // The API caps at 50 rows before the client sees them, so the type filter
+  // has to reach the server rather than only filtering what already arrived.
+  const [type, setType] = useState<string>('default');
 
   const fetchData = useCallback(async (showLoader = true) => {
     try {
       if (showLoader) setLoading(true);
       setError(null);
 
-      const response = await fetch('/api/reports');
+      const query = type === 'default' ? '' : `?types=${type}`;
+      const response = await fetch(`/api/reports${query}`);
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || 'שגיאה בטעינת הדוחות');
@@ -27,7 +31,7 @@ export function ReportsPageContent() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [type]);
 
   useEffect(() => {
     fetchData();
@@ -50,5 +54,11 @@ export function ReportsPageContent() {
     );
   }
 
-  return <ReportsTable reportAreas={reportAreas} onReportDeleted={() => fetchData(false)} />;
+  return (
+    <ReportsTable
+      reportAreas={reportAreas}
+      onReportDeleted={() => fetchData(false)}
+      onTypeChange={setType}
+    />
+  );
 }

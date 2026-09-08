@@ -32,8 +32,14 @@ export interface ReportDetail {
   area_type: { name: string; display_name: string } | null;
   area: { id: string; name: string; description: string | null; crop_id?: string } | null;
   worker: { id: string; name: string } | null;
+  report_date: string | null;
   monitoringEntries: any[] | null;
   actionEntries: any[] | null;
+  /** 1:1 detail for area_type_id 'nir'. */
+  nirDetail: any | null;
+  /** 1:1 detail for area_type_id 'harvest'. */
+  harvestDetail: any | null;
+  hasLinkedActions: boolean;
   reconciliation?: {
     summary: ReconciliationSummary;
     excessEntries: ExcessEntry[];
@@ -213,10 +219,37 @@ export async function fetchReportDetail(
     actionEntries = data;
   }
 
+  // Olive detail rows. Unlike monitoring and action, which hold many rows per
+  // report (one per finding), these are 1:1 with the header — a ripeness
+  // reading and a harvest pass are each a single event with one set of values.
+  let nirDetail = null;
+  if (reportArea.area_type_id === 'nir') {
+    const { data, error } = await (supabase.from('nir_report') as any)
+      .select('*, sub_area:sub_areas(id, name, display)')
+      .eq('report_area_id', id)
+      .maybeSingle();
+
+    if (error) throw error;
+    nirDetail = data;
+  }
+
+  let harvestDetail = null;
+  if (reportArea.area_type_id === 'harvest') {
+    const { data, error } = await (supabase.from('harvest_report') as any)
+      .select('*, sub_area:sub_areas(id, name, display)')
+      .eq('report_area_id', id)
+      .maybeSingle();
+
+    if (error) throw error;
+    harvestDetail = data;
+  }
+
   return {
     ...reportArea,
     monitoringEntries,
     actionEntries,
+    nirDetail,
+    harvestDetail,
     hasLinkedActions,
     reconciliation,
   };
