@@ -2,9 +2,7 @@ import { NextResponse } from 'next/server';
 import { getApiContext, resolveCustomerId } from '@/lib/api/auth-context';
 import { handleApiError } from '@/lib/api-utils';
 import { getAccessibleAreaIds } from '@/lib/services/customer-area.service';
-
-/** Crop name that switches the olive module on. */
-const OLIVE_CROP = 'זית';
+import { OLIVE_CROP_NAME } from '@/lib/olive/constants';
 
 /**
  * Does this user have any olive areas?
@@ -20,7 +18,7 @@ async function hasOliveAreas(ctx: Awaited<ReturnType<typeof getApiContext>>): Pr
   const { data } = await (ctx.supabase.from('areas') as any)
     .select('id, crops!inner(name)')
     .in('id', areaIds)
-    .eq('crops.name', OLIVE_CROP)
+    .eq('crops.name', OLIVE_CROP_NAME)
     .limit(1);
 
   return (data || []).length > 0;

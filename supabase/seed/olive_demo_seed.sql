@@ -72,11 +72,16 @@ SELECT c.id, a.id FROM public.customers c CROSS JOIN public.areas a
 WHERE a.id::text LIKE 'a8ff%'
 ON CONFLICT DO NOTHING;
 
--- Takts on the first plot
+-- Takts. Two plots are subdivided and four are not, which is realistic —
+-- takt_count is optional in the spec — and it exercises both the populated
+-- dropdown and the "אין טאקטים" empty state on the NIR form.
 INSERT INTO public.sub_areas (id, area_id, level, name, variety, size, size_unit_type) VALUES
   ('a9ff0000-0000-4000-8000-000000000001', 'a8ff0000-0000-4000-8000-000000000001', 1, 'טאקט 1', 'ארבקינה', 6.1, 'dunam'),
   ('a9ff0000-0000-4000-8000-000000000002', 'a8ff0000-0000-4000-8000-000000000001', 1, 'טאקט 2', 'ארבקינה', 6.0, 'dunam'),
-  ('a9ff0000-0000-4000-8000-000000000003', 'a8ff0000-0000-4000-8000-000000000001', 1, 'טאקט 3', 'ארבקינה', 6.1, 'dunam');
+  ('a9ff0000-0000-4000-8000-000000000003', 'a8ff0000-0000-4000-8000-000000000001', 1, 'טאקט 3', 'ארבקינה', 6.1, 'dunam'),
+  ('a9ff0000-0000-4000-8000-000000000004', 'a8ff0000-0000-4000-8000-000000000002', 1, 'טאקט 1', 'קורנייקי', 18.2, 'dunam'),
+  ('a9ff0000-0000-4000-8000-000000000005', 'a8ff0000-0000-4000-8000-000000000002', 1, 'טאקט 2', 'קורנייקי', 18.2, 'dunam'),
+  ('a9ff0000-0000-4000-8000-000000000006', 'a8ff0000-0000-4000-8000-000000000002', 1, 'טאקט 3', 'קורנייקי', 18.2, 'dunam');
 
 -- -----------------------------------------------------------------------------
 -- Olive-specific plot attributes
@@ -85,7 +90,7 @@ INSERT INTO public.sub_areas (id, area_id, level, name, variety, size, size_unit
 -- DATE column alone is not enough.
 INSERT INTO public.olive_plot_details (area_id, grower_name, region, plot_type, harvester, water_type, takt_count, plant_year_label) VALUES
   ('a8ff0000-0000-4000-8000-000000000001', 'קיבוץ גשור',    'מיצר אגוזי', 'owner',      '1190x', 'fresh',     3,    '2003'),
-  ('a8ff0000-0000-4000-8000-000000000002', 'קיבוץ גשור',    'מיצר אגוזי', 'owner',      '1190x', 'fresh',     NULL, '2006/7'),
+  ('a8ff0000-0000-4000-8000-000000000002', 'קיבוץ גשור',    'מיצר אגוזי', 'owner',      '1190x', 'fresh',     3,    '2006/7'),
   ('a8ff0000-0000-4000-8000-000000000003', 'קיבוץ גשור',    'בית זרע',    'owner',      '9090x', 'reclaimed', NULL, '2014'),
   ('a8ff0000-0000-4000-8000-000000000004', 'קיבוץ גשור',    'כנות',       'owner',      '9090x', 'kinneret',  NULL, '2018'),
   ('a8ff0000-0000-4000-8000-000000000005', 'אחוזת נאור',    'שקמים',      'partner',    'other', 'fresh',     NULL, '2023'),

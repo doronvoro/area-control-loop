@@ -6,7 +6,11 @@ import {
 } from '@/lib/api/auth-context';
 import { handleApiError } from '@/lib/api-utils';
 import { getAccessibleAreaIds } from '@/lib/services/customer-area.service';
-import { getOlivePlots, upsertOlivePlotDetails } from '@/lib/services/olive-plot.service';
+import {
+  getOlivePlots,
+  upsertOlivePlotDetails,
+  getOliveAreaIds,
+} from '@/lib/services/olive-plot.service';
 
 export async function GET(request: Request) {
   try {
@@ -45,7 +49,8 @@ export async function PUT(request: Request) {
     }
 
     const customerId = resolveCustomerId(ctx, null);
-    const areaIds = await getAccessibleAreaIds(ctx.supabase, ctx.isAdmin, customerId);
+    const accessible = await getAccessibleAreaIds(ctx.supabase, ctx.isAdmin, customerId);
+    const areaIds = await getOliveAreaIds(ctx.supabase, accessible);
     if (!areaIds.includes(area_id)) {
       return NextResponse.json({ error: 'אין הרשאה לחלקה זו' }, { status: 403 });
     }

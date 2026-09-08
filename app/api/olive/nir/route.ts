@@ -6,6 +6,7 @@ import {
 } from '@/lib/api/auth-context';
 import { handleApiError } from '@/lib/api-utils';
 import { getAccessibleAreaIds } from '@/lib/services/customer-area.service';
+import { getOliveAreaIds } from '@/lib/services/olive-plot.service';
 import { AreaTypeId } from '@/types/database';
 import {
   createNirReport,
@@ -15,9 +16,11 @@ import {
 } from '@/lib/services/olive-nir.service';
 
 /** Area ids the caller may act on. */
+/** Accessible AND olive. A pest-management area is not a valid target here. */
 async function accessibleAreaIds(ctx: any, override?: string | null): Promise<string[]> {
   const customerId = resolveCustomerId(ctx, override ?? null);
-  return getAccessibleAreaIds(ctx.supabase, ctx.isAdmin, customerId);
+  const accessible = await getAccessibleAreaIds(ctx.supabase, ctx.isAdmin, customerId);
+  return getOliveAreaIds(ctx.supabase, accessible);
 }
 
 /**

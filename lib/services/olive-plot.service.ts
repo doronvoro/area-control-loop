@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { OLIVE_CROP_NAME } from '@/lib/olive/constants';
 
 /**
  * Olive plots.
@@ -31,14 +32,18 @@ export interface OlivePlotDetailsInput {
 export async function getOlivePlots(supabase: SupabaseClient, areaIds: string[]): Promise<any[]> {
   if (areaIds.length === 0) return [];
 
+  // !inner + the crop filter is what keeps this to olive plots. Without it the
+  // caller's other areas — tomato, apple, whatever else the customer grows —
+  // would appear in olive plot pickers and be counted on the harvest dashboard.
   const { data, error } = await (supabase.from('areas') as any)
     .select(
       `*,
-      crops(*),
+      crops!inner(*),
       details:olive_plot_details(*),
       takts:sub_areas(id, name, level, parent_sub_area_id)`
     )
     .in('id', areaIds)
+    .eq('crops.name', OLIVE_CROP_NAME)
     .order('name', { ascending: true });
 
   if (error) throw error;
@@ -49,6 +54,28 @@ export async function getOlivePlots(supabase: SupabaseClient, areaIds: string[])
     ...area,
     details: Array.isArray(area.details) ? (area.details[0] ?? null) : (area.details ?? null),
   }));
+}
+
+/**
+ * Narrow a set of accessible area ids to the olive ones.
+ *
+ * Routes use this before writing, so a NIR measurement or harvest report can
+ * never be attached to a non-olive area even though the caller can legitimately
+ * access it for pest monitoring.
+ */
+export async function getOliveAreaIds(
+  supabase: SupabaseClient,
+  areaIds: string[]
+): Promise<string[]> {
+  if (areaIds.length === 0) return [];
+
+  const { data, error } = await (supabase.from('areas') as any)
+    .select('id, crops!inner(name)')
+    .in('id', areaIds)
+    .eq('crops.name', OLIVE_CROP_NAME);
+
+  if (error) throw error;
+  return (data || []).map((row: any) => row.id);
 }
 
 /** One plot with its details and takts, or null when it does not exist. */
