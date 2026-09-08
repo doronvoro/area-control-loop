@@ -1,9 +1,11 @@
 import { requireAuth } from '@/lib/auth';
-import { PageHeader } from '@/components/layout/PageHeader';
 import { HarvestPageContent } from '@/components/olive/HarvestPageContent';
-import { Tractor } from 'lucide-react';
 import '../olive.css';
 
+/**
+ * No PageHeader: the form carries its own hero, matching /monitoring and
+ * /olive/nir.
+ */
 export default async function OliveHarvestPage({
   searchParams,
 }: {
@@ -12,14 +14,5 @@ export default async function OliveHarvestPage({
   await requireAuth();
   const { areaId } = await searchParams;
 
-  return (
-    <>
-      <PageHeader
-        icon={Tractor}
-        title="מסיק"
-        description="רישום מעברי מסיק ותוצאות בפועל"
-      />
-      <HarvestPageContent initialAreaId={areaId ?? null} />
-    </>
-  );
+  return <HarvestPageContent initialAreaId={areaId ?? null} />;
 }
