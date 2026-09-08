@@ -14,6 +14,10 @@ import {
   ListChecks,
   RefreshCw,
   Gauge,
+  Tractor,
+  Scale,
+  CloudSun,
+  CalendarRange,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -62,6 +66,10 @@ export const oliveGroup: NavGroup = {
     { href: '/olive', label: 'סטטוס מסיק', icon: Gauge },
     { href: '/olive/plots', label: 'חלקות זית', icon: MapPin },
     { href: '/olive/nir', label: 'בדיקות NIR', icon: FlaskConical },
+    { href: '/olive/harvest', label: 'רישום מסיק', icon: Tractor },
+    { href: '/olive/yield', label: 'הערכת יבול', icon: Scale },
+    { href: '/olive/weather', label: 'מזג אוויר', icon: CloudSun },
+    { href: '/olive/seasons', label: 'עונות', icon: CalendarRange },
   ],
 };
 

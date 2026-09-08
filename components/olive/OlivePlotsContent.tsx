@@ -2,8 +2,10 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Loader2, Search } from 'lucide-react';
+import { Loader2, Search, Pencil } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { PlotDetailsDialog } from './PlotDetailsDialog';
 import { useApiData } from '@/hooks/useApiData';
 import {
   plotMatchesSearch,
@@ -43,8 +45,9 @@ const GROUPS: { type: PlotType; label: string }[] = [
 ];
 
 export function OlivePlotsContent() {
-  const { data, loading, error } = useApiData<DashboardPayload>('/api/olive/dashboard');
+  const { data, loading, error, refetch } = useApiData<DashboardPayload>('/api/olive/dashboard');
   const [term, setTerm] = useState('');
+  const [editing, setEditing] = useState<ApiPlot | null>(null);
 
   const now = useMemo(() => new Date(), []);
 
@@ -201,6 +204,13 @@ export function OlivePlotsContent() {
           <p className="olive-muted">לא נמצאו חלקות התואמות לחיפוש.</p>
         </div>
       )}
+
+      <PlotDetailsDialog
+        plot={editing}
+        open={editing !== null}
+        onOpenChange={(next) => !next && setEditing(null)}
+        onSaved={refetch}
+      />
     </div>
   );
 }

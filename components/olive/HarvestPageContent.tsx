@@ -4,10 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Loader2, Trash2, Pencil, X } from 'lucide-react';
+import { Loader2, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Form,
   FormControl,
@@ -25,39 +26,39 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { showToast } from '@/lib/toast';
-import { NIR_DIRECTIONS, PARAMETER_STATUS_CONFIG, type ParameterRule } from '@/types/database';
-import { evaluateParameter, daysSinceLabel } from '@/lib/olive/logic';
+import { HARVESTER_OPTIONS, HARVESTER_LABELS } from '@/types/database';
 import type { ApiPlot } from '@/lib/olive/adapt';
 
 /**
- * NIR entry.
+ * Harvest passes (מסיק).
  *
- * One flat form — 12 fields, no nesting. Deliberately NOT modelled on
- * MonitoringForm.tsx, which is 1,600 lines of customer → inspector → area →
- * sub-area → finding → treatment with nested field arrays. A ripeness reading
- * has none of that structure, and spec §3.1 wants it fast on a phone.
+ * pass_number is deliberately absent from the form — the server derives it from
+ * the highest pass already recorded for the plot, so a second pass cannot reuse
+ * number 1 and corrupt the season total. Marking a pass `is_final` retires the
+ * plot from the active dashboard list.
  */
+
+const NONE = '__none__';
 
 const numericField = z
   .string()
   .optional()
   .refine((v) => !v || !Number.isNaN(Number(v)), { message: 'נדרש מספר' });
 
-const nirSchema = z.object({
+const harvestSchema = z.object({
   area_id: z.string().min(1, 'נדרש לבחור חלקה'),
   report_date: z.string().min(1, 'נדרש תאריך'),
   sub_area_id: z.string().optional(),
-  direction: z.string().optional(),
-  oil: numericField,
-  water: numericField,
-  green: numericField,
-  acid: numericField,
-  maturity: numericField,
-  irrig_amount: numericField,
+  harvester_type: z.string().optional(),
+  operator: z.string().optional(),
+  area_done_dunam: numericField,
+  fruit_kg: numericField,
+  oil_kg: numericField,
+  is_final: z.boolean().optional(),
   notes: z.string().optional(),
 });
 
-type NirFormData = z.infer<typeof nirSchema>;
+type HarvestFormData = z.infer<typeof harvestSchema>;
 
 function todayString(): string {
   const now = new Date();
@@ -68,35 +69,30 @@ function todayString(): string {
   ].join('-');
 }
 
-/** '' → undefined so a blank field is stored as NULL rather than 0. */
 function optionalNumber(value?: string) {
   if (value === undefined || value.trim() === '') return null;
   return Number(value);
 }
 
-export function NirPageContent({ initialAreaId }: { initialAreaId: string | null }) {
+export function HarvestPageContent({ initialAreaId }: { initialAreaId: string | null }) {
   const [plots, setPlots] = useState<ApiPlot[]>([]);
-  const [rules, setRules] = useState<ParameterRule[]>([]);
   const [reports, setReports] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // report_area_id of the measurement being edited, or null when creating.
-  const [editingId, setEditingId] = useState<string | null>(null);
 
-  const form = useForm<NirFormData>({
-    resolver: zodResolver(nirSchema),
+  const form = useForm<HarvestFormData>({
+    resolver: zodResolver(harvestSchema),
     defaultValues: {
       area_id: initialAreaId ?? '',
       report_date: todayString(),
-      sub_area_id: '',
-      direction: '',
-      oil: '',
-      water: '',
-      green: '',
-      acid: '',
-      maturity: '',
-      irrig_amount: '',
+      sub_area_id: NONE,
+      harvester_type: NONE,
+      operator: '',
+      area_done_dunam: '',
+      fruit_kg: '',
+      oil_kg: '',
+      is_final: false,
       notes: '',
     },
   });
@@ -106,20 +102,13 @@ export function NirPageContent({ initialAreaId }: { initialAreaId: string | null
   const loadData = useCallback(async () => {
     try {
       setError(null);
-      const [plotsRes, dashRes, nirRes] = await Promise.all([
+      const [plotsRes, harvestRes] = await Promise.all([
         fetch('/api/olive/plots'),
-        fetch('/api/olive/dashboard'),
-        fetch('/api/olive/nir'),
+        fetch('/api/olive/harvest'),
       ]);
-
       if (!plotsRes.ok) throw new Error('שגיאה בטעינת החלקות');
       setPlots(await plotsRes.json());
-
-      if (dashRes.ok) {
-        const dash = await dashRes.json();
-        setRules(dash.parameterRules || []);
-      }
-      if (nirRes.ok) setReports(await nirRes.json());
+      if (harvestRes.ok) setReports(await harvestRes.json());
     } catch (err: any) {
       setError(err.message || 'שגיאה בטעינת הנתונים');
     } finally {
@@ -140,106 +129,57 @@ export function NirPageContent({ initialAreaId }: { initialAreaId: string | null
     [plots]
   );
 
-  const takts = useMemo(() => {
-    const plot = plots.find((p) => p.id === selectedAreaId);
-    return plot?.takts ?? [];
-  }, [plots, selectedAreaId]);
+  const takts = useMemo(
+    () => plots.find((p) => p.id === selectedAreaId)?.takts ?? [],
+    [plots, selectedAreaId]
+  );
 
-  const onSubmit = async (values: NirFormData) => {
+  const onSubmit = async (values: HarvestFormData) => {
     try {
       setSaving(true);
       setError(null);
 
-      const response = await fetch('/api/olive/nir', {
-        method: editingId ? 'PUT' : 'POST',
+      const response = await fetch('/api/olive/harvest', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...(editingId ? { report_area_id: editingId } : { area_id: values.area_id }),
+          area_id: values.area_id,
           report_date: values.report_date,
-          sub_area_id: values.sub_area_id || null,
-          direction: values.direction || null,
-          oil: optionalNumber(values.oil),
-          water: optionalNumber(values.water),
-          green: optionalNumber(values.green),
-          acid: optionalNumber(values.acid),
-          maturity: optionalNumber(values.maturity),
-          irrig_amount: optionalNumber(values.irrig_amount),
+          sub_area_id: values.sub_area_id === NONE ? null : values.sub_area_id || null,
+          harvester_type: values.harvester_type === NONE ? null : values.harvester_type || null,
+          operator: values.operator || null,
+          area_done_dunam: optionalNumber(values.area_done_dunam),
+          fruit_kg: optionalNumber(values.fruit_kg),
+          oil_kg: optionalNumber(values.oil_kg),
+          is_final: Boolean(values.is_final),
           notes: values.notes || null,
         }),
       });
 
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
-        throw new Error(body.error || 'שגיאה בשמירת הבדיקה');
+        throw new Error(body.error || 'שגיאה בשמירת דוח המסיק');
       }
 
-      showToast.success(editingId ? 'הבדיקה עודכנה' : 'הבדיקה נשמרה');
-      // Keep the plot and date — a sampler usually records several readings in a row.
-      form.reset({
-        ...form.getValues(),
-        oil: '',
-        water: '',
-        green: '',
-        acid: '',
-        maturity: '',
-        irrig_amount: '',
-        notes: '',
-      });
-      setEditingId(null);
+      showToast.success('דוח המסיק נשמר');
+      form.reset({ ...form.getValues(), area_done_dunam: '', fruit_kg: '', oil_kg: '', notes: '', is_final: false });
       await loadData();
     } catch (err: any) {
-      setError(err.message || 'שגיאה בשמירת הבדיקה');
+      setError(err.message || 'שגיאה בשמירה');
     } finally {
       setSaving(false);
     }
   };
 
-  const startEdit = (report: any) => {
-    const d = report.detail || {};
-    setEditingId(report.id);
-    setError(null);
-    form.reset({
-      area_id: report.area?.id ?? '',
-      report_date: report.report_date ? String(report.report_date).slice(0, 10) : todayString(),
-      sub_area_id: d.sub_area_id ?? '',
-      direction: d.direction ?? '',
-      oil: d.oil != null ? String(d.oil) : '',
-      water: d.water != null ? String(d.water) : '',
-      green: d.green != null ? String(d.green) : '',
-      acid: d.acid != null ? String(d.acid) : '',
-      maturity: d.maturity != null ? String(d.maturity) : '',
-      irrig_amount: d.irrig_amount != null ? String(d.irrig_amount) : '',
-      notes: report.description ?? '',
-    });
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const cancelEdit = () => {
-    setEditingId(null);
-    form.reset({
-      area_id: initialAreaId ?? '',
-      report_date: todayString(),
-      sub_area_id: '',
-      direction: '',
-      oil: '',
-      water: '',
-      green: '',
-      acid: '',
-      maturity: '',
-      irrig_amount: '',
-      notes: '',
-    });
-  };
-
   const handleDelete = async (reportAreaId: string) => {
-    if (!confirm('למחוק את הבדיקה הזו?')) return;
+    if (!confirm('למחוק את דוח המסיק הזה?')) return;
     try {
-      const response = await fetch(`/api/olive/nir?id=${reportAreaId}`, { method: 'DELETE' });
+      const response = await fetch(`/api/olive/harvest?id=${reportAreaId}`, { method: 'DELETE' });
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
         throw new Error(body.error || 'שגיאה במחיקה');
       }
-      showToast.success('הבדיקה נמחקה');
+      showToast.success('הדוח נמחק');
       await loadData();
     } catch (err: any) {
       showToast.error(err.message || 'שגיאה במחיקה');
@@ -255,13 +195,10 @@ export function NirPageContent({ initialAreaId }: { initialAreaId: string | null
     );
   }
 
-  const measurementFields: { name: keyof NirFormData; label: string; step: string }[] = [
-    { name: 'oil', label: 'אחוז שמן %', step: '0.1' },
-    { name: 'water', label: 'אחוז מים %', step: '0.1' },
-    { name: 'green', label: 'אחוז צבע ירוק %', step: '1' },
-    { name: 'acid', label: 'חומציות %', step: '0.01' },
-    { name: 'maturity', label: 'אינדקס הבשלה', step: '0.1' },
-    { name: 'irrig_amount', label: 'השקיה (קוב/דונם/יום)', step: '0.25' },
+  const amountFields: { name: keyof HarvestFormData; label: string; step: string }[] = [
+    { name: 'area_done_dunam', label: 'שטח שנמסק (דונם)', step: '0.1' },
+    { name: 'fruit_kg', label: 'סה״כ פרי (ק״ג)', step: '1' },
+    { name: 'oil_kg', label: 'סה״כ שמן (ק״ג)', step: '1' },
   ];
 
   return (
@@ -273,7 +210,7 @@ export function NirPageContent({ initialAreaId }: { initialAreaId: string | null
       )}
 
       <section className="olive-card p-4">
-        <h2 className="mb-3 font-bold">{editingId ? 'עריכת בדיקה' : 'רישום בדיקה'}</h2>
+        <h2 className="mb-3 font-bold">רישום מעבר מסיק</h2>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <div className="grid gap-3 md:grid-cols-2">
@@ -289,10 +226,7 @@ export function NirPageContent({ initialAreaId }: { initialAreaId: string | null
                         value={field.value}
                         onValueChange={field.onChange}
                         placeholder="בחר חלקה"
-                        searchPlaceholder="חיפוש בדיקה לפי חלקה..."
-                        // The plot a measurement belongs to is fixed once saved;
-                        // moving it would mean a different measurement.
-                        disabled={editingId !== null}
+                        searchPlaceholder="חיפוש חלקה..."
                       />
                     </FormControl>
                     <FormMessage />
@@ -320,13 +254,14 @@ export function NirPageContent({ initialAreaId }: { initialAreaId: string | null
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>טאקט</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value || ''}>
+                    <Select onValueChange={field.onChange} value={field.value || NONE}>
                       <FormControl>
                         <SelectTrigger className="h-9">
-                          <SelectValue placeholder={takts.length ? 'בחר טאקט' : 'אין טאקטים'} />
+                          <SelectValue placeholder={takts.length ? 'כל החלקה' : 'אין טאקטים'} />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent position="popper" sideOffset={4}>
+                        <SelectItem value={NONE}>כל החלקה</SelectItem>
                         {takts.map((takt: any) => (
                           <SelectItem key={takt.id} value={takt.id}>
                             {takt.name}
@@ -341,20 +276,21 @@ export function NirPageContent({ initialAreaId }: { initialAreaId: string | null
 
               <FormField
                 control={form.control}
-                name="direction"
+                name="harvester_type"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>כיוון דגימה</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value || ''}>
+                    <FormLabel>סוג מוסקת</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value || NONE}>
                       <FormControl>
                         <SelectTrigger className="h-9">
-                          <SelectValue placeholder="בחר כיוון" />
+                          <SelectValue placeholder="—" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent position="popper" sideOffset={4}>
-                        {NIR_DIRECTIONS.map((dir) => (
-                          <SelectItem key={dir} value={dir}>
-                            {dir}
+                        <SelectItem value={NONE}>—</SelectItem>
+                        {HARVESTER_OPTIONS.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>
+                            {o.label}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -363,10 +299,24 @@ export function NirPageContent({ initialAreaId }: { initialAreaId: string | null
                   </FormItem>
                 )}
               />
+
+              <FormField
+                control={form.control}
+                name="operator"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>מפעיל</FormLabel>
+                    <FormControl>
+                      <Input {...field} value={field.value ?? ''} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {measurementFields.map((f) => (
+            <div className="grid gap-3 sm:grid-cols-3">
+              {amountFields.map((f) => (
                 <FormField
                   key={f.name}
                   control={form.control}
@@ -390,9 +340,20 @@ export function NirPageContent({ initialAreaId }: { initialAreaId: string | null
               ))}
             </div>
 
-            <p className="olive-muted text-xs">
-              אחוז שמן בחומר יבש מחושב אוטומטית מהשמן והמים ואינו נרשם ידנית.
-            </p>
+            <FormField
+              control={form.control}
+              name="is_final"
+              render={({ field }) => (
+                <FormItem className="flex items-center gap-2 space-y-0">
+                  <FormControl>
+                    <Checkbox checked={!!field.value} onCheckedChange={field.onChange} />
+                  </FormControl>
+                  <FormLabel className="!mt-0">
+                    מעבר אחרון — מסמן את החלקה כנמסקה ומוציא אותה מרשימת הפעילות
+                  </FormLabel>
+                </FormItem>
+              )}
+            />
 
             <FormField
               control={form.control}
@@ -401,33 +362,29 @@ export function NirPageContent({ initialAreaId }: { initialAreaId: string | null
                 <FormItem>
                   <FormLabel>הערות</FormLabel>
                   <FormControl>
-                    <Textarea rows={2} {...field} />
+                    <Textarea rows={2} {...field} value={field.value ?? ''} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
 
-            <div className="flex items-center gap-2">
-              <Button type="submit" disabled={saving}>
-                {saving && <Loader2 className="ml-2 size-4 animate-spin" />}
-                {editingId ? 'עדכן בדיקה' : 'שמור בדיקה'}
-              </Button>
-              {editingId && (
-                <Button type="button" variant="ghost" onClick={cancelEdit}>
-                  <X className="ml-1 size-4" />
-                  בטל עריכה
-                </Button>
-              )}
-            </div>
+            <p className="olive-muted text-xs">
+              מספר המעבר נקבע אוטומטית לפי המעברים שכבר נרשמו בחלקה.
+            </p>
+
+            <Button type="submit" disabled={saving}>
+              {saving && <Loader2 className="ml-2 size-4 animate-spin" />}
+              שמור דוח מסיק
+            </Button>
           </form>
         </Form>
       </section>
 
       <section className="olive-card overflow-hidden">
-        <h2 className="p-4 pb-2 font-bold">יומן בדיקות</h2>
+        <h2 className="p-4 pb-2 font-bold">מעברי מסיק</h2>
         {reports.length === 0 ? (
-          <p className="olive-muted p-4 pt-0 text-sm">אין בדיקות עדיין</p>
+          <p className="olive-muted p-4 pt-0 text-sm">טרם נרשמו מעברי מסיק</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -435,54 +392,42 @@ export function NirPageContent({ initialAreaId }: { initialAreaId: string | null
                 <tr className="border-b text-xs text-muted-foreground">
                   <th className="p-2 text-start">תאריך</th>
                   <th className="p-2 text-start">חלקה</th>
-                  <th className="p-2 text-start">שמן %</th>
-                  <th className="p-2 text-start">מים %</th>
-                  <th className="p-2 text-start">שמן בחו״י %</th>
-                  <th className="p-2 text-start">סטטוס</th>
+                  <th className="p-2 text-start">מעבר</th>
+                  <th className="p-2 text-start">מוסקת</th>
+                  <th className="p-2 text-start">פרי (ק״ג)</th>
+                  <th className="p-2 text-start">שמן (ק״ג)</th>
+                  <th className="p-2 text-start">אחרון</th>
                   <th className="p-2 text-start"></th>
                 </tr>
               </thead>
               <tbody>
                 {reports.map((report) => {
-                  const detail = report.detail || {};
-                  const oilMatch = evaluateParameter(rules, 'oil', detail.oil);
+                  const d = report.detail || {};
                   return (
                     <tr key={report.id} className="border-b last:border-0">
                       <td className="p-2 whitespace-nowrap">
                         {report.report_date ? String(report.report_date).slice(0, 10) : '—'}
-                        <span className="olive-muted block text-xs">
-                          {daysSinceLabel(report.report_date, new Date()) ?? ''}
-                        </span>
                       </td>
                       <td className="p-2">{report.area?.name || '—'}</td>
-                      <td className="p-2">{detail.oil ?? '—'}</td>
-                      <td className="p-2">{detail.water ?? '—'}</td>
-                      <td className="p-2">{detail.dry ?? '—'}</td>
+                      <td className="p-2">{d.pass_number ?? '—'}</td>
                       <td className="p-2">
-                        {oilMatch && (
-                          <span
-                            className={`olive-pill ${PARAMETER_STATUS_CONFIG[oilMatch.status].pillClass}`}
-                          >
-                            {oilMatch.message}
-                          </span>
-                        )}
+                        {d.harvester_type
+                          ? (HARVESTER_LABELS[d.harvester_type as keyof typeof HARVESTER_LABELS] ??
+                            d.harvester_type)
+                          : '—'}
                       </td>
-                      <td className="p-2 whitespace-nowrap">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => startEdit(report)}
-                          aria-label="ערוך בדיקה"
-                        >
-                          <Pencil className="size-4" />
-                        </Button>
+                      <td className="p-2">{d.fruit_kg ?? '—'}</td>
+                      <td className="p-2">{d.oil_kg ?? '—'}</td>
+                      <td className="p-2">
+                        {d.is_final ? <span className="olive-pill olive-pill-ok">כן</span> : '—'}
+                      </td>
+                      <td className="p-2">
                         <Button
                           type="button"
                           variant="ghost"
                           size="sm"
                           onClick={() => handleDelete(report.id)}
-                          aria-label="מחק בדיקה"
+                          aria-label="מחק דוח מסיק"
                         >
                           <Trash2 className="size-4" />
                         </Button>
