@@ -140,9 +140,9 @@ export function OlivePlotsContent() {
                           {row.plot.details.grower_name}
                         </span>
                       )}
-                      {row.plot.planting_time && (
+                      {(row.plot.details?.plant_year_label || row.plot.planting_time) && (
                         <span className="olive-pill olive-pill-idle">
-                          נטיעה {row.plot.planting_time}
+                          נטיעה {row.plot.details?.plant_year_label || row.plot.planting_time}
                         </span>
                       )}
                       {row.plot.size != null && (

@@ -17,6 +17,7 @@ export interface OlivePlotDetailsInput {
   harvester?: string | null;
   water_type?: string | null;
   takt_count?: number | null;
+  plant_year_label?: string | null;
 }
 
 // --- Public API ---
@@ -77,6 +78,7 @@ export async function upsertOlivePlotDetails(
         harvester: details.harvester ?? null,
         water_type: details.water_type ?? null,
         takt_count: details.takt_count ?? null,
+        plant_year_label: details.plant_year_label ?? null,
         updated_at: new Date().toISOString(),
       },
       { onConflict: 'area_id' }

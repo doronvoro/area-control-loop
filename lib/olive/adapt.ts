@@ -22,6 +22,7 @@ export interface ApiPlot {
     harvester: string | null;
     water_type: string | null;
     takt_count: number | null;
+    plant_year_label: string | null;
   } | null;
   takts?: { id: string; name: string }[];
   [key: string]: unknown;

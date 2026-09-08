@@ -1154,6 +1154,7 @@ export interface Database {
           harvester: HarvesterType | null;
           water_type: WaterType | null;
           takt_count: number | null;
+          plant_year_label: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -1165,6 +1166,7 @@ export interface Database {
           harvester?: HarvesterType | null;
           water_type?: WaterType | null;
           takt_count?: number | null;
+          plant_year_label?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -1176,6 +1178,7 @@ export interface Database {
           harvester?: HarvesterType | null;
           water_type?: WaterType | null;
           takt_count?: number | null;
+          plant_year_label?: string | null;
           created_at?: string;
           updated_at?: string;
         };
