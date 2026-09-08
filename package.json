@@ -28,6 +28,7 @@
     "seed-customer-areas": "tsx scripts/seed-customer-areas.ts",
     "seed-recommend-materials": "tsx scripts/seed-recommend-materials.ts",
     "import-registry": "tsx scripts/import-pesticide-registry.ts",
+    "import-olive": "tsx scripts/import-olive-backup.ts",
     "test": "vitest",
     "test:run": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts"
