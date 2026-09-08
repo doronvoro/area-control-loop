@@ -1,0 +1,260 @@
+/* ========================================
+   Olive harvest — scoped palette
+   Aesthetic: the grove itself — cream, gold,
+   sage and terracotta, carried over from the
+   client's prototype (spec §6.6).
+
+   Follows the monitoring.css / actions.css
+   precedent: prefixed class names holding
+   hardcoded oklch, NOT redefinition of the
+   shadcn variables. Next.js hoists every CSS
+   import into one global sheet, so the
+   `olive-` prefix is what keeps this from
+   leaking into the pest-management screens.
+
+   shadcn components inside these pages still
+   render in the app's Terra Green. That is the
+   accepted cost of scoping rather than
+   retheming — see the plan's theming decision.
+   ======================================== */
+
+/* --- Hero --- */
+.olive-hero {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(
+    135deg,
+    oklch(0.26 0.02 75) 0%,
+    oklch(0.31 0.03 80) 55%,
+    oklch(0.28 0.02 70) 100%
+  );
+  border-radius: 1.25rem;
+}
+
+.olive-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 82% 12%, oklch(0.70 0.12 85 / 18%) 0%, transparent 55%),
+    radial-gradient(circle at 18% 78%, oklch(0.57 0.06 125 / 14%) 0%, transparent 45%);
+  pointer-events: none;
+}
+
+.olive-hero::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 3px;
+  background: linear-gradient(
+    90deg,
+    oklch(0.70 0.12 85) 0%,
+    oklch(0.83 0.09 88) 50%,
+    oklch(0.70 0.12 85) 100%
+  );
+}
+
+.olive-hero-title {
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: oklch(0.97 0.015 90);
+}
+
+.olive-hero-subtitle {
+  color: oklch(0.80 0.02 85);
+}
+
+/* --- Surfaces --- */
+.olive-card {
+  background: oklch(1 0 0);
+  border: 1px solid oklch(0.90 0.025 88);
+  border-radius: 1rem;
+  box-shadow:
+    0 1px 2px oklch(0 0 0 / 3%),
+    0 8px 24px oklch(0 0 0 / 4%);
+}
+
+.olive-muted {
+  color: oklch(0.55 0.02 85);
+}
+
+/* --- Status cards (בבדיקות / תקינות / חריגות / מוכן למסיק) --- */
+.olive-status-card {
+  border-radius: 1rem;
+  padding: 0.75rem 0.5rem;
+  text-align: center;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.olive-status-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px oklch(0 0 0 / 8%);
+}
+
+.olive-status-card[aria-pressed='true'] {
+  outline: 2px solid oklch(0.60 0.11 80);
+  outline-offset: 2px;
+}
+
+.olive-status-count {
+  font-weight: 800;
+  font-size: 1.35rem;
+  line-height: 1.1;
+}
+
+.olive-status-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  margin-top: 0.15rem;
+}
+
+.olive-sc-testing {
+  background: oklch(0.93 0.03 90);
+  border-color: oklch(0.88 0.035 88);
+  color: oklch(0.33 0.02 80);
+}
+
+.olive-sc-normal {
+  background: oklch(0.95 0.05 90);
+  border-color: oklch(0.86 0.08 88);
+  color: oklch(0.50 0.11 80);
+}
+
+.olive-sc-anomaly {
+  background: oklch(0.93 0.045 40);
+  border-color: oklch(0.85 0.07 40);
+  color: oklch(0.50 0.13 38);
+}
+
+.olive-sc-ready {
+  background: oklch(0.93 0.04 128);
+  border-color: oklch(0.85 0.06 128);
+  color: oklch(0.40 0.06 125);
+}
+
+/* --- Severity pills, keyed to ParameterStatus --- */
+.olive-pill {
+  display: inline-block;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.olive-pill-idle {
+  background: oklch(0.93 0.03 90);
+  color: oklch(0.48 0.02 85);
+}
+
+.olive-pill-ok {
+  background: oklch(0.93 0.04 128);
+  color: oklch(0.40 0.06 125);
+}
+
+.olive-pill-plan {
+  background: oklch(0.95 0.05 90);
+  color: oklch(0.50 0.11 80);
+}
+
+.olive-pill-urgent {
+  background: oklch(0.93 0.045 40);
+  color: oklch(0.50 0.13 38);
+}
+
+/* --- Alert rows --- */
+.olive-alert {
+  border: 1px solid oklch(0.90 0.025 88);
+  border-inline-start-width: 3px;
+  border-radius: 0.75rem;
+  background: oklch(1 0 0);
+  overflow: hidden;
+  transition: box-shadow 0.12s ease;
+}
+
+.olive-alert:hover {
+  box-shadow: 0 2px 10px oklch(0 0 0 / 6%);
+}
+
+.olive-alert-urgent {
+  border-inline-start-color: oklch(0.58 0.13 40);
+}
+
+.olive-alert-plan {
+  border-inline-start-color: oklch(0.70 0.12 85);
+}
+
+.olive-alert-ok {
+  border-inline-start-color: oklch(0.57 0.06 125);
+}
+
+.olive-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 999px;
+  flex: none;
+}
+
+.olive-dot-urgent {
+  background: oklch(0.58 0.13 40);
+}
+
+.olive-dot-plan {
+  background: oklch(0.70 0.12 85);
+}
+
+.olive-dot-ok {
+  background: oklch(0.57 0.06 125);
+}
+
+/* --- "מבט על" panel --- */
+.olive-overview {
+  background: oklch(0.98 0.012 90);
+  border: 1px solid oklch(0.90 0.025 88);
+  border-radius: 1rem;
+}
+
+.olive-overview-row + .olive-overview-row {
+  border-top: 1px solid oklch(0.92 0.02 88);
+}
+
+/* --- Season progress --- */
+.olive-progress-track {
+  background: oklch(0.93 0.03 90);
+  border-radius: 999px;
+  height: 0.6rem;
+  overflow: hidden;
+}
+
+.olive-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, oklch(0.57 0.06 125) 0%, oklch(0.40 0.06 125) 100%);
+  transition: width 0.3s ease;
+}
+
+/* --- Measurement grid on a plot card --- */
+.olive-kpi {
+  background: oklch(0.98 0.012 90);
+  border: 1px solid oklch(0.91 0.02 88);
+  border-radius: 0.6rem;
+  padding: 0.5rem 0.35rem;
+  text-align: center;
+}
+
+.olive-kpi-label {
+  display: block;
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: oklch(0.55 0.02 85);
+}
+
+.olive-kpi-value {
+  font-weight: 800;
+  font-size: 1rem;
+  color: oklch(0.30 0.02 80);
+}

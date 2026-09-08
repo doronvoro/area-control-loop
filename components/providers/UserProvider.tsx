@@ -2,12 +2,15 @@
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 
+import type { NavFeatures } from '@/lib/navigation';
+
 interface UserInfo {
   name: string;
   email: string;
   role: string;
   isAdmin: boolean;
   isCustomerOwner: boolean;
+  features: NavFeatures;
 }
 
 interface UserContextValue {
@@ -32,6 +35,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
             role: data.role || '',
             isAdmin: data.isAdmin || false,
             isCustomerOwner: data.isCustomerOwner || false,
+            features: data.features || {},
           });
         }
       })

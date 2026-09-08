@@ -76,6 +76,7 @@ export function Sidebar({ collapsed, onToggleCollapse }: SidebarProps) {
   const navGroups = getVisibleNavGroups(
     user?.isAdmin ?? false,
     user?.isCustomerOwner ?? false,
+    user?.features ?? {},
   );
 
   const handleLogout = async () => {

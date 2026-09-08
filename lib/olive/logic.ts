@@ -92,22 +92,28 @@ const WIND_ALERT_KMH = 25;
  *
  * The asymmetry is faithful to the prototype: oil 17.0 is "planned", not "not
  * ready", and oil 20.0 is "planned", not "immediate".
+ *
+ * Both the value and the bound are coerced to numbers first. Postgres NUMERIC
+ * arrives over PostgREST as a STRING, so `upper_bound` is "17.00" rather than
+ * 17 — and comparing two strings is lexical, where "9" > "17". Without this
+ * coercion the thresholds would silently misfire on real data while every
+ * fixture-based test kept passing.
  */
 export function evaluateParameter(
   rules: ParameterRule[],
   parameterCode: string,
-  value: number | null | undefined
+  value: number | string | null | undefined
 ): RuleMatch | null {
-  if (value === null || value === undefined || Number.isNaN(value)) return null;
+  const measured = toNumber(value);
+  if (measured === null) return null;
 
   const applicable = rules
     .filter((r) => r.parameter_code === parameterCode)
     .sort((a, b) => a.sort_order - b.sort_order);
 
   for (const rule of applicable) {
-    const matches =
-      rule.upper_bound === null ||
-      (rule.upper_inclusive ? value <= rule.upper_bound : value < rule.upper_bound);
+    const bound = toNumber(rule.upper_bound);
+    const matches = bound === null || (rule.upper_inclusive ? measured <= bound : measured < bound);
 
     if (matches) {
       return { status: rule.status, severity: rule.severity, message: rule.message };
@@ -259,14 +265,15 @@ export function classifyPlotCategory(
 
 /** Yield load band from the per-dunam estimate. Spec §4.3. */
 export function yieldLoadInfo(
-  kgPerDunam: number | null | undefined
+  kgPerDunam: number | string | null | undefined
 ): { label: string; status: ParameterStatus } | null {
-  if (kgPerDunam === null || kgPerDunam === undefined || Number.isNaN(kgPerDunam)) return null;
+  const estimate = toNumber(kgPerDunam);
+  if (estimate === null) return null;
 
-  if (kgPerDunam > YIELD_LOAD_HIGH) {
+  if (estimate > YIELD_LOAD_HIGH) {
     return { label: 'עומס יבול: גבוה', status: ParameterStatus.PLAN };
   }
-  if (kgPerDunam >= YIELD_LOAD_MEDIUM) {
+  if (estimate >= YIELD_LOAD_MEDIUM) {
     return { label: 'עומס יבול: בינוני', status: ParameterStatus.OK };
   }
   return { label: 'עומס יבול: נמוך', status: ParameterStatus.IDLE };
@@ -338,6 +345,18 @@ export function daysSinceLabel(dateStr: string | null, now: Date): string | null
 }
 
 // --- Private helpers ---
+
+/**
+ * Coerce a value that may arrive as a Postgres NUMERIC string.
+ *
+ * Returns null for anything not a finite number, so callers can treat "missing"
+ * and "unparseable" identically rather than propagating NaN into a comparison.
+ */
+function toNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
 
 /** Local-date YYYY-MM-DD. Avoids toISOString(), which shifts across timezones. */
 function toDateString(date: Date): string {

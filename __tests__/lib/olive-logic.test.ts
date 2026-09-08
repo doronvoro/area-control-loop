@@ -446,3 +446,50 @@ describe('daysSinceLabel', () => {
     expect(daysSinceLabel('2026-10-20', NOW)).toBeNull();
   });
 });
+
+// ─── PostgREST numeric coercion ──────────────────────────────────────────────
+
+describe('numeric values arriving as PostgREST strings', () => {
+  /**
+   * Postgres NUMERIC is serialised as a STRING over PostgREST, so a rule's
+   * upper_bound reaches the browser as "17.00" and a measurement as "9.00".
+   *
+   * Comparing two strings is lexical: "9" > "17" is true. Without coercion an
+   * oil reading of 9% would fall past every band and land on the catch-all,
+   * telling the grower to harvest IMMEDIATELY on fruit that is nowhere near
+   * ready. Every fixture-based test above would still have passed, because
+   * those fixtures use real numbers.
+   */
+  const pgRules: ParameterRule[] = RULES.map((r) => ({
+    ...r,
+    upper_bound: (r.upper_bound === null ? null : r.upper_bound.toFixed(2)) as never,
+  }));
+
+  it('confirms the trap that makes this necessary', () => {
+    expect('9' > '17').toBe(true);
+  });
+
+  it.each([
+    ['9.00', ParameterStatus.IDLE],
+    ['16.90', ParameterStatus.IDLE],
+    ['17.00', ParameterStatus.PLAN],
+    ['20.00', ParameterStatus.PLAN],
+    ['20.10', ParameterStatus.URGENT],
+  ])('oil "%s" still resolves to %s', (value, expected) => {
+    expect(evaluateParameter(pgRules, 'oil', value as string)?.status).toBe(expected);
+  });
+
+  it('handles a string measurement against numeric rules', () => {
+    expect(evaluateParameter(RULES, 'water', '57.20')?.status).toBe(ParameterStatus.PLAN);
+  });
+
+  it('treats empty string as no measurement rather than zero', () => {
+    expect(evaluateParameter(RULES, 'oil', '')).toBeNull();
+  });
+
+  it('coerces the yield estimate too', () => {
+    expect(yieldLoadInfo('1500.00')?.label).toBe('עומס יבול: גבוה');
+    expect(yieldLoadInfo('850.00')?.label).toBe('עומס יבול: נמוך');
+    expect(yieldLoadInfo('')).toBeNull();
+  });
+});

@@ -39,6 +39,7 @@ export function MobileMoreMenu({ open, onOpenChange }: MobileMoreMenuProps) {
   const navGroups = getVisibleNavGroups(
     user?.isAdmin ?? false,
     user?.isCustomerOwner ?? false,
+    user?.features ?? {},
   );
 
   // Filter out the workflow group since those are already in the bottom nav
