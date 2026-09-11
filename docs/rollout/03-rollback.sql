@@ -1,0 +1,93 @@
+-- Olive rollout — ROLLBACK. DO NOT RUN unless you are undoing the rollout.
+--
+-- Written before the migrations run, so it exists when it is needed rather than
+-- being composed under pressure. Every section is independent; run only the one
+-- that matches what went wrong.
+--
+-- Nothing here is automatic. Read the section header before running it.
+
+
+-- ============================================================================
+-- SECTION A — POLICY ONLY.
+-- Run this if, after the migrations, the existing tenant's area names render as
+-- "-" on /reports or /areas.
+--
+-- WARNING: this brings back the 42P17 infinite recursion between areas and
+-- report_areas, and re-opens the tenancy leak it caused (SELECT on any area
+-- having any report_areas row, for any authenticated user). It is a stop-the-
+-- bleeding measure, not a fix. Re-plan the RLS change afterwards.
+-- ============================================================================
+
+-- create policy "Users can view areas through report areas"
+--   on public.areas for select
+--   using (exists (select 1 from report_areas ra where ra.area_id = areas.id));
+
+
+-- ============================================================================
+-- SECTION B — DATA ONLY (keep the schema, remove the imported Gashur rows).
+-- Run this to redo a bad import without touching the schema or the other tenant.
+--
+-- Set the customer id first. NEVER put the existing tenant's id here — take it
+-- from 00-preflight step 4 and use the NEW one.
+-- ============================================================================
+
+-- begin;
+--
+-- -- Assert before deleting: this must report 45 for the 2026 export.
+-- do $$
+-- declare n int;
+-- begin
+--   select count(*) into n
+--   from areas a
+--   join customer_areas ca on ca.area_id = a.id
+--   where ca.customer_id = '<GASHUR-CUSTOMER-UUID>'::uuid;
+--   raise notice 'areas linked to this customer: %', n;
+--   if n <> 45 then
+--     raise exception 'expected 45 areas, found % — check the uuid before deleting', n;
+--   end if;
+-- end $$;
+--
+-- -- report_areas must go first; areas does not cascade to it in every path.
+-- delete from report_areas r
+--  using areas a, customer_areas ca
+--  where a.id = r.area_id and ca.area_id = a.id
+--    and ca.customer_id = '<GASHUR-CUSTOMER-UUID>'::uuid;
+--
+-- -- areas cascades to olive_plot_details, yield_estimates and customer_areas.
+-- delete from areas a
+--  using customer_areas ca
+--  where ca.area_id = a.id and ca.customer_id = '<GASHUR-CUSTOMER-UUID>'::uuid;
+--
+-- delete from seasons where name in ('מסיק (מיובא)', 'מסיק 2026');
+--
+-- commit;
+
+
+-- ============================================================================
+-- SECTION C — SCHEMA (remove the olive module entirely).
+-- Children first. Only after Section B, or the deletes above have nothing left
+-- to delete.
+--
+-- This does NOT drop report_areas.report_number: the core screens now depend on
+-- it, and dropping it would break the existing tenant.
+-- ============================================================================
+
+-- begin;
+--
+-- drop table if exists nir_report cascade;
+-- drop table if exists harvest_report cascade;
+-- drop table if exists yield_estimates cascade;
+-- drop table if exists variety_windows cascade;
+-- drop table if exists weather_days cascade;
+-- drop table if exists olive_plot_details cascade;
+-- drop table if exists parameter_rules cascade;
+-- drop table if exists parameters cascade;
+-- drop table if exists seasons cascade;
+--
+-- delete from report_area_types where name in ('nir','harvest');
+--
+-- -- Leave the crop in place if any area still references it.
+-- delete from crops c where c.name = 'זית'
+--   and not exists (select 1 from areas a where a.crop_id = c.id);
+--
+-- commit;
