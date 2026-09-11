@@ -15,10 +15,15 @@
  *   SUPABASE_SERVICE_ROLE_KEY=xxx npm run import-olive -- <backup.html>
  *   SUPABASE_SERVICE_ROLE_KEY=xxx npm run import-olive -- <backup.html> --apply
  *   SUPABASE_SERVICE_ROLE_KEY=xxx npm run import-olive -- <backup.html> --apply --customer <uuid>
+ *
+ * --overwrite-yield replaces kg/dunam values that differ from the backup. By
+ * default a difference is reported and left alone, so a re-run cannot silently
+ * undo an estimate someone edited in /olive/yield.
  */
 
 import { readFileSync } from 'fs';
 import { createClient } from '@supabase/supabase-js';
+import { resolveYieldRows, type YieldPlotLike } from '../lib/olive/import-yield';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -35,8 +40,23 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey, {
 
 const OLIVE_CROP_NAME = 'זית';
 
-/** Stand-in area id used during a dry run, so linkage can still be checked. */
-const DRY_RUN_AREA = '__dry_run__';
+/**
+ * Stand-in area id used during a dry run, so linkage can still be checked.
+ *
+ * Unique per prototype plot: a single shared constant would make every
+ * not-yet-created plot collapse to one key, and the NIR pass dedupes on
+ * (area, date) — two readings taken on different plots the same day would
+ * report as one duplicate. A dry run has to count what --apply would write.
+ */
+const DRY_RUN_AREA_PREFIX = '__dry_run__:';
+
+function dryRunAreaId(plotId: string): string {
+  return `${DRY_RUN_AREA_PREFIX}${plotId}`;
+}
+
+function isDryRunAreaId(areaId: string): boolean {
+  return areaId.startsWith(DRY_RUN_AREA_PREFIX);
+}
 
 // --- Types (the prototype's own shapes, not ours) ---
 
@@ -183,11 +203,14 @@ async function main() {
   const args = process.argv.slice(2);
   const file = args.find((a) => !a.startsWith('--'));
   const apply = args.includes('--apply');
+  const overwriteYield = args.includes('--overwrite-yield');
   const customerFlag = args.indexOf('--customer');
   const customerArg = customerFlag > -1 ? args[customerFlag + 1] : null;
 
   if (!file) {
-    console.error('❌ Usage: npm run import-olive -- <backup.html> [--apply] [--customer <uuid>]');
+    console.error(
+      '❌ Usage: npm run import-olive -- <backup.html> [--apply] [--customer <uuid>] [--overwrite-yield]'
+    );
     process.exit(1);
   }
 
@@ -275,6 +298,7 @@ async function main() {
   }
 
   const plotIdMap = new Map<string, string>(); // prototype plot id -> area id
+  const perPlotYield = new Map<string, number>(); // prototype plot id -> yieldEst override
   let created = 0;
   let reused = 0;
 
@@ -318,7 +342,7 @@ async function main() {
       // Register a placeholder so the NIR pass can still resolve its plot
       // references. Without this a dry run reports every measurement as an
       // orphan, which is the opposite of what a preview is for.
-      plotIdMap.set(plot.id, DRY_RUN_AREA);
+      plotIdMap.set(plot.id, dryRunAreaId(plot.id));
       created += 1;
     }
 
@@ -334,12 +358,18 @@ async function main() {
     };
 
     const areaId = plotIdMap.get(plot.id);
+
+    // Parsed in both modes. This per-plot value is an override that beats the
+    // ownYieldData sheet, so the yield pass below must know about it even in a
+    // dry run — otherwise the preview reports writes it would not make.
+    const est = num(plot.yieldEst, where);
+    if (est !== null) perPlotYield.set(plot.id, est);
+
     if (apply && areaId) {
       await supabase
         .from('olive_plot_details')
         .upsert({ area_id: areaId, ...details } as any, { onConflict: 'area_id' });
 
-      const est = num(plot.yieldEst, where);
       if (est !== null && seasonId) {
         await supabase
           .from('yield_estimates')
@@ -374,6 +404,115 @@ async function main() {
     }
   }
   console.log(`📍 plots: ${created} new, ${reused} matched by name`);
+
+  // --- yield estimates (ownYieldData) ---
+  // A separate pass on purpose. The plot loop above already writes
+  // yield_estimates from plot.yieldEst; folding this in would put two sources in
+  // a race for the same (area_id, season_id) with the last write winning
+  // silently. Precedence is one visible rule instead: yieldEst is a per-plot
+  // override and wins, and this sheet fills in the rest. In a real export
+  // yieldEst is empty everywhere and this sheet is the only source of kg/dunam.
+  const yieldRows = backup.ownYieldData || [];
+  if (yieldRows.length > 0) {
+    const resolved = resolveYieldRows(
+      (backup.plots || []) as YieldPlotLike[],
+      yieldRows,
+      new Set(perPlotYield.keys())
+    );
+
+    for (const { key, plots } of resolved.ambiguous) {
+      flag(
+        `yield: ${plots.length} plots share block/year/variety "${key.replace(/\u0000/g, ' / ')}"` +
+          ` (${plots.map((p) => p.name).join(', ')}) — no estimate written for any of them`
+      );
+    }
+    for (const { row, reason } of resolved.skipped) {
+      flag(`yield row ${row.block} / ${row.year} / ${row.variety}: ${reason} — skipped`);
+    }
+    for (const { row, nearest, candidates } of resolved.unmatched) {
+      let detail = '';
+      if (nearest) {
+        detail =
+          ` — the only plot in that block and variety still without an estimate is` +
+          ` "${nearest.name}"; confirm the year before using it`;
+      } else if (candidates.length > 0) {
+        detail =
+          ` — same block and variety exists for ${candidates.map((c) => c.plantYear).join(', ')}` +
+          `, none of them clearly the intended one`;
+      }
+      flag(
+        `yield row ${row.block} / ${row.year} / ${row.variety} = ${row.kg} matches no plot${detail}`
+      );
+    }
+
+    // Existing rows are read once so a re-run can tell "already correct" apart
+    // from "somebody edited this in /olive/yield". A blind upsert would revert
+    // the second case without saying so.
+    const existingYield = new Map<string, number | null>();
+    if (seasonId) {
+      const { data: rows } = await supabase
+        .from('yield_estimates')
+        .select('area_id, kg_per_dunam')
+        .eq('season_id', seasonId);
+      for (const row of (rows || []) as any[]) {
+        existingYield.set(row.area_id, row.kg_per_dunam === null ? null : Number(row.kg_per_dunam));
+      }
+    }
+
+    let yieldWritten = 0;
+    let yieldUnchanged = 0;
+    let yieldConflicts = 0;
+
+    if (apply && !seasonId) {
+      flag(`yield: no season resolved — ${resolved.matched.length} estimates skipped`);
+    } else {
+      for (const { plot, kg } of resolved.matched) {
+        const mappedId = plotIdMap.get(plot.id);
+        // A plot the dry run only pretended to create has no row to compare
+        // against, so it is unambiguously a write.
+        const areaId = mappedId && !isDryRunAreaId(mappedId) ? mappedId : null;
+        const current = areaId ? existingYield.get(areaId) : undefined;
+
+        if (current !== undefined && current !== null) {
+          if (current === kg) {
+            yieldUnchanged += 1;
+            continue;
+          }
+          if (!overwriteYield) {
+            yieldConflicts += 1;
+            flag(
+              `yield "${plot.name}": stored ${current} kg/dunam but the backup says ${kg}` +
+                ' — left as is; pass --overwrite-yield to replace'
+            );
+            continue;
+          }
+        }
+
+        if (apply && areaId && seasonId) {
+          const { error } = await supabase
+            .from('yield_estimates')
+            .upsert({ area_id: areaId, season_id: seasonId, kg_per_dunam: kg } as any, {
+              onConflict: 'area_id,season_id',
+            });
+          if (error) throw error;
+        }
+        yieldWritten += 1;
+      }
+    }
+
+    console.log(
+      `🫒 yield: ${apply ? 'wrote' : 'would write'} ${yieldWritten}` +
+        (yieldUnchanged ? `, ${yieldUnchanged} unchanged` : '') +
+        (yieldConflicts ? `, ${yieldConflicts} conflicting` : '') +
+        `, ${resolved.unmatched.length} unmatched` +
+        `, ${resolved.unestimated.length} without an estimate`
+    );
+    if (resolved.unestimated.length > 0) {
+      // Left absent rather than written as null: an empty cell in /olive/yield
+      // means "nobody has estimated this yet", which is the truth here.
+      console.log(`   no estimate: ${resolved.unestimated.map((p) => p.name).join(' · ')}`);
+    }
+  }
 
   // --- NIR measurements ---
   // Deduplicated on (area, date): the prototype allows one reading per plot per
