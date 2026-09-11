@@ -67,8 +67,9 @@ are comparing, not interpreting.
 | 4 | `01-migrations-in-order.sql` | **yes** | All 7, timestamp order, one transaction. |
 | 5 | `02-verify.sql` | no | Then exercise the live site as the existing tenant. |
 | 6 | `04-create-crop.sql` | **yes** | Creates the `זית` crop. One row. |
-| 7 | *(create the גשור tenant)* | yes | Through the live UI — see below. |
-| 8 | *(import)* | yes | Dry run first. See below. |
+| 7 | *(create the גשור tenant)* | yes | `/admin/customers` → new customer with name + email + password. |
+| 8 | `05-verify-tenant.sql` | no | Confirms Noam can add workers before handover. |
+| 9 | *(import)* | yes | Dry run first. See below. |
 
 Ledger repair is deliberately absent: the ledger is already decorative here.
 
