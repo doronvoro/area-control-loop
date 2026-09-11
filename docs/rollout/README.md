@@ -87,15 +87,21 @@ Consequences:
 - **The RLS risk is lower than planned**, since the policy being dropped is not
   there. The site walk in `02-verify.sql` is still worth doing, but a regression
   is now unlikely to come from that migration.
-- **Production's RLS has been reimplemented, and that is the real open risk.**
-  `"Users can view accessible areas"` resolves membership through
-  `get_user_customer_id(auth.uid())`; the version in this repo uses a
-  customers/workers join. Every policy the olive migrations create delegates to
-  `can_access_area` / `can_access_report_area` / `is_admin_user`, which exist but
-  may not mean the same thing. **`00c-auth-helpers.sql` is the gate**: if
-  `can_access_area` has no worker branch, the workers Noam adds will see an empty
-  plot list while Noam himself sees everything — so the owner's own testing will
-  not catch it.
+- **The auth helpers are CLEARED.** `00c-auth-helpers.sql` was run against
+  production: `can_access_area`, `can_access_report_area`, `is_admin_user` and
+  `is_worker_in_customer` are all identical to this repo's versions, and
+  `can_access_area` carries all three branches — admin, customer owner, and the
+  worker path. The workers Noam adds will inherit the plots.
+
+  `is_worker_in_customer` is `SECURITY DEFINER = false`, which is correct and
+  matches local: it is only ever called from inside `can_access_area`, which is
+  `SECURITY DEFINER` and owned by `postgres`, so the nested call runs as the
+  owner of `workers` and bypasses that table's RLS (which is enabled but not
+  FORCEd). The olive policies will behave exactly as they do locally.
+
+  The divergence is confined to the `areas` table's own SELECT policy, which
+  resolves membership via `get_user_customer_id()`. No olive policy uses that
+  function, so it does not affect this rollout.
 - **There is no admin SELECT policy on `areas`** (`"Admins can view all areas"`
   is absent despite two migrations creating it). That is pre-existing production
   behaviour, not something this rollout changes, but worth knowing before
