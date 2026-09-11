@@ -12,4 +12,6 @@ export const TREATMENT_STATUS_LABELS: Record<string, string> = {
 export const REPORT_TYPE_LABELS: Record<string, string> = {
   monitoring: 'ניטור',
   action: 'פעולה',
+  nir: 'בדיקת NIR',
+  harvest: 'מסיק',
 };

@@ -56,6 +56,8 @@ const STATUS_BADGE_CONFIG: Record<string, { className: string; dotColor: string 
 const TYPE_BADGE_CONFIG: Record<string, string> = {
   monitoring: 'bg-blue-50 text-blue-700 border-blue-200',
   action: 'bg-orange-50 text-orange-700 border-orange-200',
+  nir: 'bg-amber-50 text-amber-700 border-amber-200',
+  harvest: 'bg-lime-50 text-lime-700 border-lime-200',
 };
 
 interface ReportAreaData {
@@ -75,9 +77,11 @@ interface ReportAreaData {
 interface ReportsTableProps {
   reportAreas: ReportAreaData[];
   onReportDeleted?: () => void;
+  /** Notifies the parent to refetch — the 50-row cap is applied server-side. */
+  onTypeChange?: (type: string) => void;
 }
 
-export function ReportsTable({ reportAreas, onReportDeleted }: ReportsTableProps) {
+export function ReportsTable({ reportAreas, onReportDeleted, onTypeChange }: ReportsTableProps) {
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -362,7 +366,13 @@ export function ReportsTable({ reportAreas, onReportDeleted }: ReportsTableProps
               />
             </div>
 
-            <Select value={filterType} onValueChange={setFilterType}>
+            <Select
+              value={filterType}
+              onValueChange={(value) => {
+                setFilterType(value);
+                onTypeChange?.(value);
+              }}
+            >
               <SelectTrigger className="w-[140px]" size="sm">
                 <SelectValue placeholder="סוג דוח" />
               </SelectTrigger>
@@ -370,6 +380,8 @@ export function ReportsTable({ reportAreas, onReportDeleted }: ReportsTableProps
                 <SelectItem value="all">כל הסוגים</SelectItem>
                 <SelectItem value="monitoring">ניטור</SelectItem>
                 <SelectItem value="action">פעולה</SelectItem>
+                <SelectItem value="nir">בדיקת NIR</SelectItem>
+                <SelectItem value="harvest">מסיק</SelectItem>
               </SelectContent>
             </Select>
 

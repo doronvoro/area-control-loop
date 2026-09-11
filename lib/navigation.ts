@@ -13,6 +13,11 @@ import {
   ClipboardList,
   ListChecks,
   RefreshCw,
+  Gauge,
+  Tractor,
+  Scale,
+  CloudSun,
+  CalendarRange,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -22,11 +27,23 @@ export interface NavItem {
   icon: LucideIcon;
 }
 
+/** Feature flags that gate a whole nav group, independent of role. */
+export interface NavFeatures {
+  /** Customer has at least one olive area. */
+  olive?: boolean;
+}
+
 export interface NavGroup {
   id: string;
   label: string;
   items: NavItem[];
   requiredRole?: 'customer_owner' | 'admin';
+  /**
+   * Gate on a capability rather than a role. Gating the olive module on crop
+   * rather than on a specific customer means the next olive grower needs no
+   * code change.
+   */
+  requiredFeature?: keyof NavFeatures;
 }
 
 export const workflowGroup: NavGroup = {
@@ -38,6 +55,21 @@ export const workflowGroup: NavGroup = {
     { href: '/actions', label: 'פעולות', icon: Zap },
     { href: '/areas', label: 'שטחים', icon: MapPin },
     { href: '/reports', label: 'דוחות', icon: FileText },
+  ],
+};
+
+export const oliveGroup: NavGroup = {
+  id: 'olive',
+  label: 'מסיק זית',
+  requiredFeature: 'olive',
+  items: [
+    { href: '/olive', label: 'סטטוס מסיק', icon: Gauge },
+    { href: '/olive/plots', label: 'חלקות זית', icon: MapPin },
+    { href: '/olive/nir', label: 'בדיקות NIR', icon: FlaskConical },
+    { href: '/olive/harvest', label: 'רישום מסיק', icon: Tractor },
+    { href: '/olive/yield', label: 'הערכת יבול', icon: Scale },
+    { href: '/olive/weather', label: 'מזג אוויר', icon: CloudSun },
+    { href: '/olive/seasons', label: 'עונות', icon: CalendarRange },
   ],
 };
 
@@ -66,15 +98,17 @@ export const adminGroup: NavGroup = {
   ],
 };
 
-export const allNavGroups: NavGroup[] = [workflowGroup, managementGroup, adminGroup];
+export const allNavGroups: NavGroup[] = [workflowGroup, oliveGroup, managementGroup, adminGroup];
 
 export const bottomNavItems: NavItem[] = workflowGroup.items;
 
 export function getVisibleNavGroups(
   isAdmin: boolean,
   isCustomerOwner: boolean,
+  features: NavFeatures = {}
 ): NavGroup[] {
   return allNavGroups.filter((group) => {
+    if (group.requiredFeature && !features[group.requiredFeature]) return false;
     if (!group.requiredRole) return true;
     if (group.requiredRole === 'admin') return isAdmin;
     if (group.requiredRole === 'customer_owner') return isAdmin || isCustomerOwner;

@@ -8,6 +8,8 @@
 export enum AreaTypeId {
   MONITORING = 'monitoring',
   ACTION = 'action',
+  NIR = 'nir',
+  HARVEST = 'harvest',
 }
 
 // Severity levels for monitoring and action reports
@@ -69,6 +71,115 @@ export const SIZE_UNIT_TYPES = [
 ] as const;
 
 export type SizeUnitTypeName = (typeof SIZE_UNIT_TYPES)[number]['name'];
+
+// ---------------------------------------------------------------------------
+// Olive harvest module
+// ---------------------------------------------------------------------------
+// Lookup values are stored in the DB as English codes and rendered in Hebrew,
+// the same convention worker_types already follows.
+
+// Status a measurement falls into, per parameter_rules.status
+export enum ParameterStatus {
+  IDLE = 'idle',
+  OK = 'ok',
+  PLAN = 'plan',
+  URGENT = 'urgent',
+}
+
+export const PARAMETER_STATUS_CONFIG: Record<
+  ParameterStatus,
+  { pillClass: string; severity: number }
+> = {
+  [ParameterStatus.IDLE]: { pillClass: 'olive-pill-idle', severity: 0 },
+  [ParameterStatus.OK]: { pillClass: 'olive-pill-ok', severity: 1 },
+  [ParameterStatus.PLAN]: { pillClass: 'olive-pill-plan', severity: 2 },
+  [ParameterStatus.URGENT]: { pillClass: 'olive-pill-urgent', severity: 3 },
+};
+
+// Ownership category of a plot (סוג מגדל)
+export enum PlotType {
+  OWNER = 'owner',
+  PARTNER = 'partner',
+  OCCASIONAL = 'occasional',
+}
+
+export const PLOT_TYPE_LABELS: Record<PlotType, string> = {
+  [PlotType.OWNER]: 'ארץ גשור',
+  [PlotType.PARTNER]: 'שותף',
+  [PlotType.OCCASIONAL]: 'מזדמן',
+};
+
+export const PLOT_TYPE_OPTIONS = [
+  { value: PlotType.OWNER, label: PLOT_TYPE_LABELS[PlotType.OWNER] },
+  { value: PlotType.PARTNER, label: PLOT_TYPE_LABELS[PlotType.PARTNER] },
+  { value: PlotType.OCCASIONAL, label: PLOT_TYPE_LABELS[PlotType.OCCASIONAL] },
+];
+
+// Harvesting equipment (סוג מוסקת)
+export enum HarvesterType {
+  X1190 = '1190x',
+  X9090 = '9090x',
+  OTHER = 'other',
+}
+
+export const HARVESTER_LABELS: Record<HarvesterType, string> = {
+  [HarvesterType.X1190]: 'ניו הולנד 11.90X כפולה',
+  [HarvesterType.X9090]: 'ניו הולנד 9090X',
+  [HarvesterType.OTHER]: 'אחר (קבלן חיצוני)',
+};
+
+export const HARVESTER_OPTIONS = [
+  { value: HarvesterType.X1190, label: HARVESTER_LABELS[HarvesterType.X1190] },
+  { value: HarvesterType.X9090, label: HARVESTER_LABELS[HarvesterType.X9090] },
+  { value: HarvesterType.OTHER, label: HARVESTER_LABELS[HarvesterType.OTHER] },
+];
+
+// Irrigation water source (סוג מים)
+export enum WaterType {
+  FRESH = 'fresh',
+  RECLAIMED = 'reclaimed',
+  KINNERET = 'kinneret',
+}
+
+export const WATER_TYPE_LABELS: Record<WaterType, string> = {
+  [WaterType.FRESH]: 'שפירים',
+  [WaterType.RECLAIMED]: 'קולחין',
+  [WaterType.KINNERET]: 'כנרת',
+};
+
+export const WATER_TYPE_OPTIONS = [
+  { value: WaterType.FRESH, label: WATER_TYPE_LABELS[WaterType.FRESH] },
+  { value: WaterType.RECLAIMED, label: WATER_TYPE_LABELS[WaterType.RECLAIMED] },
+  { value: WaterType.KINNERET, label: WATER_TYPE_LABELS[WaterType.KINNERET] },
+];
+
+// Alternate-bearing year type (סוג שנה)
+export enum SeasonYearType {
+  ON = 'ON',
+  OFF = 'OFF',
+}
+
+export const SEASON_YEAR_TYPE_LABELS: Record<SeasonYearType, string> = {
+  [SeasonYearType.ON]: 'שנה עמוסה (ON)',
+  [SeasonYearType.OFF]: 'שנה מועטה (OFF)',
+};
+
+// Compass direction the sample was taken from (רוח שמיים)
+export const NIR_DIRECTIONS = [
+  'צפון',
+  'דרום',
+  'מזרח',
+  'מערב',
+  'מרכז',
+  'צפון מזרח',
+  'צפון מערב',
+  'דרום מזרח',
+  'דרום מערב',
+  'מרכזי מזרחי',
+  'מרכזי מערבי',
+] as const;
+
+export type NirDirection = (typeof NIR_DIRECTIONS)[number];
 
 export type Json =
   | string
@@ -970,6 +1081,310 @@ export interface Database {
           completed_at?: string | null;
         };
       };
+      parameters: {
+        Row: {
+          code: string; // PK
+          label: string;
+          unit: string | null;
+          sort_order: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          code: string;
+          label: string;
+          unit?: string | null;
+          sort_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          code?: string;
+          label?: string;
+          unit?: string | null;
+          sort_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      parameter_rules: {
+        Row: {
+          id: string;
+          parameter_code: string;
+          upper_bound: number | null; // null = unbounded catch-all, must sort last
+          upper_inclusive: boolean;
+          status: ParameterStatus;
+          severity: number;
+          message: string;
+          sort_order: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          parameter_code: string;
+          upper_bound?: number | null;
+          upper_inclusive?: boolean;
+          status: ParameterStatus;
+          severity?: number;
+          message: string;
+          sort_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          parameter_code?: string;
+          upper_bound?: number | null;
+          upper_inclusive?: boolean;
+          status?: ParameterStatus;
+          severity?: number;
+          message?: string;
+          sort_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      olive_plot_details: {
+        Row: {
+          area_id: string; // PK, 1:1 with areas
+          grower_name: string | null;
+          region: string | null;
+          plot_type: PlotType | null;
+          harvester: HarvesterType | null;
+          water_type: WaterType | null;
+          takt_count: number | null;
+          plant_year_label: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          area_id: string;
+          grower_name?: string | null;
+          region?: string | null;
+          plot_type?: PlotType | null;
+          harvester?: HarvesterType | null;
+          water_type?: WaterType | null;
+          takt_count?: number | null;
+          plant_year_label?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          area_id?: string;
+          grower_name?: string | null;
+          region?: string | null;
+          plot_type?: PlotType | null;
+          harvester?: HarvesterType | null;
+          water_type?: WaterType | null;
+          takt_count?: number | null;
+          plant_year_label?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      seasons: {
+        Row: {
+          id: string;
+          name: string;
+          year_type: SeasonYearType | null;
+          starts_on: string;
+          ends_on: string;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          year_type?: SeasonYearType | null;
+          starts_on: string;
+          ends_on: string;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          year_type?: SeasonYearType | null;
+          starts_on?: string;
+          ends_on?: string;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      yield_estimates: {
+        Row: {
+          id: string;
+          area_id: string;
+          season_id: string;
+          kg_per_dunam: number | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          area_id: string;
+          season_id: string;
+          kg_per_dunam?: number | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          area_id?: string;
+          season_id?: string;
+          kg_per_dunam?: number | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      variety_windows: {
+        Row: {
+          id: string;
+          variety: string;
+          start_dm: string; // 'DD/MM'
+          end_dm: string; // 'DD/MM', may wrap the year end
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          variety: string;
+          start_dm: string;
+          end_dm: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          variety?: string;
+          start_dm?: string;
+          end_dm?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      weather_days: {
+        Row: {
+          id: string;
+          entry_date: string;
+          temp_min: number | null;
+          temp_max: number | null;
+          rain_mm: number | null;
+          wind_kmh: number | null;
+          is_manual: boolean; // manual rows win over fetched forecast
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          entry_date: string;
+          temp_min?: number | null;
+          temp_max?: number | null;
+          rain_mm?: number | null;
+          wind_kmh?: number | null;
+          is_manual?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          entry_date?: string;
+          temp_min?: number | null;
+          temp_max?: number | null;
+          rain_mm?: number | null;
+          wind_kmh?: number | null;
+          is_manual?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      nir_report: {
+        Row: {
+          report_area_id: string; // PK, detail of report_areas where area_type_id = 'nir'
+          sub_area_id: string | null;
+          oil: number | null;
+          water: number | null;
+          dry: number | null; // GENERATED ALWAYS — never written
+          green: number | null;
+          acid: number | null;
+          maturity: number | null;
+          irrig_amount: number | null;
+          direction: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          report_area_id: string;
+          sub_area_id?: string | null;
+          oil?: number | null;
+          water?: number | null;
+          green?: number | null;
+          acid?: number | null;
+          maturity?: number | null;
+          irrig_amount?: number | null;
+          direction?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          report_area_id?: string;
+          sub_area_id?: string | null;
+          oil?: number | null;
+          water?: number | null;
+          green?: number | null;
+          acid?: number | null;
+          maturity?: number | null;
+          irrig_amount?: number | null;
+          direction?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      harvest_report: {
+        Row: {
+          report_area_id: string; // PK, detail of report_areas where area_type_id = 'harvest'
+          sub_area_id: string | null;
+          pass_number: number;
+          harvester_type: string | null;
+          operator: string | null;
+          area_done_dunam: number | null;
+          fruit_kg: number | null;
+          oil_kg: number | null;
+          is_final: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          report_area_id: string;
+          sub_area_id?: string | null;
+          pass_number?: number;
+          harvester_type?: string | null;
+          operator?: string | null;
+          area_done_dunam?: number | null;
+          fruit_kg?: number | null;
+          oil_kg?: number | null;
+          is_final?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          report_area_id?: string;
+          sub_area_id?: string | null;
+          pass_number?: number;
+          harvester_type?: string | null;
+          operator?: string | null;
+          area_done_dunam?: number | null;
+          fruit_kg?: number | null;
+          oil_kg?: number | null;
+          is_final?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
     };
   };
 }
@@ -986,3 +1401,14 @@ export type Role = Database['public']['Tables']['roles']['Row'];
 export type Permission = Database['public']['Tables']['permissions']['Row'];
 export type RolePermission = Database['public']['Tables']['role_permissions']['Row'];
 export type UserRole = Database['public']['Tables']['user_roles']['Row'];
+
+// Olive harvest module
+export type Parameter = Database['public']['Tables']['parameters']['Row'];
+export type ParameterRule = Database['public']['Tables']['parameter_rules']['Row'];
+export type OlivePlotDetails = Database['public']['Tables']['olive_plot_details']['Row'];
+export type Season = Database['public']['Tables']['seasons']['Row'];
+export type YieldEstimate = Database['public']['Tables']['yield_estimates']['Row'];
+export type VarietyWindow = Database['public']['Tables']['variety_windows']['Row'];
+export type WeatherDay = Database['public']['Tables']['weather_days']['Row'];
+export type NirReport = Database['public']['Tables']['nir_report']['Row'];
+export type HarvestReport = Database['public']['Tables']['harvest_report']['Row'];
