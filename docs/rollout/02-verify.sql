@@ -1,64 +1,110 @@
 -- Olive rollout — VERIFY. Read-only. Run straight after the migrations,
--- BEFORE merging anything else and BEFORE the data import.
+-- BEFORE the data import.
 --
--- The point of running this before the import is attribution: if the existing
--- tenant regresses here, it is unambiguously the RLS drop in migration 2, not
--- the import.
+-- Running it before the import is about attribution: if the existing tenant
+-- regresses here, it is unambiguously the RLS drop, not the import.
+--
+-- Pure SQL, one grid. Paste into Supabase Studio → SQL Editor.
+-- Every row has an explicit want= so you are comparing, not interpreting.
 
-\echo '=== 1. all 9 olive tables now exist (expect 9 rows) ==='
-select table_name from information_schema.tables
-where table_schema = 'public' and table_name in (
-  'parameters','parameter_rules','olive_plot_details','seasons',
-  'yield_estimates','variety_windows','weather_days','nir_report','harvest_report')
-order by table_name;
+select *
+from (
+  values
+    -- schema ────────────────────────────────────────────────────────────────
+    (0, 'olive tables',
+     coalesce(
+       (select count(*)::text || ' of 9 — ' || string_agg(table_name, ', ' order by table_name)
+        from information_schema.tables
+        where table_schema = 'public'
+          and table_name in ('parameters','parameter_rules','olive_plot_details',
+                             'seasons','yield_estimates','variety_windows',
+                             'weather_days','nir_report','harvest_report')),
+       '*** NONE ***'),
+     'want: 9 of 9'),
 
-\echo ''
-\echo '=== 2. report_number is a BY DEFAULT identity (this unblocks the core screens) ==='
-select column_name, is_identity, identity_generation
-from information_schema.columns
-where table_schema = 'public' and table_name = 'report_areas' and column_name = 'report_number';
+    (1, 'report_areas.report_number',
+     coalesce(
+       (select 'is_identity=' || is_identity
+               || ', generation=' || coalesce(identity_generation, '(none)')
+        from information_schema.columns
+        where table_schema = 'public'
+          and table_name = 'report_areas'
+          and column_name = 'report_number'),
+       '*** MISSING ***'),
+     'want: is_identity=YES, generation=BY DEFAULT'),
 
-\echo ''
-\echo '=== 3. seeded lookup data ==='
-select 'parameters' t, count(*) from parameters
-union all select 'parameter_rules', count(*) from parameter_rules
-order by t;
--- expect parameters 7; parameter_rules split oil 3 / water 4 / dry 3:
-select parameter_code, count(*) from parameter_rules group by parameter_code order by parameter_code;
+    -- seeded lookup data ────────────────────────────────────────────────────
+    (2, 'parameters',
+     (select count(*)::text from parameters),
+     'want: 7'),
 
-\echo ''
-\echo '=== 4. report types (expect exactly: action, harvest, monitoring, nir) ==='
-select name from report_area_types order by name;
+    (3, 'parameter_rules by parameter',
+     coalesce(
+       (select string_agg(parameter_code || '=' || n::text, ', ' order by parameter_code)
+        from (select parameter_code, count(*) n from parameter_rules group by parameter_code) s),
+       '*** NONE ***'),
+     'want: dry=3, oil=3, water=4'),
 
-\echo ''
-\echo '=== 5. the recursion policy is gone from areas ==='
-select polname from pg_policy where polrelid = 'public.areas'::regclass order by polname;
--- "Users can view areas through report areas" must NOT be listed.
--- "Users can view accessible areas" and "Admins can view all areas" must be.
+    (4, 'report_area_types',
+     coalesce(
+       (select string_agg(name, ', ' order by name) from report_area_types),
+       '*** NONE ***'),
+     'want: action, harvest, monitoring, nir'),
 
-\echo ''
-\echo '=== 6. baseline counts — compare against 00-preflight step 8 ==='
--- Nothing should have changed yet. The migrations add no rows to these tables.
-select 'areas' t, count(*) from areas
-union all select 'customers', count(*) from customers
-union all select 'customer_areas', count(*) from customer_areas
-union all select 'sub_areas', count(*) from sub_areas
-union all select 'report_areas', count(*) from report_areas
-union all select 'workers', count(*) from workers
-order by t;
+    (5, 'crops named זית',
+     (select count(*)::text from crops where name = 'זית'),
+     'want: exactly 1 (create it if 0)'),
 
-\echo ''
-\echo '=== 7. no olive data yet (all must be 0) ==='
-select 'olive_plot_details' t, count(*) from olive_plot_details
-union all select 'yield_estimates', count(*) from yield_estimates
-union all select 'nir_report', count(*) from nir_report
-union all select 'harvest_report', count(*) from harvest_report
-union all select 'variety_windows', count(*) from variety_windows
-order by t;
+    -- the one change that touches the live tenant ───────────────────────────
+    (6, 'recursion policy on areas',
+     case
+       when exists (select 1 from pg_policy
+                    where polrelid = to_regclass('public.areas')
+                      and polname = 'Users can view areas through report areas')
+       then '*** STILL PRESENT — the RLS migration did not run ***'
+       else 'gone (correct)'
+     end,
+     'want: gone'),
 
--- THEN, before going further, exercise the LIVE SITE as the existing customer
--- and as one of their workers:
---   /areas · /reports (area names must render, not "-") · open a report detail
---   sheet · /actions · /map
--- Those are exactly the surfaces migration 2 changes. If area names go blank,
--- run 03-rollback.sql's POLICY section only, stop, and re-plan the RLS fix.
+    (7, 'remaining policies on areas',
+     coalesce(
+       (select string_agg(polname, '  |  ' order by polname)
+        from pg_policy where polrelid = to_regclass('public.areas')),
+       '*** NONE — everything is locked out ***'),
+     'want: "Users can view accessible areas" AND "Admins can view all areas" present'),
+
+    -- nothing should have moved yet ─────────────────────────────────────────
+    (8, 'baseline counts',
+     (select 'areas=' || (select count(*) from areas)
+          || '  customers=' || (select count(*) from customers)
+          || '  customer_areas=' || (select count(*) from customer_areas)
+          || '  sub_areas=' || (select count(*) from sub_areas)
+          || '  report_areas=' || (select count(*) from report_areas)
+          || '  workers=' || (select count(*) from workers)),
+     'want: identical to 00-preflight — migrations add no rows here'),
+
+    (9, 'olive data',
+     (select 'plots=' || (select count(*) from olive_plot_details)
+          || '  yield=' || (select count(*) from yield_estimates)
+          || '  nir=' || (select count(*) from nir_report)
+          || '  harvest=' || (select count(*) from harvest_report)
+          || '  windows=' || (select count(*) from variety_windows)),
+     'want: all 0 — the import has not run yet')
+) as t(ord, check_name, result, want)
+order by ord;
+
+
+-- ============================================================================
+-- THEN exercise the LIVE SITE, as the existing customer AND as one of their
+-- workers. SQL cannot tell you this part.
+--
+--   /areas
+--   /reports          <- area names must render, NOT "-"
+--   open a report detail sheet
+--   /actions
+--   /map
+--
+-- These are exactly the surfaces the RLS migration changes. If area names go
+-- blank, run SECTION A of 03-rollback.sql, stop, and re-plan the RLS fix.
+-- Everything else can proceed independently.
+-- ============================================================================

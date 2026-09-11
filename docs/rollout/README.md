@@ -39,6 +39,13 @@ Apply the SQL directly instead, and reconcile the ledger afterwards.
 Run in Supabase Studio → SQL Editor, or psql against the pooler on **port 5432
 (session mode)** — never 6543.
 
+All four files are **pure SQL with no psql meta-commands**, so they paste into
+Studio as-is. The read-only ones each return a **single result grid**, because
+Studio shows only the last result set when a script has several statements —
+`00-preflight` and `02-verify` are therefore one big `values` list rather than a
+series of queries. `02-verify` carries an explicit `want=` on every row so you
+are comparing, not interpreting.
+
 | # | File | Writes? | Notes |
 | --- | --- | --- | --- |
 | 0 | `00-preflight.sql` | no | Keep the output. It is the before-picture and half the rollback. |
