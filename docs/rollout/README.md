@@ -1,25 +1,36 @@
 # Olive module — production schema rollout
 
-## The situation
+## Status
 
-The PR is merged into `main` (`17279d7`), and the git→Vercel pipeline deploys
-`main`. **The olive code is therefore already live**, while the database may not
-yet have the schema it depends on.
+**The schema is applied.** `02-verify.sql` against production returned 9 of 9
+olive tables, `parameters` 7, `parameter_rules` dry=3/oil=3/water=4,
+`report_area_types` = action/harvest/monitoring/nir, and — the load-bearing
+result — baseline counts **byte-identical to the pre-flight**:
 
-That inverts the original plan, which assumed schema-then-code. It matters
-because `report_areas.report_number` is not olive-only — it is selected by:
+```
+areas=23  customers=3  customer_areas=23  sub_areas=76  report_areas=7  workers=13
+```
 
-| Path | File |
-| --- | --- |
-| Reports list | `app/api/reports/route.ts:31` |
-| Report detail | `lib/reports/fetch-report-detail.ts:57` |
-| Monitoring submit | `lib/services/monitoring.service.ts:98` |
-| Action tasks list | `app/api/action-tasks/route.ts:64` |
-| Complete a task | `app/api/action-tasks/complete/route.ts:325` |
+So the migrations added nothing to the existing tenant, which is exactly what
+additive migrations should do.
 
-If that column is missing in production, those screens are erroring for the
-existing tenant **right now**. `00-preflight.sql` step 1 answers that in one
-query, and it is the first thing to run.
+Remaining: create the `זית` crop (`04-create-crop.sql`), create the גשור tenant
+through the live UI, then import. See the step table below.
+
+### Background
+
+The PR is merged into `main` (`17279d7`) and the git→Vercel pipeline deploys
+`main`, so the olive code went live *before* its schema. That inverted the
+original plan. It mattered because `report_areas.report_number` is not
+olive-only — it is selected by the reports list
+(`app/api/reports/route.ts:31`), report detail
+(`lib/reports/fetch-report-detail.ts:57`), monitoring submit
+(`lib/services/monitoring.service.ts:98`) and action tasks
+(`app/api/action-tasks/route.ts:64`).
+
+That turned out fine: the column already existed as a serial and had been
+numbering reports all along. Nothing was ever broken. The pre-flight's job was
+to establish that rather than assume it.
 
 ## Why not `supabase db push`
 
@@ -28,11 +39,12 @@ Three reasons, any one of which is sufficient:
 1. `20260227000000_add_geometry_to_areas.sql` was committed empty and back-filled
    later. Its version may already be recorded as applied while its content never
    ran, so `db push` would skip it.
-2. Production is a restored project; the migration ledger is not trustworthy
-   until `00-preflight.sql` step 9 has been read.
+2. Production is a restored project whose schema has been edited by hand; the
+   migration ledger does not describe it. Confirmed — see below.
 3. `db push` gives no chance to stop between the RLS change and everything else.
 
-Apply the SQL directly instead, and reconcile the ledger afterwards.
+Apply the SQL directly instead. Do **not** reconcile the ledger afterwards: it is
+already decorative, and repairing it would only make it lie more confidently.
 
 ## Order
 
@@ -54,7 +66,11 @@ are comparing, not interpreting.
 | 3 | *(backup)* | — | See below. Do not skip. |
 | 4 | `01-migrations-in-order.sql` | **yes** | All 7, timestamp order, one transaction. |
 | 5 | `02-verify.sql` | no | Then exercise the live site as the existing tenant. |
-| 6 | *(ledger repair)* | — | Skip. The ledger is not load-bearing here — see below. |
+| 6 | `04-create-crop.sql` | **yes** | Creates the `זית` crop. One row. |
+| 7 | *(create the גשור tenant)* | yes | Through the live UI — see below. |
+| 8 | *(import)* | yes | Dry run first. See below. |
+
+Ledger repair is deliberately absent: the ledger is already decorative here.
 
 `01a-fix-report-number.sql` is **not needed on the current production database**.
 Its header explains when it would be.
@@ -130,8 +146,8 @@ neither is confirmed, stop.**
 | File | Effect | Risk |
 | --- | --- | --- |
 | `20260227000000_add_geometry_to_areas` | geometry jsonb on areas/sub_areas | none, expect no-op |
-| `20260907000000_fix_areas_report_areas_rls_recursion` | **drops** `"Users can view areas through report areas"` | **the only change that touches the live tenant** |
-| `20260908000000_add_report_number_to_report_areas` | `report_number` identity column | unblocks the core screens |
+| `20260907000000_fix_areas_report_areas_rls_recursion` | **drops** `"Users can view areas through report areas"` | **no-op** — that policy was already absent |
+| `20260908000000_add_report_number_to_report_areas` | `report_number` identity column | **no-op** — the column exists as a serial |
 | `20260908100000_create_olive_parameters` | `parameters`, `parameter_rules` + seed | additive |
 | `20260908110000_create_olive_plot_tables` | 5 olive tables | additive |
 | `20260908120000_create_olive_report_types` | `nir_report`, `harvest_report` | additive |

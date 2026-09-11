@@ -22,16 +22,19 @@ from (
        '*** NONE ***'),
      'want: 9 of 9'),
 
-    (1, 'report_areas.report_number',
+    (1, 'report_areas.report_number auto-assigns',
      coalesce(
-       (select 'is_identity=' || is_identity
-               || ', generation=' || coalesce(identity_generation, '(none)')
+       (select case
+                 when is_identity = 'YES' then 'identity (' || coalesce(identity_generation,'?') || ') — OK'
+                 when column_default like 'nextval(%' then 'serial: ' || column_default || ' — OK'
+                 else '*** neither identity nor serial: inserts will get NULL ***'
+               end
         from information_schema.columns
         where table_schema = 'public'
           and table_name = 'report_areas'
           and column_name = 'report_number'),
        '*** MISSING ***'),
-     'want: is_identity=YES, generation=BY DEFAULT'),
+     'want: identity OR serial — this production uses a serial, which is fine'),
 
     -- seeded lookup data ────────────────────────────────────────────────────
     (2, 'parameters',
@@ -66,12 +69,13 @@ from (
      end,
      'want: gone'),
 
-    (7, 'remaining policies on areas',
+    (7, 'SELECT path on areas survives',
      coalesce(
        (select string_agg(polname, '  |  ' order by polname)
-        from pg_policy where polrelid = to_regclass('public.areas')),
+        from pg_policy where polrelid = to_regclass('public.areas') and polcmd = 'r'),
        '*** NONE — everything is locked out ***'),
-     'want: "Users can view accessible areas" AND "Admins can view all areas" present'),
+     'want: "Users can view accessible areas" present. NOTE: "Admins can view all areas" '
+     || 'is absent on this production and was absent BEFORE the migrations too — pre-existing, not a regression'),
 
     -- nothing should have moved yet ─────────────────────────────────────────
     (8, 'baseline counts',
