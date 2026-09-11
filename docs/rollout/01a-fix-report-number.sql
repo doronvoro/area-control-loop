@@ -1,5 +1,23 @@
 -- Olive rollout — CONVERT report_areas.report_number TO AN IDENTITY COLUMN.
 --
+-- ┌──────────────────────────────────────────────────────────────────────────┐
+-- │ NOT NEEDED ON THE CURRENT PRODUCTION DATABASE. DO NOT RUN IT THERE.       │
+-- │                                                                          │
+-- │ The follow-up diagnostics showed report_number carries                    │
+-- │   default nextval('report_areas_report_number_seq'::regclass)            │
+-- │ so it is a SERIAL column, not a bare integer: it already auto-assigns,    │
+-- │ and min=107 max=122 shows it has been doing so. A serial and an identity  │
+-- │ are equivalent for everything this application does — the difference is   │
+-- │ catalog metadata, not behaviour.                                          │
+-- │                                                                          │
+-- │ Converting would drop a working default and orphan the existing sequence  │
+-- │ to buy nothing. Leave it alone.                                           │
+-- │                                                                          │
+-- │ Keep this file for the case it was written for: report_number present     │
+-- │ with is_identity=NO *and* no default, where inserts really would get      │
+-- │ NULL. 00b-followup.sql row 3 is what tells the two apart.                 │
+-- └──────────────────────────────────────────────────────────────────────────┘
+--
 -- WHY THIS FILE EXISTS
 -- Production already has report_areas.report_number as a PLAIN INTEGER
 -- (is_identity=NO). Migration 20260908000000 says:
