@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/server';
-import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
+import { getApiContext } from '@/lib/api/auth-context';
+import { assertAreaVisible } from '@/lib/api/utils';
 import { handleApiError } from '@/lib/api-utils';
 
 interface SubArea {
@@ -45,30 +46,22 @@ export async function GET(request: Request) {
       );
     }
 
-    const supabase = await createClient();
+    // Tenancy check first: this handler read through adminClient with no
+    // authorization at all, so any logged-in user could fetch any area's
+    // sub-area tree by id.
+    const ctx = await getApiContext();
+    await assertAreaVisible(ctx.supabase, areaId);
+
+    // adminClient is retained for the tree read itself — buildTree needs every
+    // row in the area to resolve parent chains, and a partial result would
+    // silently drop branches rather than fail.
     const adminClient = createAdminClient();
 
-    // Use admin client to bypass RLS
     const { data, error } = await (adminClient.from('sub_areas') as any)
       .select('*')
       .eq('area_id', areaId)
       .order('level')
       .order('name');
-
-    // Debug: check auth status
-    const { data: { user } } = await supabase.auth.getUser();
-    console.log('[sub-areas/tree] user id:', user?.id);
-
-    // Check if user is admin via user_roles
-    const { data: adminCheck } = await supabase
-      .from('user_roles')
-      .select('roles(name)')
-      .eq('user_id', user?.id || '');
-    console.log('[sub-areas/tree] user roles:', JSON.stringify(adminCheck, null, 2));
-
-    console.log('[sub-areas/tree] areaId:', areaId);
-    console.log('[sub-areas/tree] data:', JSON.stringify(data, null, 2));
-    console.log('[sub-areas/tree] error:', error);
 
     if (error) throw error;
 
