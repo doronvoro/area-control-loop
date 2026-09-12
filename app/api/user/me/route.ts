@@ -24,15 +24,41 @@ async function hasOliveAreas(ctx: Awaited<ReturnType<typeof getApiContext>>): Pr
   return (data || []).length > 0;
 }
 
+/**
+ * The admin's currently selected customer, for the switcher to display.
+ *
+ * Null for everyone else: only an admin has a selection. Read on adminClient
+ * because whether an admin can SELECT `customers` through RLS differs between
+ * databases, and the switcher showing a blank label over a working selection
+ * would be a confusing way to discover that.
+ */
+async function selectedCustomerSummary(
+  ctx: Awaited<ReturnType<typeof getApiContext>>
+): Promise<{ id: string; name: string } | null> {
+  if (!ctx.isAdmin || !ctx.scopedCustomerId) return null;
+
+  const { data } = await ctx.adminClient
+    .from('customers')
+    .select('id, name')
+    .eq('id', ctx.scopedCustomerId)
+    .maybeSingle();
+
+  // A selection pointing at a deleted customer reports as none, so the UI
+  // falls back to the unselected state instead of showing a stale name.
+  const row = data as { id: string; name: string } | null;
+  return row ? { id: row.id, name: row.name } : null;
+}
+
 export async function GET() {
   try {
     const ctx = await getApiContext();
 
     const nameFromMetadata = ctx.user.user_metadata?.name || ctx.user.email?.split('@')[0] || '';
 
-    const [rolesResult, olive] = await Promise.all([
+    const [rolesResult, olive, selectedCustomer] = await Promise.all([
       (ctx.supabase.from('user_roles') as any).select('roles(name, display_name)').eq('user_id', ctx.user.id),
       hasOliveAreas(ctx),
+      selectedCustomerSummary(ctx),
     ]);
 
     let displayName = nameFromMetadata;
@@ -52,6 +78,7 @@ export async function GET() {
       isAdmin: ctx.isAdmin,
       isCustomerOwner,
       features: { olive },
+      selectedCustomer,
     });
   } catch (error) {
     return handleApiError(error);

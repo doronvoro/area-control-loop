@@ -1,9 +1,14 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { AuthError } from '@/lib/auth';
-import { headers } from 'next/headers';
+import { headers, cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { NextResponse } from 'next/server';
 import type { SupabaseClient, User } from '@supabase/supabase-js';
+import {
+  SELECTED_CUSTOMER_COOKIE,
+  parseSelectionCookie,
+  resolveScopedCustomerId,
+} from './customer-selection';
 
 export interface ApiContext {
   supabase: SupabaseClient;
@@ -12,6 +17,14 @@ export interface ApiContext {
   worker: any | null;
   customer: any | null;
   isAdmin: boolean;
+  /**
+   * The customer this request is scoped to: an admin's selected customer, or
+   * for everyone else their own tenancy. Null for an admin who has not selected
+   * one, and for a user with no tenancy at all.
+   *
+   * Scoping only — not an authorization boundary. See lib/api/customer-selection.ts.
+   */
+  scopedCustomerId: string | null;
 }
 
 async function isBearerRequest(): Promise<boolean> {
@@ -61,6 +74,15 @@ export async function getApiContext(): Promise<ApiContext> {
     }).then(({ data }: { data: boolean }) => data === true),
   ]);
 
+  // Read after the role is known: the cookie is only consulted for admins, and
+  // a Bearer (mobile) request carries no cookies at all, which is why the
+  // ?customerId= override has to stay as the Bearer-compatible channel.
+  const cookieStore = await cookies();
+  const cookieCustomerId = parseSelectionCookie(
+    cookieStore.get(SELECTED_CUSTOMER_COOKIE)?.value,
+    user.id
+  );
+
   return {
     supabase,
     adminClient,
@@ -68,6 +90,12 @@ export async function getApiContext(): Promise<ApiContext> {
     worker: workerResult,
     customer: customerResult,
     isAdmin: adminRoleResult,
+    scopedCustomerId: resolveScopedCustomerId({
+      isAdmin: adminRoleResult,
+      cookieCustomerId,
+      ownedCustomerId: (customerResult as { id?: string } | null)?.id ?? null,
+      workerCustomerId: (workerResult as { customer_id?: string } | null)?.customer_id ?? null,
+    }),
   };
 }
 
