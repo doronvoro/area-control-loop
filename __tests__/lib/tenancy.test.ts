@@ -35,11 +35,12 @@ function ctx(overrides: Partial<ApiContext>): ApiContext {
 }
 
 describe('scopedAreaIds', () => {
-  it('returns null for an admin with no selection — no filter, sees every tenant', async () => {
-    // Phase 5 changes this to []. Until then, returning [] here would blank
-    // every admin screen in the app at once.
+  it('returns [] for an admin with no selection — scoped to nothing', async () => {
+    // Not null. An admin who has not chosen a customer sees nothing and is
+    // prompted to choose; returning null here would restore the merged
+    // all-tenants view the switcher exists to replace.
     const result = await scopedAreaIds(ctx({ isAdmin: true }));
-    expect(result).toBeNull();
+    expect(result).toEqual([]);
   });
 
   it("returns an admin's selected customer areas", async () => {
@@ -81,17 +82,18 @@ describe('scopedAreaIds', () => {
     expect(result).toEqual(['area-a1', 'area-a2']);
   });
 
-  it('distinguishes null from [] in a way truthiness would not', async () => {
-    // Documents why callers must test `=== null`: both values are falsy in no
-    // useful sense, and `if (areaIds)` is true for [] — which would apply an
-    // empty IN filter, while `if (!areaIds)` is false for [] — which would skip
-    // filtering entirely. Either mistake is a tenant leak or a blank screen.
-    const adminNoSelection = await scopedAreaIds(ctx({ isAdmin: true }));
-    const noTenancy = await scopedAreaIds(ctx({ isAdmin: false }));
-
-    expect(adminNoSelection).toBeNull();
-    expect(noTenancy).toEqual([]);
-    expect(Boolean(adminNoSelection)).toBe(false);
-    expect(Boolean(noTenancy)).toBe(true);
+  it('never returns null today — every caller is scoped to something', async () => {
+    // null still means "no filter" and callers must keep branching on
+    // `=== null`, but nothing produces it now. If a future caller does, this
+    // test failing is the reminder to check every `areaIds !== null` site
+    // rather than assume the array form.
+    for (const c of [
+      ctx({ isAdmin: true }),
+      ctx({ isAdmin: false }),
+      ctx({ isAdmin: true, scopedCustomerId: CUSTOMER_A }),
+      ctx({ scopedCustomerId: CUSTOMER_EMPTY }),
+    ]) {
+      expect(await scopedAreaIds(c)).not.toBeNull();
+    }
   });
 });

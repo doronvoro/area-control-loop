@@ -82,14 +82,14 @@ describe('getAccessibleAreaIds', () => {
     expect(ids).not.toContain('area-orphan');
   });
 
-  it('falls back to every area for an admin with no customer selected', async () => {
-    // Phase 5 of the tenant switcher changes this to [] so an admin sees
-    // nothing until they choose. Until then this preserves current behaviour,
-    // which is what lets the switcher ship without changing what anyone sees.
+  it('gives an admin with no customer selected NOTHING, not everything', async () => {
+    // The switcher's whole point. Before it, an admin saw every tenant merged
+    // together; a stray click could edit the wrong tenant's data and nothing on
+    // screen said which one you were in. The empty result drives a "choose a
+    // customer" banner, not an error.
     const ids = await getAccessibleAreaIds(supabase as unknown as SupabaseClient, true, null);
 
-    expect(ids).toHaveLength(4);
-    expect(ids).toContain('area-orphan');
+    expect(ids).toEqual([]);
   });
 
   it('never leaks another tenant when a customer is given', async () => {

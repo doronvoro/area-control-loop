@@ -46,23 +46,25 @@ export async function getAllAreaIds(supabase: SupabaseClient): Promise<string[]>
  * exactly the user who most needed it to work. The old order looks deliberate,
  * which is why it survived so long.
  *
- * The `isAdmin` case is now only the fallback for an admin with no customer
- * selected. Phase 5 of the tenant-switcher work replaces it with `[]`, so that
- * an admin sees nothing until they choose; it is kept for now so the switcher
- * can land without changing what anyone currently sees.
+ * An admin with no customer selected now gets NOTHING, not everything. Until
+ * the switcher shipped they saw every tenant at once, which made support work
+ * impractical and meant a stray click could edit the wrong tenant's data. The
+ * empty result is a prompt to choose, surfaced in the UI by a banner, not an
+ * error.
+ *
+ * `getAllAreaIds` is therefore no longer reachable from here. It is kept as an
+ * export because the import script and area-management tooling legitimately
+ * want every area.
  *
  * RLS remains the enforcement boundary — this narrows, it does not authorize.
  */
 export async function getAccessibleAreaIds(
   supabase: SupabaseClient,
-  isAdmin: boolean,
+  _isAdmin: boolean,
   customerId: string | null
 ): Promise<string[]> {
   if (customerId) {
     return getCustomerAreaIds(supabase, customerId);
-  }
-  if (isAdmin) {
-    return getAllAreaIds(supabase);
   }
   return [];
 }

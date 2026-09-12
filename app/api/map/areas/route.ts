@@ -9,7 +9,12 @@ export async function GET() {
     const targetCustomerId = resolveCustomerId(ctx);
 
     if (!targetCustomerId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      // 200 with an empty payload, not 401. "No customer selected" is the
+      // normal resting state for an admin who has just logged in, and there is
+      // no global 401 handler on the client — a 401 here surfaced as the
+      // English word "Unauthorized" in a red box inside a Hebrew RTL app. The
+      // UI shows a "choose a customer" banner instead.
+      return NextResponse.json([]);
     }
 
     // Get areas for customer with geometry (exclude indoor areas)

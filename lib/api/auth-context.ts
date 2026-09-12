@@ -176,13 +176,13 @@ export async function requireAdminOrCustomerOwner(ctx: ApiContext): Promise<Next
  * works for Bearer (mobile) requests, which carry no cookies and therefore have
  * no selection.
  *
- * The final fallback preserves today's behaviour for an admin who has not
- * selected a customer — several of these accounts hold a legacy `customers` row
- * linked to every area. Phase 5 removes it, at which point an admin with no
- * selection resolves to null and sees nothing until they choose.
+ * An admin with no selection resolves to null and therefore sees nothing until
+ * they choose. There is deliberately no fallback to a `customers` row they may
+ * hold: the old create-admin script gave admins one linked to every area, so
+ * falling back would silently restore the unscoped view and make the switcher
+ * look broken. `scopedCustomerId` already encodes that precedence.
  */
 export function resolveCustomerId(ctx: ApiContext, override?: string | null): string | null {
   if (ctx.isAdmin && override) return override;
-  if (ctx.scopedCustomerId) return ctx.scopedCustomerId;
-  return ctx.customer?.id || ctx.worker?.customer_id || null;
+  return ctx.scopedCustomerId;
 }

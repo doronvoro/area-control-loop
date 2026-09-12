@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import { UserProvider } from '@/components/providers/UserProvider';
 import { Sidebar } from './Sidebar';
 import { BottomNav } from './BottomNav';
+import { SelectCustomerBanner } from './SelectCustomerBanner';
 
 interface AppShellProps {
   children: ReactNode;
@@ -48,6 +49,7 @@ export function AppShell({ children }: AppShellProps) {
           )}
         >
           <div className="page-enter container mx-auto px-4 py-6 md:py-8">
+            <SelectCustomerBanner />
             {children}
           </div>
         </main>

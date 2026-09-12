@@ -9,14 +9,17 @@ import { AuthError } from '@/lib/auth';
  *
  * THE RETURN VALUES ARE NOT INTERCHANGEABLE:
  *
- *   null  →  add no filter. The caller is an admin who has not selected a
- *            customer, and is deliberately seeing every tenant. Returning []
- *            here instead would blank every admin screen.
+ *   null  →  add no filter. Reserved for callers that genuinely span tenants;
+ *            nothing returns it today. Kept because the difference between
+ *            "unscoped" and "scoped to nothing" has to stay expressible — the
+ *            two are one character apart at every call site and mean opposite
+ *            things.
  *
- *   []    →  the request IS scoped, to something with no areas: a customer with
- *            none yet, or a user with no tenancy at all. The response must be
- *            empty. Treating this as "no filter" would show that caller
- *            everything — the exact inversion this helper exists to prevent.
+ *   []    →  the request IS scoped, to something with no areas: an admin who
+ *            has not picked a customer, a customer with no areas yet, or a user
+ *            with no tenancy at all. The response must be empty. Treating this
+ *            as "no filter" would show that caller everything — the exact
+ *            inversion this helper exists to prevent.
  *
  * Callers must branch on null explicitly rather than on truthiness, because an
  * empty array is truthy in the one place it matters and falsy nowhere useful.
@@ -30,11 +33,10 @@ export async function scopedAreaIds(
 ): Promise<string[] | null> {
   const customerId = resolveCustomerId(ctx, override);
 
-  if (!customerId) {
-    // Phase 5 of the customer switcher changes the admin branch to [], so an
-    // admin sees nothing until they pick a customer.
-    return ctx.isAdmin ? null : [];
-  }
+  // An admin with no selection is scoped to nothing, not to everything. Before
+  // the switcher they saw every tenant merged together; now the empty result
+  // drives a "choose a customer" banner instead.
+  if (!customerId) return [];
 
   return getCustomerAreaIds(ctx.supabase, customerId);
 }
