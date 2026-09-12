@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getApiContext } from '@/lib/api/auth-context';
+import { scopedAreaIds } from '@/lib/api/tenancy';
 import { handleApiError } from '@/lib/api-utils';
 import { fetchReportDetail } from '@/lib/reports/fetch-report-detail';
 import { STATUS_LABELS, TREATMENT_STATUS_LABELS } from '@/lib/reports/labels';
@@ -43,11 +44,21 @@ export async function GET() {
     const ctx = await getApiContext();
 
     // Fetch all report IDs
-    const { data: reportAreas, error } = await ctx.supabase
+    let listQuery = ctx.supabase
       .from('report_areas')
       .select('id')
       .order('created_at', { ascending: false })
       .limit(50);
+
+    // An export is the worst place to leak a tenant: it produces a file that
+    // outlives the session and gets forwarded.
+    const areaIds = await scopedAreaIds(ctx);
+    if (areaIds !== null && areaIds.length === 0) {
+      return NextResponse.json({ error: 'אין דוחות לייצוא' }, { status: 404 });
+    }
+    if (areaIds !== null) listQuery = listQuery.in('area_id', areaIds);
+
+    const { data: reportAreas, error } = await listQuery;
 
     if (error) throw error;
     if (!reportAreas || reportAreas.length === 0) {

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getApiContext } from '@/lib/api/auth-context';
+import { scopedAreaIds } from '@/lib/api/tenancy';
 import { handleApiError } from '@/lib/api-utils';
 
 /**
@@ -37,11 +38,16 @@ export async function GET(request: Request) {
 
     if (types) query = query.in('area_type_id', types);
 
+    // Scope before the limit, not after: this returns the 50 most recent rows,
+    // so an unscoped query would fill that window with other tenants' reports
+    // and push the selected customer's off the end.
+    const areaIds = await scopedAreaIds(ctx);
+    if (areaIds !== null && areaIds.length === 0) return NextResponse.json([]);
+    if (areaIds !== null) query = query.in('area_id', areaIds);
+
     const { data: reportAreas, error } = await query;
 
     if (error) throw error;
-
-    console.log('[Reports GET] Fetched report areas:', reportAreas?.length ?? 0);
 
     const monitoringIds = (reportAreas || [])
       .filter((r: any) => r.area_type?.name === 'monitoring')

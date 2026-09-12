@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getApiContext } from '@/lib/api/auth-context';
+import { assertAreaInScope } from '@/lib/api/tenancy';
 import { handleApiError } from '@/lib/api-utils';
 import { ENTIRE_AREA_DISPLAY } from '@/lib/constants';
 
@@ -9,7 +10,6 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const areaId = searchParams.get('areaId');
 
-    console.log('[Monitoring by-area GET] areaId:', areaId);
 
     if (!areaId) {
       return NextResponse.json(
@@ -17,6 +17,11 @@ export async function GET(request: Request) {
         { status: 400 }
       );
     }
+
+    // Constrains a caller-supplied area id to the current scope. RLS alone is
+    // not enough here: an admin can see every area, so without this a selected
+    // customer would not restrict an admin passing another tenant's id.
+    await assertAreaInScope(ctx, areaId);
 
     // Get all report areas for this area
     const { data: reportAreas, error: reportAreasError } = await ctx.supabase
@@ -54,7 +59,6 @@ export async function GET(request: Request) {
       status: item.status,
     }));
 
-    console.log('[Monitoring by-area GET] Fetched monitoring reports:', formatted?.length ?? 0);
 
     return NextResponse.json(formatted);
   } catch (error) {
