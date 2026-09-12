@@ -11,17 +11,29 @@ export async function GET() {
     const customerIdForData = resolveCustomerId(ctx);
 
     // Fetch data based on role
-    const [customers, findings, unitTypes] = await Promise.all([
+    const [allCustomers, findings, unitTypes] = await Promise.all([
       ctx.isAdmin ? getCustomers(ctx.supabase) : Promise.resolve([]),
       getFindings(ctx.supabase),
       getUnitTypes(ctx.supabase),
     ]);
 
-    // For non-admin users, pre-fetch inspectors and areas for their customer
+    // An admin with a customer selected must not be offered a different one
+    // here. This form has its own customer dropdown, so two pickers that can
+    // disagree means submitting a report against a tenant other than the one
+    // shown in the nav — with nothing on screen indicating the mismatch.
+    const customers =
+      ctx.isAdmin && customerIdForData
+        ? allCustomers.filter((c: { id: string }) => c.id === customerIdForData)
+        : allCustomers;
+
+    // Pre-fetch inspectors and areas for whoever has a resolved customer. This
+    // used to be guarded on !ctx.isAdmin, so an admin got empty lists and had
+    // to pick a customer in the form first; with a selection they now take the
+    // same path as an owner.
     let initialInspectors: any[] = [];
     let initialAreas: any[] = [];
 
-    if (!ctx.isAdmin && customerIdForData) {
+    if (customerIdForData) {
       const inspectorTypeIds = await getWorkerTypeIds(ctx.supabase, ['inspector', 'super_worker']);
 
       const [areas, inspectorsRes] = await Promise.all([

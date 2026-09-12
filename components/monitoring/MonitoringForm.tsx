@@ -159,7 +159,10 @@ export function MonitoringForm({
   const form = useForm<MonitoringFormData>({
     resolver: zodResolver(monitoringSchema),
     defaultValues: {
-      customer_id: !isAdmin && customerIdForData ? customerIdForData : '',
+      // Prefilled whenever the server resolved a customer. Previously gated on
+      // !isAdmin, which left an admin with a selected customer facing an empty
+      // form even though the nav already said which tenant they were in.
+      customer_id: customerIdForData || '',
       inspector_id: '',
       area_id: '',
       report_date: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16),
@@ -778,7 +781,7 @@ export function MonitoringForm({
 
       setSuccess(true);
       form.reset();
-      if (!isAdmin && customerIdForData) {
+      if (customerIdForData) {
         form.setValue('customer_id', customerIdForData);
         setInspectors(initialInspectors);
         setAreas(initialAreas);

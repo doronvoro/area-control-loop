@@ -11,11 +11,20 @@ export async function GET() {
     const customerIdForData = resolveCustomerId(ctx);
 
     // Fetch common lookup data
-    const [customers, findings, unitTypes] = await Promise.all([
+    const [allCustomers, findings, unitTypes] = await Promise.all([
       ctx.isAdmin ? getCustomers(ctx.supabase) : Promise.resolve([]),
       getFindings(ctx.supabase),
       getUnitTypes(ctx.supabase),
     ]);
+
+    // An admin with a customer selected must not be offered a different one
+    // here — this form has its own customer dropdown, and two pickers that can
+    // disagree means filing an action against a tenant other than the one shown
+    // in the nav.
+    const customers =
+      ctx.isAdmin && customerIdForData
+        ? allCustomers.filter((c: { id: string }) => c.id === customerIdForData)
+        : allCustomers;
 
     let initialAreas: any[] = [];
     let initialWorkers: any[] = [];
