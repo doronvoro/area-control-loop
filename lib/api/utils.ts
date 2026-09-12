@@ -1,5 +1,36 @@
 import { AreaTypeId } from '@/types/database';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { AuthError } from '@/lib/auth';
+
+/**
+ * Confirm the caller may write to this area, and return its name.
+ *
+ * Reads through the RLS-scoped client, so "can this user see the area" is
+ * answered by the same policies that govern every other read. Callers that go
+ * on to write via `adminClient` MUST pass that check first — the admin client
+ * bypasses RLS entirely, so without this the only thing standing between a
+ * request body's `area_id` and a row is nothing at all.
+ *
+ * This existed as a name lookup whose empty result was shrugged off
+ * (`areaData?.name || 'אזור'`), which meant any authenticated user who guessed
+ * or enumerated another tenant's area id could create reports against it via
+ * POST /api/monitoring or POST /api/actions. The lookup was already the right
+ * check; it just was not being enforced.
+ */
+export async function assertAreaVisible(
+  supabase: SupabaseClient,
+  areaId: string
+): Promise<string> {
+  const { data } = await supabase.from('areas').select('name').eq('id', areaId).single();
+
+  if (!data) {
+    // Deliberately not 404: whether the area exists is itself tenant
+    // information, and the caller has no business distinguishing the two.
+    throw new AuthError('אין הרשאה לדווח על שטח זה', 403);
+  }
+
+  return (data as { name: string }).name;
+}
 
 /**
  * Parse a dosage value that may come as string, number, null, or undefined.
@@ -75,19 +106,17 @@ export async function findOrCreateReportArea(
     }
   }
 
-  // Get area name for the new report_area
-  const { data: areaData } = await supabase
-    .from('areas')
-    .select('name')
-    .eq('id', areaId)
-    .single();
+  // Membership check AND the name lookup, in one read. Throws 403 when the
+  // caller cannot see the area — the insert below goes through adminClient and
+  // would otherwise accept any area id in the request body.
+  const areaName = await assertAreaVisible(supabase, areaId);
 
   const { data: newReportArea, error } = await adminClient
     .from('report_areas')
     .insert({
       area_id: areaId,
       area_type_id: areaTypeId,
-      name: `${namePrefix} - ${areaData?.name || 'אזור'}`,
+      name: `${namePrefix} - ${areaName}`,
       description,
       worker_id: workerId || null,
       report_date: reportDate || null,
