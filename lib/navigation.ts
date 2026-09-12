@@ -18,6 +18,8 @@ import {
   Scale,
   CloudSun,
   CalendarRange,
+  Building2,
+  MapPinned,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -92,6 +94,12 @@ export const adminGroup: NavGroup = {
   label: 'מנהל מערכת',
   requiredRole: 'admin',
   items: [
+    // Both of these existed and worked but were reachable only by typing the
+    // URL. They are also the two halves of onboarding a tenant: create the
+    // customer, then give them areas — without the second, selecting a newly
+    // created customer shows an empty app and no way forward.
+    { href: '/admin/customers', label: 'ניהול לקוחות', icon: Building2 },
+    { href: '/admin/areas-management', label: 'שיוך שטחים ללקוחות', icon: MapPinned },
     { href: '/admin/roles', label: 'תפקידים והרשאות', icon: Shield },
     { href: '/admin/monitoring', label: 'ניטור - מנהל', icon: ClipboardList },
     { href: '/admin/actions', label: 'פעולות - מנהל', icon: ListChecks },

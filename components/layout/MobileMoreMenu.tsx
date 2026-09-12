@@ -8,6 +8,7 @@ import { getVisibleNavGroups } from '@/lib/navigation';
 import { getDirection } from '@/lib/rtl';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
+import { CustomerSwitcher } from './CustomerSwitcher';
 import {
   Sheet,
   SheetContent,
@@ -85,6 +86,10 @@ export function MobileMoreMenu({ open, onOpenChange }: MobileMoreMenuProps) {
             </div>
           </div>
         )}
+
+        <div className="px-5 pb-3">
+          <CustomerSwitcher />
+        </div>
 
         <Separator />
 
