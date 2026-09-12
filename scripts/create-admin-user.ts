@@ -1,11 +1,27 @@
 /**
- * Script to create a default admin user
- * Run with: npx tsx scripts/create-admin-user.ts
- * 
- * This creates:
- * - An admin user in Supabase Auth
- * - A customer record linked to this admin user
- * - Links the customer to all available areas
+ * Create an admin user.
+ *
+ *   SUPABASE_SERVICE_ROLE_KEY=xxx npm run create-admin
+ *   SUPABASE_SERVICE_ROLE_KEY=xxx npm run create-admin -- --email me@example.com
+ *
+ * Creates the auth user and — the part that actually makes them an admin —
+ * inserts the row in `user_roles`. `is_admin_user()` and `has_role()` read ONLY
+ * that table; `user_metadata.role` is read by zero authorization paths and is
+ * written here purely because the rest of the codebase still writes it.
+ *
+ * Until this was fixed the script set the metadata and skipped `user_roles`, so
+ * it produced a user who was NOT an admin: every /admin/* page redirected them
+ * to /dashboard.
+ *
+ * It also used to create a `customers` row for the admin and link it to every
+ * area in the database. That made "admin" mean "a customer who owns
+ * everything", which breaks every tenancy question asked of this schema — and
+ * it hid the real bug, because the all-areas link made admin screens look like
+ * they worked. A real admin owns nothing; their access comes from the role.
+ *
+ * This does not load .env.local (nothing in scripts/ does) and defaults to local
+ * Docker, so the service key must be on the command line. For production, prefer
+ * docs/rollout/07-promote-admin.sql — promoting an existing user needs no key.
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -13,10 +29,15 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
-// Default admin credentials
-const ADMIN_EMAIL = 'admin@example.com';
+const emailFlag = process.argv.indexOf('--email');
+const ADMIN_EMAIL = emailFlag > -1 ? process.argv[emailFlag + 1] : 'admin@example.com';
 const ADMIN_PASSWORD = 'admin123';
 const ADMIN_NAME = 'מנהל מערכת';
+
+if (emailFlag > -1 && !ADMIN_EMAIL) {
+  console.error('❌ --email needs a value.');
+  process.exit(1);
+}
 
 if (!supabaseServiceKey) {
   console.error('❌ SUPABASE_SERVICE_ROLE_KEY is required.');
@@ -73,64 +94,48 @@ async function createAdminUser() {
       console.log(`✅ Created admin user: ${ADMIN_EMAIL}`);
     }
 
-    // Create or update customer record
-    const { data: existingCustomer } = await supabase
-      .from('customers')
+    // The role row. THIS is what makes them an admin — is_admin_user() and
+    // has_role() read user_roles and nothing else.
+    const { data: adminRole, error: roleLookupError } = await supabase
+      .from('roles')
       .select('id')
-      .eq('user_id', userId)
+      .eq('name', 'admin')
       .single();
 
-    let customerId: string;
-
-    if (existingCustomer) {
-      console.log('   Customer record already exists.');
-      customerId = existingCustomer.id;
-    } else {
-      const { data: newCustomer, error: customerError } = await supabase
-        .from('customers')
-        .insert({
-          user_id: userId,
-          name: 'מנהל מערכת',
-          description: 'מנהל מערכת ראשי - יכול להזמין לקוחות חדשים',
-        })
-        .select()
-        .single();
-
-      if (customerError) throw customerError;
-      if (!newCustomer) throw new Error('Failed to create customer');
-
-      customerId = newCustomer.id;
-      console.log('✅ Created customer record for admin');
+    if (roleLookupError || !adminRole) {
+      throw new Error(
+        'No role named "admin" exists. Migration 006_roles_and_permissions.sql has not run ' +
+          'on this database — creating the auth user without it would produce a non-admin.'
+      );
     }
 
-    // Link customer to all areas
-    const { data: areas } = await supabase.from('areas').select('id');
-    
-    if (areas && areas.length > 0) {
-      // Get existing customer-area links
-      const { data: existingLinks } = await supabase
-        .from('customer_areas')
-        .select('area_id')
-        .eq('customer_id', customerId);
+    const { data: existingRole } = await supabase
+      .from('user_roles')
+      .select('user_id')
+      .eq('user_id', userId)
+      .eq('role_id', (adminRole as any).id)
+      .maybeSingle();
 
-      const existingAreaIds = new Set(existingLinks?.map(l => l.area_id) || []);
-      const newLinks = areas
-        .filter(a => !existingAreaIds.has(a.id))
-        .map(a => ({
-          customer_id: customerId,
-          area_id: a.id,
-        }));
+    if (existingRole) {
+      console.log('   Admin role already attached.');
+    } else {
+      const { error: roleInsertError } = await supabase
+        .from('user_roles')
+        .insert({ user_id: userId, role_id: (adminRole as any).id } as any);
 
-      if (newLinks.length > 0) {
-        const { error: linkError } = await supabase
-          .from('customer_areas')
-          .insert(newLinks);
+      // Checked, not ignored: a silent failure here is exactly the bug this
+      // script used to ship — a user who looks like an admin and is not one.
+      if (roleInsertError) throw roleInsertError;
+      console.log('✅ Attached the admin role');
+    }
 
-        if (linkError) throw linkError;
-        console.log(`✅ Linked admin customer to ${newLinks.length} areas`);
-      } else {
-        console.log('   Customer already linked to all areas');
-      }
+    // Prove it rather than assume it, using the same function the app calls.
+    const { data: isAdminNow } = await (supabase.rpc as any)('has_role', {
+      p_user_id: userId,
+      p_role_name: 'admin',
+    });
+    if (isAdminNow !== true) {
+      throw new Error('has_role() still reports false for this user — the promotion did not take.');
     }
 
     console.log('\n✅ Admin user setup completed!\n');
