@@ -132,6 +132,25 @@ export async function findOrCreateReportArea(
  * Create a user with auth account, domain record, and role assignment.
  * Handles rollback if domain record creation fails.
  */
+/**
+ * Best-effort cleanup of a half-created user.
+ *
+ * There is no transaction across GoTrue and Postgres, so a failure partway
+ * through leaves an auth account with no domain record or no role. Deleting the
+ * auth user is the only step that undoes something the caller can see.
+ *
+ * Its own failure is swallowed deliberately: the caller is already throwing the
+ * error that matters, and replacing it with "rollback failed" would hide the
+ * cause. A stranded auth user is recoverable; a misleading error is not.
+ */
+async function rollbackUser(adminClient: SupabaseClient, userId: string): Promise<void> {
+  try {
+    await adminClient.auth.admin.deleteUser(userId);
+  } catch {
+    // Intentionally ignored — see above.
+  }
+}
+
 export async function createUserWithRole(
   adminClient: SupabaseClient,
   params: {
@@ -168,22 +187,35 @@ export async function createUserWithRole(
   const { data: record, error: recordError } = await insertRecord(authData.user.id);
 
   if (recordError) {
-    // Rollback: delete the auth user
-    await adminClient.auth.admin.deleteUser(authData.user.id);
+    await rollbackUser(adminClient, authData.user.id);
     throw recordError;
   }
 
-  // Assign role
-  const { data: roleData } = await (adminClient.from('roles') as any)
+  // Assign role.
+  //
+  // Previously the lookup error was discarded and `if (roleData)` made an
+  // unknown roleName a silent no-op that still returned 201 Created: the caller
+  // got an account that could log in and had no permissions, while the UI said
+  // "הלקוח נוצר בהצלחה". The user_roles insert error was not checked either.
+  // Both are now hard failures, and both roll back.
+  const { data: roleData, error: roleLookupError } = await (adminClient.from('roles') as any)
     .select('id')
     .eq('name', roleName)
     .single();
 
-  if (roleData) {
-    await (adminClient.from('user_roles') as any).insert({
-      user_id: authData.user.id,
-      role_id: roleData.id,
-    });
+  if (roleLookupError || !roleData) {
+    await rollbackUser(adminClient, authData.user.id);
+    throw new Error(`לא נמצא תפקיד בשם "${roleName}" — המשתמש לא נוצר`);
+  }
+
+  const { error: roleInsertError } = await (adminClient.from('user_roles') as any).insert({
+    user_id: authData.user.id,
+    role_id: roleData.id,
+  });
+
+  if (roleInsertError) {
+    await rollbackUser(adminClient, authData.user.id);
+    throw roleInsertError;
   }
 
   return { user: authData.user, record };
