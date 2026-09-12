@@ -45,8 +45,13 @@ DECLARE
   v_role_id uuid;
   v_existing int;
 BEGIN
-  IF v_email = 'CHANGE-ME@example.com' THEN
-    RAISE EXCEPTION 'Edit the v_email line at the top of the DO block first';
+  -- Matches a fragment rather than the whole placeholder, so that replacing
+  -- every occurrence of the placeholder address — the obvious way to edit this
+  -- file — cannot rewrite this guard into one that compares against your own
+  -- address and therefore always fires.
+  IF v_email LIKE '%CHANGE-ME%' OR position('@' in v_email) = 0 THEN
+    RAISE EXCEPTION
+      'Set v_email (in the DECLARE block above) to the address to promote. Got: %', v_email;
   END IF;
 
   SELECT id INTO v_user_id FROM auth.users WHERE lower(email) = lower(v_email);
