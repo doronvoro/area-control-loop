@@ -3,8 +3,13 @@
 -- HOW TO USE
 --   1. The person signs up normally at /register, or is created through
 --      /admin/customers or /admin/workers. They must be able to log in first.
---   2. Set :admin_email below to their address.
+--   2. Change 'CHANGE-ME@example.com' on the v_email line below (inside the DO
+--      block, marked with an arrow) to their address.
 --   3. Run. Re-running is safe.
+--
+-- Running it unedited fails with "Edit the v_email line at the top of the DO
+-- block first". That is the guard, not a bug — promoting the wrong account is
+-- not something to discover later.
 --
 -- WHY SQL AND NOT A SCRIPT
 -- `npm run create-admin` does NOT create an admin. It writes
