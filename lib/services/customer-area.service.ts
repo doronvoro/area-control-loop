@@ -36,19 +36,33 @@ export async function getAllAreaIds(supabase: SupabaseClient): Promise<string[]>
 }
 
 /**
- * Get accessible area IDs based on role.
- * Admin → all areas, non-admin → customer's areas only.
+ * Get accessible area IDs.
+ *
+ * BRANCH ORDER IS LOAD-BEARING — do not "tidy" it back.
+ *
+ * A customer id, when present, always wins. This used to check `isAdmin` first,
+ * which meant an admin passing an explicit customer still received every area in
+ * the database: the nine routes accepting `?customerId=` silently ignored it for
+ * exactly the user who most needed it to work. The old order looks deliberate,
+ * which is why it survived so long.
+ *
+ * The `isAdmin` case is now only the fallback for an admin with no customer
+ * selected. Phase 5 of the tenant-switcher work replaces it with `[]`, so that
+ * an admin sees nothing until they choose; it is kept for now so the switcher
+ * can land without changing what anyone currently sees.
+ *
+ * RLS remains the enforcement boundary — this narrows, it does not authorize.
  */
 export async function getAccessibleAreaIds(
   supabase: SupabaseClient,
   isAdmin: boolean,
   customerId: string | null
 ): Promise<string[]> {
-  if (isAdmin) {
-    return getAllAreaIds(supabase);
-  }
   if (customerId) {
     return getCustomerAreaIds(supabase, customerId);
+  }
+  if (isAdmin) {
+    return getAllAreaIds(supabase);
   }
   return [];
 }

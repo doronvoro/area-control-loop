@@ -161,9 +161,28 @@ export async function requireAdminOrCustomerOwner(ctx: ApiContext): Promise<Next
 }
 
 /**
- * Resolve the customer ID from context, with optional override.
- * Tries: explicit override → customer.id → worker.customer_id
+ * Which customer's data this request is scoped to.
+ *
+ * Order: admin's explicit ?customerId= override → the resolved scope (an
+ * admin's selected customer, or the caller's own tenancy) → legacy fallback.
+ *
+ * THE OVERRIDE IS ADMIN-ONLY. It used to win for anyone who passed it. That was
+ * harmless in most routes only because the follow-up query ran through the
+ * RLS-scoped client and came back empty — but `/api/customer-areas` GET runs on
+ * `adminClient`, where it was a genuine cross-tenant read. Gating it here fixes
+ * that at the source rather than route by route.
+ *
+ * The override is kept rather than removed because it is the only channel that
+ * works for Bearer (mobile) requests, which carry no cookies and therefore have
+ * no selection.
+ *
+ * The final fallback preserves today's behaviour for an admin who has not
+ * selected a customer — several of these accounts hold a legacy `customers` row
+ * linked to every area. Phase 5 removes it, at which point an admin with no
+ * selection resolves to null and sees nothing until they choose.
  */
 export function resolveCustomerId(ctx: ApiContext, override?: string | null): string | null {
-  return override || ctx.customer?.id || ctx.worker?.customer_id || null;
+  if (ctx.isAdmin && override) return override;
+  if (ctx.scopedCustomerId) return ctx.scopedCustomerId;
+  return ctx.customer?.id || ctx.worker?.customer_id || null;
 }
