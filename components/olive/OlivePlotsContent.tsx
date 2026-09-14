@@ -1,54 +1,67 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import Link from 'next/link';
-import { Loader2, Search, Pencil } from 'lucide-react';
-import { Input } from '@/components/ui/input';
+import { Loader2, MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { PlotDetailsDialog } from './PlotDetailsDialog';
+import { TablePagination } from '@/components/ui/table-pagination';
+import { PlotDetailSheet } from './PlotDetailSheet';
+import { PlotsToolbar } from './PlotsToolbar';
+import { PlotsTable } from './PlotsTable';
 import { useApiData } from '@/hooks/useApiData';
+import { usePagination } from '@/hooks/usePagination';
+import { useTableSort } from '@/hooks/useTableSort';
+import { classifyPlotCategory } from '@/lib/olive/logic';
+import { toNirLike, toCategoryThresholds, type ApiPlot } from '@/lib/olive/adapt';
 import {
-  plotMatchesSearch,
-  yieldLoadInfo,
-  daysSinceLabel,
-  classifyPlotCategory,
-} from '@/lib/olive/logic';
-import { toPlotLike, toNirLike, toCategoryThresholds, type ApiPlot } from '@/lib/olive/adapt';
-import {
-  PARAMETER_STATUS_CONFIG,
-  PLOT_TYPE_LABELS,
-  HARVESTER_LABELS,
-  WATER_TYPE_LABELS,
-  PlotType,
-  type ParameterRule,
-} from '@/types/database';
+  EMPTY_PLOT_FILTERS,
+  filterPlotRows,
+  hasActivePlotFilters,
+  sortPlotRows,
+  toPlotRow,
+  type PlotFilters,
+  type PlotRow,
+  type PlotSortField,
+} from '@/lib/olive/plot-rows';
+import type { ParameterRule } from '@/types/database';
+
+/**
+ * The plot list.
+ *
+ * This was a nested accordion — plots grouped by grower type, each one a card
+ * you had to open to see anything, with a single case-sensitive search over the
+ * lot and no way to order them. Everything the rows were scored on (the latest
+ * oil and water, the days since that reading, the yield band) was computed and
+ * then thrown away behind a grey pill.
+ *
+ * It is a table now: the grower type is a column and a filter rather than a
+ * grouping, the measurements are visible and sortable, and "which plots have
+ * not been measured in three weeks" is one click on a column header.
+ *
+ * ~45 plots, so filtering, sorting and paging are all client-side.
+ */
 
 interface DashboardPayload {
   plots: ApiPlot[];
-  latestNir: Record<string, any>;
-  yieldEstimates: Record<string, any>;
+  latestNir: Record<string, unknown>;
+  yieldEstimates: Record<string, { kg_per_dunam?: unknown }>;
   harvestedAreaIds: string[];
   parameterRules: ParameterRule[];
   categoryThresholds: Record<string, unknown> | null;
 }
 
-const CATEGORY_LABELS: Record<string, string> = {
-  testing: 'בבדיקות',
-  normal: 'תקין',
-  anomaly: 'חריגה',
-  ready: 'מוכן למסיק',
-};
+const NO_RULES: ParameterRule[] = [];
 
-const GROUPS: { type: PlotType; label: string }[] = [
-  { type: PlotType.OWNER, label: PLOT_TYPE_LABELS[PlotType.OWNER] },
-  { type: PlotType.PARTNER, label: PLOT_TYPE_LABELS[PlotType.PARTNER] },
-  { type: PlotType.OCCASIONAL, label: PLOT_TYPE_LABELS[PlotType.OCCASIONAL] },
-];
+const SORT_DEFAULT_DIRECTIONS: Partial<Record<PlotSortField, 'asc' | 'desc'>> = {
+  name: 'asc',
+  growerName: 'asc',
+  region: 'asc',
+  category: 'asc',
+};
 
 export function OlivePlotsContent() {
   const { data, loading, error, refetch } = useApiData<DashboardPayload>('/api/olive/dashboard');
-  const [term, setTerm] = useState('');
-  const [editing, setEditing] = useState<ApiPlot | null>(null);
+  const [filters, setFilters] = useState<PlotFilters>(EMPTY_PLOT_FILTERS);
+  const [selected, setSelected] = useState<PlotRow | null>(null);
 
   const now = useMemo(() => new Date(), []);
 
@@ -58,25 +71,41 @@ export function OlivePlotsContent() {
     const bands = toCategoryThresholds(data.categoryThresholds);
 
     return (data.plots || []).map((plot) => {
-      const nir = toNirLike(data.latestNir?.[plot.id]);
-      return {
+      const nir = toNirLike(data.latestNir?.[plot.id] as never);
+      return toPlotRow({
         plot,
-        plotLike: toPlotLike(plot),
         nir,
-        harvested: harvested.has(plot.id),
         category: classifyPlotCategory(nir, data.parameterRules || [], bands),
-        lastMeasured: daysSinceLabel(nir?.report_date ?? null, now),
-        yieldLoad: yieldLoadInfo(data.yieldEstimates?.[plot.id]?.kg_per_dunam),
-      };
+        harvested: harvested.has(plot.id),
+        yieldEstimate: data.yieldEstimates?.[plot.id] ?? null,
+        now,
+      });
     });
   }, [data, now]);
 
-  const visible = useMemo(
-    () => rows.filter((row) => plotMatchesSearch(row.plotLike, term.trim())),
-    [rows, term]
+  const { sort, toggle } = useTableSort<PlotSortField>('name', 'asc', SORT_DEFAULT_DIRECTIONS);
+
+  const visibleRows = useMemo(
+    () => sortPlotRows(filterPlotRows(rows, filters), sort),
+    [rows, filters, sort]
   );
 
-  if (loading) {
+  const pagination = usePagination(visibleRows, {
+    pageSize: 50,
+    resetKey: [
+      filters.search,
+      filters.plotType,
+      filters.category,
+      filters.harvest,
+      filters.nir,
+      sort.field,
+      sort.direction,
+    ].join('|'),
+  });
+
+  // The `&& !data` guard matters: refetch() after saving the details dialog
+  // would otherwise blank the whole screen for the length of the request.
+  if (loading && !data) {
     return (
       <div className="flex items-center justify-center py-12">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -95,124 +124,76 @@ export function OlivePlotsContent() {
 
   return (
     <div className="space-y-4">
-      <div className="olive-card flex items-center gap-2 p-3">
-        <Search className="size-4 shrink-0 text-muted-foreground" />
-        <Input
-          value={term}
-          onChange={(e) => setTerm(e.target.value)}
-          placeholder="חיפוש לפי שם, גוש, זן, מגדל — או ראשי תיבות"
-          className="border-0 shadow-none focus-visible:ring-0"
+      <section className="olive-card overflow-hidden">
+        <PlotsToolbar
+          filters={filters}
+          onFiltersChange={setFilters}
+          onClear={() => setFilters(EMPTY_PLOT_FILTERS)}
+          shown={visibleRows.length}
+          total={rows.length}
         />
-        <span className="olive-muted shrink-0 text-sm">{visible.length}</span>
-      </div>
 
-      {GROUPS.map((group) => {
-        const groupRows = visible.filter((r) => r.plot.details?.plot_type === group.type);
-        if (groupRows.length === 0) return null;
+        {visibleRows.length === 0 ? (
+          <EmptyState
+            filtered={hasActivePlotFilters(filters)}
+            onClear={() => setFilters(EMPTY_PLOT_FILTERS)}
+          />
+        ) : (
+          <div
+            aria-busy={loading}
+            className={loading ? 'opacity-60 transition-opacity' : undefined}
+          >
+            <PlotsTable
+              rows={pagination.pageItems}
+              sort={sort}
+              onSort={toggle}
+              onEdit={setSelected}
+              activeId={selected?.id ?? null}
+            />
+            <TablePagination
+              page={pagination.page}
+              pageCount={pagination.pageCount}
+              total={pagination.total}
+              from={pagination.from}
+              to={pagination.to}
+              pageSize={pagination.pageSize}
+              onPageChange={pagination.setPage}
+              onPageSizeChange={pagination.setPageSize}
+              itemLabel="חלקות"
+            />
+          </div>
+        )}
+      </section>
 
-        return (
-          <details key={group.type} className="olive-card overflow-hidden" open>
-            <summary className="flex cursor-pointer items-center justify-between p-4 font-bold">
-              {group.label}
-              <span className="olive-muted text-sm font-semibold">({groupRows.length})</span>
-            </summary>
-
-            <div className="space-y-2 border-t p-3">
-              {groupRows.map((row) => (
-                <details key={row.plot.id} className="olive-alert">
-                  <summary className="flex cursor-pointer items-baseline justify-between gap-2 p-3">
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm font-bold">
-                        {row.plot.name}
-                        {row.plot.variety && (
-                          <span className="olive-muted font-normal"> · {row.plot.variety}</span>
-                        )}
-                      </span>
-                      <span className="olive-muted block text-xs">
-                        {row.plot.details?.region || '—'}
-                        {row.harvested && ' · נמסק'}
-                      </span>
-                    </span>
-                    <span className={`olive-pill olive-pill-idle shrink-0`}>
-                      {CATEGORY_LABELS[row.category]}
-                    </span>
-                  </summary>
-
-                  <div className="space-y-2 border-t p-3 text-xs">
-                    <div className="flex flex-wrap gap-1.5">
-                      {row.plot.details?.grower_name && (
-                        <span className="olive-pill olive-pill-idle">
-                          {row.plot.details.grower_name}
-                        </span>
-                      )}
-                      {(row.plot.details?.plant_year_label || row.plot.planting_time) && (
-                        <span className="olive-pill olive-pill-idle">
-                          נטיעה {row.plot.details?.plant_year_label || row.plot.planting_time}
-                        </span>
-                      )}
-                      {row.plot.size != null && (
-                        <span className="olive-pill olive-pill-idle">{row.plot.size} דונם</span>
-                      )}
-                      {row.plot.details?.water_type && (
-                        <span className="olive-pill olive-pill-idle">
-                          מים:{' '}
-                          {WATER_TYPE_LABELS[
-                            row.plot.details.water_type as keyof typeof WATER_TYPE_LABELS
-                          ] ?? row.plot.details.water_type}
-                        </span>
-                      )}
-                      {row.plot.details?.harvester && (
-                        <span className="olive-pill olive-pill-idle">
-                          {HARVESTER_LABELS[
-                            row.plot.details.harvester as keyof typeof HARVESTER_LABELS
-                          ] ?? row.plot.details.harvester}
-                        </span>
-                      )}
-                      {row.yieldLoad && (
-                        <span
-                          className={`olive-pill ${PARAMETER_STATUS_CONFIG[row.yieldLoad.status].pillClass}`}
-                        >
-                          {row.yieldLoad.label}
-                        </span>
-                      )}
-                    </div>
-
-                    <p className="olive-muted">
-                      {row.nir
-                        ? `בדיקת NIR אחרונה: ${row.lastMeasured ?? '—'}`
-                        : 'טרם בוצעה בדיקת NIR בחלקה זו'}
-                    </p>
-
-                    {row.plot.takts && row.plot.takts.length > 0 && (
-                      <p className="olive-muted">מספר טאקטים: {row.plot.takts.length}</p>
-                    )}
-
-                    <Link
-                      href={`/olive/nir?areaId=${row.plot.id}`}
-                      className="inline-block underline"
-                    >
-                      הוסף בדיקה
-                    </Link>
-                  </div>
-                </details>
-              ))}
-            </div>
-          </details>
-        );
-      })}
-
-      {visible.length === 0 && (
-        <div className="olive-card p-8 text-center">
-          <p className="olive-muted">לא נמצאו חלקות התואמות לחיפוש.</p>
-        </div>
-      )}
-
-      <PlotDetailsDialog
-        plot={editing}
-        open={editing !== null}
-        onOpenChange={(next) => !next && setEditing(null)}
+      {/*
+        The plot's own screen. The details form inside it has existed all along
+        with nothing able to open it — the old state setter was never called
+        with a plot, so it was unreachable code.
+      */}
+      <PlotDetailSheet
+        row={selected}
+        onOpenChange={(open) => !open && setSelected(null)}
+        rules={data?.parameterRules ?? NO_RULES}
         onSaved={refetch}
       />
+    </div>
+  );
+}
+
+function EmptyState({ filtered, onClear }: { filtered: boolean; onClear: () => void }) {
+  return (
+    <div className="flex flex-col items-center gap-3 p-10 text-center">
+      <MapPin className="text-muted-foreground/40 size-8" />
+      {filtered ? (
+        <>
+          <p className="olive-muted text-sm">לא נמצאו חלקות התואמות לסינון</p>
+          <Button type="button" variant="ghost" size="sm" onClick={onClear}>
+            נקה סינון
+          </Button>
+        </>
+      ) : (
+        <p className="olive-muted text-sm">אין חלקות זית ללקוח זה</p>
+      )}
     </div>
   );
 }
