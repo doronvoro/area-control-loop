@@ -65,6 +65,13 @@ This roadmap tracks progress from the current state (Monitoring + Action phases)
   - [ ] Pagination (currently limited to 50)
   - [ ] Search/filter by date, area, worker
   - [ ] Sort by columns
+  - Shared pieces for this already exist, built for the NIR log: `hooks/useTableSort.ts`,
+    `hooks/usePagination.ts`, `components/ui/sortable-table-head.tsx`,
+    `components/ui/table-pagination.tsx`. Note `/api/reports` caps at 50 server-side, so
+    unlike the NIR log this one needs a real `.range()` before client paging means anything.
+- [ ] `/olive/harvest` — adopt the NIR log's grid-first + drawer layout
+  - It is a structural twin of the old `/olive/nir` (form stacked on a hand-rolled table);
+    the toolbar/sort/paging components above were extracted with it in mind.
 
 ### Milestone Completion
 

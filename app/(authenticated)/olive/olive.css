@@ -488,6 +488,22 @@
   }
 }
 
+/*
+ * The same footer inside a drawer.
+ *
+ * There it is a flex sibling of the scroll area rather than part of the page
+ * flow, so `sticky` has nothing to stick to — but the negative margins, which
+ * exist to bleed the bar to the edges of a padded card, would still pull it out
+ * of alignment. Both are dropped; the flex layout already pins it to the bottom.
+ *
+ * Declared after both rules above, and at the same specificity, so it also wins
+ * over the 768px override without needing a media query of its own.
+ */
+.olive-sticky-footer--flush {
+  position: static;
+  margin: 0;
+}
+
 .olive-submit {
   position: relative;
   overflow: hidden;

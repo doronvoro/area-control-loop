@@ -3,17 +3,20 @@ import {
   getApiContext,
   requireWorkerAdminOrCustomer,
   resolveCustomerId,
+  type ApiContext,
 } from '@/lib/api/auth-context';
 import { handleApiError } from '@/lib/api-utils';
 import { getAccessibleAreaIds } from '@/lib/services/customer-area.service';
 import { getOliveAreaIds } from '@/lib/services/olive-plot.service';
-import { AreaTypeId } from '@/types/database';
+import { AreaTypeId, type Season } from '@/types/database';
 import {
   createNirReport,
   updateNirReport,
   deleteNirReport,
   getNirReports,
+  NIR_ROW_CAP,
 } from '@/lib/services/olive-nir.service';
+import { getActiveSeason } from '@/lib/services/olive-config.service';
 
 /** Area ids the caller may act on. */
 /** Accessible AND olive. A pest-management area is not a valid target here. */
@@ -44,6 +47,29 @@ async function denyIfInaccessible(ctx: any, reportAreaId: string) {
   return null;
 }
 
+/**
+ * Which season the log is scoped to.
+ *
+ * `seasonId` absent means the active season — the common case, and what makes
+ * the screen's "בדיקות בעונה" count honest. 'all' opts out of the date bound
+ * entirely, and is also the fallback when no season is marked active, so the
+ * log never silently comes back empty on a fresh install.
+ */
+async function resolveSeason(ctx: ApiContext, seasonId: string | null): Promise<Season | null> {
+  if (seasonId === 'all') return null;
+
+  if (seasonId) {
+    const { data } = await ctx.supabase
+      .from('seasons')
+      .select('*')
+      .eq('id', seasonId)
+      .maybeSingle();
+    return (data as Season | null) ?? null;
+  }
+
+  return getActiveSeason(ctx.supabase);
+}
+
 export async function GET(request: Request) {
   try {
     const ctx = await getApiContext();
@@ -58,8 +84,20 @@ export async function GET(request: Request) {
       areaIds = areaIds.filter((id) => id === areaId);
     }
 
-    const reports = await getNirReports(ctx.supabase, areaIds);
-    return NextResponse.json(reports);
+    const season = await resolveSeason(ctx, searchParams.get('seasonId'));
+    const reports = await getNirReports(ctx.supabase, areaIds, {
+      from: season?.starts_on ?? null,
+      to: season?.ends_on ?? null,
+    });
+
+    return NextResponse.json({
+      reports,
+      season,
+      scope: season ? 'season' : 'all',
+      // Surfaced, not swallowed: a silently clipped list is how a count starts
+      // lying about how much data there is.
+      truncated: reports.length >= NIR_ROW_CAP,
+    });
   } catch (error) {
     return handleApiError(error);
   }

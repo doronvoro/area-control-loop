@@ -153,27 +153,78 @@ export async function deleteNirReport(
   if (error) throw error;
 }
 
-/** Measurements for the given areas, newest first. */
-export async function getNirReports(supabase: SupabaseClient, areaIds: string[]): Promise<any[]> {
+export interface NirReportFilter {
+  /** Inclusive calendar day, YYYY-MM-DD. */
+  from?: string | null;
+  /** Inclusive calendar day, YYYY-MM-DD. */
+  to?: string | null;
+  limit?: number;
+}
+
+/**
+ * A ceiling so an unbounded archive cannot become an unbounded payload. The log
+ * screen surfaces it rather than silently showing a truncated count.
+ */
+export const NIR_ROW_CAP = 2000;
+
+/**
+ * Measurements for the given areas, newest first.
+ *
+ * `filter` is optional so existing unbounded callers — getLatestNirByArea
+ * below, and through it the dashboard — keep their current behaviour. That is
+ * deliberate: putting a season floor on the dashboard would flip a plot whose
+ * last reading was last season from "has NIR" to 'testing' and change what
+ * classifyPlotCategory reports.
+ */
+export async function getNirReports(
+  supabase: SupabaseClient,
+  areaIds: string[],
+  filter: NirReportFilter = {}
+): Promise<any[]> {
   if (areaIds.length === 0) return [];
 
-  const { data, error } = await (supabase.from('report_areas') as any)
+  let query = (supabase.from('report_areas') as any)
     .select(NIR_SELECT)
     .eq('area_type_id', AreaTypeId.NIR)
-    .in('area_id', areaIds)
+    .in('area_id', areaIds);
+
+  if (filter.from) {
+    query = query.gte('report_date', `${filter.from}T00:00:00+00:00`);
+  }
+  if (filter.to) {
+    // Half-open on purpose. report_date is timestamptz while a season's ends_on
+    // is a DATE, and the form posts a bare 'YYYY-MM-DD' that Postgres stores as
+    // midnight. A .lte('report_date', ends_on) would therefore drop every
+    // reading taken ON the season's last day.
+    query = query.lt('report_date', `${dayAfter(filter.to)}T00:00:00+00:00`);
+  }
+
+  const { data, error } = await query
     .order('report_date', { ascending: false, nullsFirst: false })
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .limit(filter.limit ?? NIR_ROW_CAP);
 
   if (error) throw error;
   return (data || []).map(flattenDetail);
+}
+
+/** The calendar day after `day` (YYYY-MM-DD), for a half-open upper bound. */
+function dayAfter(day: string): string {
+  const next = new Date(`${day}T00:00:00Z`);
+  next.setUTCDate(next.getUTCDate() + 1);
+  return next.toISOString().slice(0, 10);
 }
 
 /**
  * The most recent measurement per area, keyed by area id.
  *
  * PostgREST has no DISTINCT ON, so this reduces the ordered list in memory.
- * At ~45 plots sampled through one season that is a few hundred rows; if the
- * archive grows past a season, add a date floor rather than paginating.
+ * At ~45 plots sampled through one season that is a few hundred rows.
+ *
+ * Unfiltered, so it reads the newest NIR_ROW_CAP rows. A plot would have to be
+ * that far behind the others to lose its latest reading here, which at this
+ * plot count cannot happen; if the archive ever gets there, give this its own
+ * date floor rather than raising the cap for everyone.
  */
 export async function getLatestNirByArea(
   supabase: SupabaseClient,
