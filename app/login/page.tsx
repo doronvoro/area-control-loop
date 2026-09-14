@@ -20,6 +20,24 @@ export default function LoginPage() {
   const lang = getLanguage();
 
   useEffect(() => {
+    // A recovery link can land here rather than on /reset-password: the Supabase
+    // dashboard's "send password recovery" always redirects to the project's
+    // Site URL and ignores the redirectTo the app would pass. That is the normal
+    // route when an admin helps a user who cannot log in.
+    //
+    // It has to be handled BEFORE the getUser() check below, because a recovery
+    // token establishes a real session — so that check would see a logged-in
+    // user and bounce them to /dashboard, silently swallowing the recovery and
+    // leaving the password unchanged.
+    const hash = window.location.hash;
+    if (hash.includes('type=recovery')) {
+      // Full navigation with the fragment intact rather than router.replace:
+      // /reset-password relies on supabase-js consuming the token on load, and
+      // a client-side transition would not re-run that detection.
+      window.location.replace(`/reset-password${hash}`);
+      return;
+    }
+
     const checkUser = async () => {
       const {
         data: { user },
@@ -30,6 +48,20 @@ export default function LoginPage() {
     };
     checkUser();
   }, [router]);
+
+  useEffect(() => {
+    // Backstop for the race: supabase-js cleans the fragment out of the URL once
+    // it has read the token, so the check above can arrive too late. The event
+    // fires either way.
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        window.location.replace('/reset-password');
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
