@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getApiContext, checkPermission } from '@/lib/api/auth-context';
+import { getApiContext, checkPermission, resolveCustomerId } from '@/lib/api/auth-context';
 import { handleApiError } from '@/lib/api-utils';
 
 export async function POST(request: Request) {
@@ -72,12 +72,30 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const customerId = searchParams.get('customerId');
 
-    let query = (ctx.adminClient.from('customer_areas') as any)
+    // This handler read every customer↔area pair — including customer names —
+    // through adminClient, for any authenticated user, with ?customerId= as an
+    // unchecked filter. It is the one route where the ungated override in
+    // resolveCustomerId was a genuine cross-tenant read rather than something
+    // RLS quietly absorbed.
+    const scopedCustomerId = resolveCustomerId(ctx, customerId);
+
+    if (!scopedCustomerId && !ctx.isAdmin) {
+      // A user with no tenancy (self-registered, no customer or worker row)
+      // gets nothing rather than everything.
+      return NextResponse.json([]);
+    }
+
+    // ctx.supabase, not adminClient: the admin RLS policies are in place, so
+    // this keeps RLS as a backstop underneath the explicit filter instead of
+    // making the filter the only thing standing between tenants.
+    let query = (ctx.supabase.from('customer_areas') as any)
       .select('id, customer_id, area_id, areas(id, name, description, crop_id, area_type, geometry, crops(id, name, description)), customers(id, name)');
 
-    if (customerId) {
-      query = query.eq('customer_id', customerId);
+    if (scopedCustomerId) {
+      query = query.eq('customer_id', scopedCustomerId);
     }
+    // An admin with no selection still sees every tenant here; phase 5 of the
+    // customer switcher changes that to an empty result.
 
     const { data, error } = await query;
     if (error) throw error;

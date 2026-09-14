@@ -1,5 +1,36 @@
 import { AreaTypeId } from '@/types/database';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { AuthError } from '@/lib/auth';
+
+/**
+ * Confirm the caller may write to this area, and return its name.
+ *
+ * Reads through the RLS-scoped client, so "can this user see the area" is
+ * answered by the same policies that govern every other read. Callers that go
+ * on to write via `adminClient` MUST pass that check first — the admin client
+ * bypasses RLS entirely, so without this the only thing standing between a
+ * request body's `area_id` and a row is nothing at all.
+ *
+ * This existed as a name lookup whose empty result was shrugged off
+ * (`areaData?.name || 'אזור'`), which meant any authenticated user who guessed
+ * or enumerated another tenant's area id could create reports against it via
+ * POST /api/monitoring or POST /api/actions. The lookup was already the right
+ * check; it just was not being enforced.
+ */
+export async function assertAreaVisible(
+  supabase: SupabaseClient,
+  areaId: string
+): Promise<string> {
+  const { data } = await supabase.from('areas').select('name').eq('id', areaId).single();
+
+  if (!data) {
+    // Deliberately not 404: whether the area exists is itself tenant
+    // information, and the caller has no business distinguishing the two.
+    throw new AuthError('אין הרשאה לדווח על שטח זה', 403);
+  }
+
+  return (data as { name: string }).name;
+}
 
 /**
  * Parse a dosage value that may come as string, number, null, or undefined.
@@ -75,19 +106,17 @@ export async function findOrCreateReportArea(
     }
   }
 
-  // Get area name for the new report_area
-  const { data: areaData } = await supabase
-    .from('areas')
-    .select('name')
-    .eq('id', areaId)
-    .single();
+  // Membership check AND the name lookup, in one read. Throws 403 when the
+  // caller cannot see the area — the insert below goes through adminClient and
+  // would otherwise accept any area id in the request body.
+  const areaName = await assertAreaVisible(supabase, areaId);
 
   const { data: newReportArea, error } = await adminClient
     .from('report_areas')
     .insert({
       area_id: areaId,
       area_type_id: areaTypeId,
-      name: `${namePrefix} - ${areaData?.name || 'אזור'}`,
+      name: `${namePrefix} - ${areaName}`,
       description,
       worker_id: workerId || null,
       report_date: reportDate || null,
@@ -103,6 +132,25 @@ export async function findOrCreateReportArea(
  * Create a user with auth account, domain record, and role assignment.
  * Handles rollback if domain record creation fails.
  */
+/**
+ * Best-effort cleanup of a half-created user.
+ *
+ * There is no transaction across GoTrue and Postgres, so a failure partway
+ * through leaves an auth account with no domain record or no role. Deleting the
+ * auth user is the only step that undoes something the caller can see.
+ *
+ * Its own failure is swallowed deliberately: the caller is already throwing the
+ * error that matters, and replacing it with "rollback failed" would hide the
+ * cause. A stranded auth user is recoverable; a misleading error is not.
+ */
+async function rollbackUser(adminClient: SupabaseClient, userId: string): Promise<void> {
+  try {
+    await adminClient.auth.admin.deleteUser(userId);
+  } catch {
+    // Intentionally ignored — see above.
+  }
+}
+
 export async function createUserWithRole(
   adminClient: SupabaseClient,
   params: {
@@ -139,22 +187,35 @@ export async function createUserWithRole(
   const { data: record, error: recordError } = await insertRecord(authData.user.id);
 
   if (recordError) {
-    // Rollback: delete the auth user
-    await adminClient.auth.admin.deleteUser(authData.user.id);
+    await rollbackUser(adminClient, authData.user.id);
     throw recordError;
   }
 
-  // Assign role
-  const { data: roleData } = await (adminClient.from('roles') as any)
+  // Assign role.
+  //
+  // Previously the lookup error was discarded and `if (roleData)` made an
+  // unknown roleName a silent no-op that still returned 201 Created: the caller
+  // got an account that could log in and had no permissions, while the UI said
+  // "הלקוח נוצר בהצלחה". The user_roles insert error was not checked either.
+  // Both are now hard failures, and both roll back.
+  const { data: roleData, error: roleLookupError } = await (adminClient.from('roles') as any)
     .select('id')
     .eq('name', roleName)
     .single();
 
-  if (roleData) {
-    await (adminClient.from('user_roles') as any).insert({
-      user_id: authData.user.id,
-      role_id: roleData.id,
-    });
+  if (roleLookupError || !roleData) {
+    await rollbackUser(adminClient, authData.user.id);
+    throw new Error(`לא נמצא תפקיד בשם "${roleName}" — המשתמש לא נוצר`);
+  }
+
+  const { error: roleInsertError } = await (adminClient.from('user_roles') as any).insert({
+    user_id: authData.user.id,
+    role_id: roleData.id,
+  });
+
+  if (roleInsertError) {
+    await rollbackUser(adminClient, authData.user.id);
+    throw roleInsertError;
   }
 
   return { user: authData.user, record };

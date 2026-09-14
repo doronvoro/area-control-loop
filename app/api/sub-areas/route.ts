@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { getApiContext, checkPermission } from '@/lib/api/auth-context';
+import { assertAreaVisible } from '@/lib/api/utils';
 import { handleApiError } from '@/lib/api-utils';
 
 export async function GET(request: Request) {
@@ -12,6 +13,16 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'areaId is required' }, { status: 400 });
     }
 
+    // This handler used to do no auth work at all — it imported getApiContext
+    // and never called it, then read through adminClient, so any logged-in user
+    // could enumerate any area's sub-areas by id. The tenancy check has to
+    // happen against the RLS client before the admin client is used.
+    const ctx = await getApiContext();
+    await assertAreaVisible(ctx.supabase, areaId);
+
+    // adminClient is kept for the reads below: they resolve parent chains and
+    // crop inheritance across rows, and narrowing that mid-query is a separate
+    // change. The area-level check above is what makes it safe.
     const supabase = createAdminClient();
     const { data, error } = await supabase
       .from('sub_areas')

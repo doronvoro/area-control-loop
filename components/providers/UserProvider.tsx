@@ -11,6 +11,15 @@ interface UserInfo {
   isAdmin: boolean;
   isCustomerOwner: boolean;
   features: NavFeatures;
+  /**
+   * The customer an admin is currently scoped to, or null for everyone else
+   * and for an admin who has not chosen one.
+   *
+   * Carried here rather than in a provider of its own: /api/user/me already
+   * resolves it, so a separate context would mean a second request for a value
+   * that is part of the same answer to "who am I acting as right now".
+   */
+  selectedCustomer: { id: string; name: string } | null;
 }
 
 interface UserContextValue {
@@ -36,6 +45,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
             isAdmin: data.isAdmin || false,
             isCustomerOwner: data.isCustomerOwner || false,
             features: data.features || {},
+            selectedCustomer: data.selectedCustomer || null,
           });
         }
       })

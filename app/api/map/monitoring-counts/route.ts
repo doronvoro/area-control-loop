@@ -15,7 +15,11 @@ export async function GET() {
     const targetCustomerId = resolveCustomerId(ctx);
 
     if (!targetCustomerId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      // Same empty shape this route already returns when a customer has no
+      // areas, rather than a 401. "No customer selected" is the normal resting
+      // state for an admin, and there is no global 401 handler on the client —
+      // it would surface as the English word "Unauthorized" in a Hebrew app.
+      return NextResponse.json({ counts: {}, reports: {} });
     }
 
     // Get ALL areas for customer (no area_type filter)

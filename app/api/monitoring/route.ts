@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getApiContext, requireWorkerAdminOrCustomer } from '@/lib/api/auth-context';
+import { scopedAreaIds } from '@/lib/api/tenancy';
 import { handleApiError } from '@/lib/api-utils';
 import { createMonitoringBatch, createMonitoringSingle } from '@/lib/services/monitoring.service';
 
@@ -9,11 +10,11 @@ export async function GET() {
     const unauthorized = requireWorkerAdminOrCustomer(ctx);
     if (unauthorized) return unauthorized;
 
-    const { data, error } = await ctx.supabase
+    let query = ctx.supabase
       .from('monitoring_area_report')
       .select(
         `*,
-        area_report:report_areas(*),
+        area_report:report_areas!inner(*),
         sub_area:sub_areas(*),
         finding:findings(*),
         treatments:monitoring_treatments(
@@ -23,6 +24,14 @@ export async function GET() {
         )`
       )
       .order('created_at', { ascending: false });
+
+    // report_areas is inner-joined above so its area_id can be filtered here;
+    // this table has no area_id of its own.
+    const areaIds = await scopedAreaIds(ctx);
+    if (areaIds !== null && areaIds.length === 0) return NextResponse.json([]);
+    if (areaIds !== null) query = query.in('area_report.area_id', areaIds);
+
+    const { data, error } = await query;
 
     if (error) throw error;
     return NextResponse.json(data);

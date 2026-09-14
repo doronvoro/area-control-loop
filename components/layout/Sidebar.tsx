@@ -9,6 +9,7 @@ import { getDirection } from '@/lib/rtl';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
+import { CustomerSwitcher } from './CustomerSwitcher';
 import { supabase } from '@/lib/supabase/client';
 import { PanelRightClose, PanelRightOpen, LogOut } from 'lucide-react';
 
@@ -133,6 +134,11 @@ export function Sidebar({ collapsed, onToggleCollapse }: SidebarProps) {
         >
           <PanelRightOpen className="size-4" />
         </button>
+      </div>
+
+      {/* Active customer (admins only; renders nothing for everyone else) */}
+      <div className={cn('pb-2', collapsed ? 'flex justify-center px-2' : 'px-3')}>
+        <CustomerSwitcher collapsed={collapsed} variant="sidebar" />
       </div>
 
       {/* Navigation */}

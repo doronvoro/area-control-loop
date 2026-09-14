@@ -1,9 +1,14 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { AuthError } from '@/lib/auth';
-import { headers } from 'next/headers';
+import { headers, cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { NextResponse } from 'next/server';
 import type { SupabaseClient, User } from '@supabase/supabase-js';
+import {
+  SELECTED_CUSTOMER_COOKIE,
+  parseSelectionCookie,
+  resolveScopedCustomerId,
+} from './customer-selection';
 
 export interface ApiContext {
   supabase: SupabaseClient;
@@ -12,6 +17,14 @@ export interface ApiContext {
   worker: any | null;
   customer: any | null;
   isAdmin: boolean;
+  /**
+   * The customer this request is scoped to: an admin's selected customer, or
+   * for everyone else their own tenancy. Null for an admin who has not selected
+   * one, and for a user with no tenancy at all.
+   *
+   * Scoping only — not an authorization boundary. See lib/api/customer-selection.ts.
+   */
+  scopedCustomerId: string | null;
 }
 
 async function isBearerRequest(): Promise<boolean> {
@@ -61,6 +74,15 @@ export async function getApiContext(): Promise<ApiContext> {
     }).then(({ data }: { data: boolean }) => data === true),
   ]);
 
+  // Read after the role is known: the cookie is only consulted for admins, and
+  // a Bearer (mobile) request carries no cookies at all, which is why the
+  // ?customerId= override has to stay as the Bearer-compatible channel.
+  const cookieStore = await cookies();
+  const cookieCustomerId = parseSelectionCookie(
+    cookieStore.get(SELECTED_CUSTOMER_COOKIE)?.value,
+    user.id
+  );
+
   return {
     supabase,
     adminClient,
@@ -68,6 +90,12 @@ export async function getApiContext(): Promise<ApiContext> {
     worker: workerResult,
     customer: customerResult,
     isAdmin: adminRoleResult,
+    scopedCustomerId: resolveScopedCustomerId({
+      isAdmin: adminRoleResult,
+      cookieCustomerId,
+      ownedCustomerId: (customerResult as { id?: string } | null)?.id ?? null,
+      workerCustomerId: (workerResult as { customer_id?: string } | null)?.customer_id ?? null,
+    }),
   };
 }
 
@@ -133,9 +161,28 @@ export async function requireAdminOrCustomerOwner(ctx: ApiContext): Promise<Next
 }
 
 /**
- * Resolve the customer ID from context, with optional override.
- * Tries: explicit override → customer.id → worker.customer_id
+ * Which customer's data this request is scoped to.
+ *
+ * Order: admin's explicit ?customerId= override → the resolved scope (an
+ * admin's selected customer, or the caller's own tenancy) → legacy fallback.
+ *
+ * THE OVERRIDE IS ADMIN-ONLY. It used to win for anyone who passed it. That was
+ * harmless in most routes only because the follow-up query ran through the
+ * RLS-scoped client and came back empty — but `/api/customer-areas` GET runs on
+ * `adminClient`, where it was a genuine cross-tenant read. Gating it here fixes
+ * that at the source rather than route by route.
+ *
+ * The override is kept rather than removed because it is the only channel that
+ * works for Bearer (mobile) requests, which carry no cookies and therefore have
+ * no selection.
+ *
+ * An admin with no selection resolves to null and therefore sees nothing until
+ * they choose. There is deliberately no fallback to a `customers` row they may
+ * hold: the old create-admin script gave admins one linked to every area, so
+ * falling back would silently restore the unscoped view and make the switcher
+ * look broken. `scopedCustomerId` already encodes that precedence.
  */
 export function resolveCustomerId(ctx: ApiContext, override?: string | null): string | null {
-  return override || ctx.customer?.id || ctx.worker?.customer_id || null;
+  if (ctx.isAdmin && override) return override;
+  return ctx.scopedCustomerId;
 }

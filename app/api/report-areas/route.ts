@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { getApiContext } from '@/lib/api/auth-context';
+import { scopedAreaIds } from '@/lib/api/tenancy';
 import { handleApiError } from '@/lib/api-utils';
 
 export async function GET(request: Request) {
@@ -10,8 +11,16 @@ export async function GET(request: Request) {
     const areaId = searchParams.get('areaId');
     const typeName = searchParams.get('type'); // accepts type name for backward compat
 
-    const supabase = await createClient();
-    let query = supabase.from('report_areas').select('*, area_type:report_area_types(*)');
+    const ctx = await getApiContext();
+    let query = ctx.supabase.from('report_areas').select('*, area_type:report_area_types(*)');
+
+    // Applied before the id/areaId branches so both are scoped. Without it an
+    // admin with a customer selected could still fetch another tenant's report
+    // by id — RLS permits it for them, which is exactly what the selection is
+    // meant to narrow.
+    const areaIds = await scopedAreaIds(ctx);
+    if (areaIds !== null && areaIds.length === 0) return NextResponse.json(id ? null : []);
+    if (areaIds !== null) query = query.in('area_id', areaIds);
 
     if (id) {
       // Fetch single report area by ID

@@ -334,3 +334,36 @@ body {
 .multi-select-tree-toggle:hover {
   background: oklch(0.92 0.02 152);
 }
+
+/* --- Customer switcher (sidebar / mobile menu) --- */
+/*
+ * SearchableSelect hardcodes the `monitoring-select-trigger` class, whose rules
+ * live in monitoring.css and force a near-white background with !important —
+ * built for the light form pages. Inside the sidebar that is either invisible
+ * (when monitoring.css is not loaded, leaving bg-transparent and a dark muted
+ * foreground on a dark panel) or a glaring white box (when it is).
+ *
+ * These rules re-point the trigger at the sidebar's own tokens. !important is
+ * required to beat the ones above, not for convenience.
+ */
+.customer-switcher .monitoring-select-trigger {
+  background: var(--sidebar-accent) !important;
+  border-color: var(--sidebar-border) !important;
+  color: var(--sidebar-foreground) !important;
+}
+
+.customer-switcher .monitoring-select-trigger:hover:not(:disabled) {
+  background: var(--sidebar-accent) !important;
+  border-color: var(--sidebar-ring) !important;
+}
+
+/* The label span carries text-muted-foreground, which is tuned for the light
+   surface and disappears here. */
+.customer-switcher .monitoring-select-trigger span {
+  color: var(--sidebar-foreground) !important;
+}
+
+.customer-switcher .monitoring-select-trigger svg {
+  color: var(--sidebar-foreground) !important;
+  opacity: 0.7;
+}

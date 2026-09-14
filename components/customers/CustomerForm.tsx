@@ -25,18 +25,52 @@ import {
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 
-const customerSchema = z.object({
-  name: z.string().min(1, 'שם הלקוח נדרש'),
-  description: z.string().optional(),
-  email: z.string().email('אימייל לא תקין').optional().or(z.literal('')),
-  password: z.string().min(6, 'סיסמה חייבת להכיל לפחות 6 תווים').optional().or(z.literal('')),
-}).refine((data) => {
-  // For new customers, email and password are required
-  // This will be handled in the component based on whether it's edit or create
-  return true;
-}, {});
+/**
+ * Validation depends on the mode, so the schema is built per mode rather than
+ * shared.
+ *
+ * The previous version ended in `.refine(() => true, {})` — a no-op whose
+ * comment said requiredness "will be handled in the component". It was: by an
+ * imperative check in onSubmit that wrote to a local `error` string. So a
+ * missing email rendered as a banner above the form rather than a message under
+ * the email field, and the field itself never showed as invalid.
+ *
+ * superRefine puts the errors on the fields, where react-hook-form's FormMessage
+ * already knows how to render them.
+ */
+const makeCustomerSchema = (isEditMode: boolean) =>
+  z
+    .object({
+      name: z.string().min(1, 'שם הלקוח נדרש'),
+      description: z.string().optional(),
+      // Optional at the field level because editing does not resubmit
+      // credentials; superRefine below makes them required on create.
+      email: z.string().optional().or(z.literal('')),
+      password: z.string().optional().or(z.literal('')),
+    })
+    .superRefine((data, ctx) => {
+      if (isEditMode) return;
 
-type CustomerFormData = z.infer<typeof customerSchema>;
+      if (!data.email) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['email'],
+          message: 'אימייל נדרש ליצירת לקוח חדש',
+        });
+      } else if (!z.string().email().safeParse(data.email).success) {
+        ctx.addIssue({ code: 'custom', path: ['email'], message: 'אימייל לא תקין' });
+      }
+
+      if (!data.password || data.password.length < 6) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['password'],
+          message: 'סיסמה חייבת להכיל לפחות 6 תווים',
+        });
+      }
+    });
+
+type CustomerFormData = z.infer<ReturnType<typeof makeCustomerSchema>>;
 
 interface CustomerFormProps {
   customer?: {
@@ -56,7 +90,7 @@ export function CustomerForm({ customer, open, onOpenChange, onSuccess }: Custom
   const isEditMode = !!customer;
 
   const form = useForm<CustomerFormData>({
-    resolver: zodResolver(customerSchema),
+    resolver: zodResolver(makeCustomerSchema(isEditMode)),
     defaultValues: {
       name: customer?.name || '',
       description: customer?.description || '',
@@ -79,18 +113,8 @@ export function CustomerForm({ customer, open, onOpenChange, onSuccess }: Custom
   }, [open, customer, form]);
 
   const onSubmit = async (data: CustomerFormData) => {
-    // Validate email and password for new customers
-    if (!isEditMode) {
-      if (!data.email) {
-        setError('אימייל נדרש ליצירת לקוח חדש');
-        return;
-      }
-      if (!data.password || data.password.length < 6) {
-        setError('סיסמה חייבת להכיל לפחות 6 תווים');
-        return;
-      }
-    }
-
+    // Requiredness is enforced by makeCustomerSchema, so onSubmit only runs on
+    // valid input. `error` below is for server-side failures only.
     setLoading(true);
     setError(null);
 
@@ -104,7 +128,7 @@ export function CustomerForm({ customer, open, onOpenChange, onSuccess }: Custom
       if (isEditMode) {
         body.id = customer.id;
       } else {
-        body.email = data.email;
+        body.email = data.email?.trim();
         body.password = data.password;
       }
 

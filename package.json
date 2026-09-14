@@ -20,6 +20,7 @@
     "update-area-names": "tsx scripts/update-area-names.ts",
     "assign-roles": "tsx scripts/assign-roles.ts",
     "create-test-users": "tsx scripts/create-test-users.ts",
+    "seed-demo-customers": "tsx scripts/seed-demo-customers.ts",
     "reset-seed": "tsx scripts/reset-and-seed.ts",
     "db:seed-full": "docker exec -i supabase_db_area-control-loop psql -U postgres -d postgres -v confirm=yes -f - < supabase/seed/reset_and_seed_full.sql",
     "db:reset-seed": "npx supabase db reset && npm run db:seed-full",

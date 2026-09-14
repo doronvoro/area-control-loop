@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getApiContext } from '@/lib/api/auth-context';
+import { scopedAreaIds } from '@/lib/api/tenancy';
 import { handleApiError } from '@/lib/api-utils';
 import { fetchReportDetail } from '@/lib/reports/fetch-report-detail';
 
@@ -14,6 +15,15 @@ export async function GET(
     const report = await fetchReportDetail(ctx.supabase, id);
 
     if (!report) {
+      return NextResponse.json({ error: 'דוח לא נמצא' }, { status: 404 });
+    }
+
+    // Checked after the fetch because the scope is expressed in area ids and
+    // this route is addressed by report id. Reported as "not found" rather than
+    // "forbidden" to match the branch above — whether a report exists in
+    // another tenant is not something to disclose here.
+    const areaIds = await scopedAreaIds(ctx);
+    if (areaIds !== null && (!report.area?.id || !areaIds.includes(report.area.id))) {
       return NextResponse.json({ error: 'דוח לא נמצא' }, { status: 404 });
     }
 
