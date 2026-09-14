@@ -257,10 +257,24 @@ function PlotDetailBody({
       </div>
 
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4 md:p-6">
-        {/* Stats */}
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {/* Stats. Three across rather than four, to give the yield band room. */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <Stat label="גודל (דונם)" value={num(row.size, 1)} />
           <Stat label="טאקטים" value={String(row.taktCount)} />
+          {/* The season's planned figure, not an actual — it is what the
+              harvest form scores each pass against. */}
+          <Stat
+            label="יבול צפוי (ק״ג/דונם)"
+            value={num(row.yieldKgPerDunam)}
+            pill={
+              row.yieldLoad
+                ? {
+                    label: row.yieldLoad.label,
+                    className: PARAMETER_STATUS_CONFIG[row.yieldLoad.status].pillClass,
+                  }
+                : undefined
+            }
+          />
           <Stat label="בדיקה אחרונה" value={row.lastMeasuredLabel ?? 'טרם נבדקה'} small />
           <Stat
             label="קטגוריה"
@@ -529,17 +543,21 @@ function Stat({
   label,
   value,
   hint,
+  pill,
   small,
 }: {
   label: string;
   value: string;
   hint?: string;
+  /** A tinted band under the figure, e.g. the yield load. */
+  pill?: { label: string; className: string };
   small?: boolean;
 }) {
   return (
     <div className="olive-card p-3">
       <div className="olive-muted text-xs font-semibold">{label}</div>
       <div className={small ? 'text-sm font-bold' : 'text-lg font-bold tabular-nums'}>{value}</div>
+      {pill && <span className={`olive-pill mt-1 ${pill.className}`}>{pill.label}</span>}
       {hint && <div className="text-primary text-xs font-semibold">{hint}</div>}
     </div>
   );
