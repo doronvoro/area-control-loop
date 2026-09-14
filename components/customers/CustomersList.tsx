@@ -3,8 +3,9 @@
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Pencil, Plus, Trash2, Users } from 'lucide-react';
+import { KeyRound, Pencil, Plus, Trash2, Users } from 'lucide-react';
 import { CustomerForm } from './CustomerForm';
+import { RecoveryLinkDialog } from './RecoveryLinkDialog';
 import { ConfirmationDialog } from '@/components/ui/confirmation-dialog';
 import { showToast } from '@/lib/toast';
 
@@ -22,16 +23,19 @@ interface CustomersListProps {
   canDelete: boolean;
 }
 
-export function CustomersList({
-  customers,
-  canCreate,
-  canUpdate,
-  canDelete,
-}: CustomersListProps) {
+export function CustomersList({ customers, canCreate, canUpdate, canDelete }: CustomersListProps) {
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [deleteCustomer, setDeleteCustomer] = useState<Customer | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+
+  const [recoveryCustomer, setRecoveryCustomer] = useState<Customer | null>(null);
+  const [recoveryOpen, setRecoveryOpen] = useState(false);
+
+  const handleRecoveryLink = (customer: Customer) => {
+    setRecoveryCustomer(customer);
+    setRecoveryOpen(true);
+  };
 
   const handleEditCustomer = (customer: Customer) => {
     setSelectedCustomer(customer);
@@ -106,6 +110,16 @@ export function CustomersList({
                       <Button
                         variant="ghost"
                         size="sm"
+                        onClick={() => handleRecoveryLink(customer)}
+                        title="קישור לאיפוס סיסמה"
+                      >
+                        <KeyRound className="h-4 w-4" />
+                      </Button>
+                    )}
+                    {canUpdate && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={() => handleEditCustomer(customer)}
                         title="ערוך"
                       >
@@ -127,9 +141,7 @@ export function CustomersList({
               </CardHeader>
               <CardContent>
                 {customer.description && (
-                  <p className="text-sm text-muted-foreground">
-                    {customer.description}
-                  </p>
+                  <p className="text-sm text-muted-foreground">{customer.description}</p>
                 )}
                 {customer.created_at && (
                   <p className="text-xs text-muted-foreground mt-2">
@@ -140,6 +152,14 @@ export function CustomersList({
             </Card>
           ))}
         </div>
+      )}
+
+      {canUpdate && (
+        <RecoveryLinkDialog
+          customer={recoveryCustomer}
+          open={recoveryOpen}
+          onOpenChange={setRecoveryOpen}
+        />
       )}
 
       {(canCreate || canUpdate) && (
