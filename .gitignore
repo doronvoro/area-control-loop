@@ -39,3 +39,8 @@ next-env.d.ts
 
 # supabase
 .supabase
+
+# Local database dumps. These contain auth.users including password hashes, and
+# backups/ already has tracked files, so an unthinking `git add .` would publish
+# one to GitHub.
+backups/*.sql
