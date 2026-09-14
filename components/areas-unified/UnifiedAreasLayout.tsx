@@ -219,32 +219,16 @@ export function UnifiedAreasLayout({
   );
 
   const handleRefreshData = useCallback(async () => {
-    // Refresh customers
+    // Re-read the same endpoint the page loaded from, rather than /api/customers
+    // + /api/customer-areas. /api/customers returns every tenant to an admin, so
+    // refreshing after a create or delete used to repopulate the tree with the
+    // customers the selection had just excluded.
     try {
-      const response = await fetch('/api/customers');
+      const response = await fetch('/api/areas-management');
       if (response.ok) {
         const data = await response.json();
-        setCustomers(data);
-      }
-    } catch (error) {
-      console.error('Error refreshing customers:', error);
-    }
-
-    // Refresh customer areas
-    try {
-      const response = await fetch('/api/customer-areas');
-      if (response.ok) {
-        const data = await response.json();
-        const newMap: Record<string, AreaWithType[]> = {};
-        for (const ca of data) {
-          if (!newMap[ca.customer_id]) {
-            newMap[ca.customer_id] = [];
-          }
-          if (ca.areas) {
-            newMap[ca.customer_id].push(ca.areas);
-          }
-        }
-        setCustomerAreasMap(newMap);
+        setCustomers(data.customers || []);
+        setCustomerAreasMap(data.customerAreasMap || {});
       }
     } catch (error) {
       console.error('Error refreshing data:', error);

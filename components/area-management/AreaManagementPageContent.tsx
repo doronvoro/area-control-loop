@@ -15,7 +15,9 @@ export function AreaManagementPageContent() {
         setLoading(true);
         setError(null);
 
-        const response = await fetch('/api/areas-management');
+        // ?scope=all: this is the cross-tenant screen. /api/areas-management is
+        // scoped to the selected customer by default, for /areas.
+        const response = await fetch('/api/areas-management?scope=all');
         if (!response.ok) {
           const errorData = await response.json();
           throw new Error(errorData.error || 'שגיאה בטעינת הנתונים');
