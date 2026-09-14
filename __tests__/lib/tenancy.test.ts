@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { scopedAreaIds } from '@/lib/api/tenancy';
+import { scopedAreaIds, assertCustomerInScope } from '@/lib/api/tenancy';
 import type { ApiContext } from '@/lib/api/auth-context';
 import { createMockSupabase } from '../helpers/mock-supabase';
 
@@ -95,5 +95,53 @@ describe('scopedAreaIds', () => {
     ]) {
       expect(await scopedAreaIds(c)).not.toBeNull();
     }
+  });
+});
+
+describe('assertCustomerInScope', () => {
+  const CUSTOMER_OTHER = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+
+  it('allows a customer owner to act on their own customer', async () => {
+    await expect(
+      assertCustomerInScope(ctx({ customer: { id: CUSTOMER_A }, scopedCustomerId: CUSTOMER_A }), CUSTOMER_A)
+    ).resolves.toBeUndefined();
+  });
+
+  it('refuses a customer owner acting on another tenant', async () => {
+    // The hole this closes: worker POST took customer_id from the request body
+    // and DELETE ran on adminClient, so an owner could create staff inside — or
+    // delete staff from — a tenant that was not theirs.
+    await expect(
+      assertCustomerInScope(
+        ctx({ customer: { id: CUSTOMER_A }, scopedCustomerId: CUSTOMER_A }),
+        CUSTOMER_OTHER
+      )
+    ).rejects.toMatchObject({ status: 403 });
+  });
+
+  it('allows an admin acting on the customer they have selected', async () => {
+    await expect(
+      assertCustomerInScope(ctx({ isAdmin: true, scopedCustomerId: CUSTOMER_A }), CUSTOMER_A)
+    ).resolves.toBeUndefined();
+  });
+
+  it('refuses an admin acting on a tenant they have not selected', async () => {
+    await expect(
+      assertCustomerInScope(ctx({ isAdmin: true, scopedCustomerId: CUSTOMER_A }), CUSTOMER_OTHER)
+    ).rejects.toMatchObject({ status: 403 });
+  });
+
+  it('refuses an admin who has selected nothing', async () => {
+    // Deliberately not "admins may do anything". Writing into a tenant you have
+    // not explicitly chosen is the accident the switcher exists to prevent.
+    await expect(
+      assertCustomerInScope(ctx({ isAdmin: true }), CUSTOMER_A)
+    ).rejects.toMatchObject({ status: 403 });
+  });
+
+  it('refuses a user with no tenancy at all', async () => {
+    await expect(
+      assertCustomerInScope(ctx({ isAdmin: false }), CUSTOMER_A)
+    ).rejects.toMatchObject({ status: 403 });
   });
 });

@@ -68,6 +68,53 @@ export async function assertAreaInScope(ctx: ApiContext, areaId: string): Promis
 }
 
 /**
+ * Assert that a caller-supplied customer id is the one this request is scoped to.
+ *
+ * For write paths that take a `customer_id` in the body, or that act on a row
+ * belonging to some customer. RLS is not enough on its own here: several worker
+ * writes go through `adminClient`, which bypasses policies entirely, and an
+ * admin can see every tenant in any case.
+ *
+ * An admin with no customer selected is refused rather than allowed everything —
+ * writing to a tenant you have not explicitly chosen is exactly the accident the
+ * switcher exists to prevent.
+ */
+export async function assertCustomerInScope(ctx: ApiContext, customerId: string): Promise<void> {
+  const scoped = resolveCustomerId(ctx);
+
+  if (!scoped) {
+    throw new AuthError('בחר לקוח לפני ביצוע פעולה זו', 403);
+  }
+  if (scoped !== customerId) {
+    throw new AuthError('אין הרשאה ללקוח זה', 403);
+  }
+}
+
+/**
+ * The same check, for a row addressed by id rather than by customer.
+ *
+ * Reads the owning customer through `adminClient` on purpose: the point is to
+ * answer "who owns this row" even when the caller cannot see it, so that the
+ * answer is a 403 rather than a silent success against another tenant's data.
+ */
+export async function assertRowInScope(
+  ctx: ApiContext,
+  table: string,
+  rowId: string
+): Promise<void> {
+  const { data } = await ctx.adminClient
+    .from(table)
+    .select('customer_id')
+    .eq('id', rowId)
+    .maybeSingle();
+
+  if (!data) {
+    throw new AuthError('לא נמצא', 404);
+  }
+  await assertCustomerInScope(ctx, (data as { customer_id: string }).customer_id);
+}
+
+/**
  * NOTE ON A WRAPPER THAT IS DELIBERATELY ABSENT
  *
  * An `applyAreaScope(ctx, query)` helper that took a query builder and returned

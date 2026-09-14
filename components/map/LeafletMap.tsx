@@ -15,6 +15,9 @@ import type {
 import {
   DEFAULT_CENTER,
   DEFAULT_ZOOM,
+  MAX_ZOOM,
+  SATELLITE_MAX_NATIVE_ZOOM,
+  OSM_MAX_NATIVE_ZOOM,
   AREA_STYLE,
   SUB_AREA_STYLE,
   AREA_PENDING_STYLE,
@@ -152,6 +155,7 @@ export function LeafletMap({
       center: _lastCenter ?? DEFAULT_CENTER,
       zoom: _lastZoom ?? DEFAULT_ZOOM,
       zoomControl: true,
+      maxZoom: MAX_ZOOM,
     });
 
     map.on('moveend', () => {
@@ -165,7 +169,8 @@ export function LeafletMap({
       'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
       {
         attribution: '&copy; OpenStreetMap contributors',
-        maxZoom: 19,
+        maxZoom: MAX_ZOOM,
+        maxNativeZoom: OSM_MAX_NATIVE_ZOOM,
       }
     );
 
@@ -173,7 +178,10 @@ export function LeafletMap({
       'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
       {
         attribution: '&copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics',
-        maxZoom: 19,
+        maxZoom: MAX_ZOOM,
+        // Past this zoom Esri serves a "Map data not yet available" tile over
+        // rural areas, so upscale the last real tile instead.
+        maxNativeZoom: SATELLITE_MAX_NATIVE_ZOOM,
       }
     );
 
@@ -480,7 +488,10 @@ export function LeafletMap({
       }
       if (geoLayers.length > 0) {
         const group = L.featureGroup(geoLayers);
-        mapRef.current.fitBounds(group.getBounds(), { padding: [50, 50] });
+        mapRef.current.fitBounds(group.getBounds(), {
+          padding: [50, 50],
+          maxZoom: SATELLITE_MAX_NATIVE_ZOOM,
+        });
       }
       return;
     }
@@ -503,7 +514,10 @@ export function LeafletMap({
 
     if (targetGeometry) {
       const geoJsonLayer = L.geoJSON(targetGeometry as any);
-      mapRef.current.fitBounds(geoJsonLayer.getBounds(), { padding: [50, 50] });
+      mapRef.current.fitBounds(geoJsonLayer.getBounds(), {
+        padding: [50, 50],
+        maxZoom: SATELLITE_MAX_NATIVE_ZOOM,
+      });
     }
   }, [fitToEntityId, areas]);
 

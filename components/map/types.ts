@@ -70,6 +70,16 @@ export interface DrawingState {
 export const DEFAULT_CENTER: LatLngExpression = [31.7683, 35.2137];
 export const DEFAULT_ZOOM = 8;
 
+// How far the user may zoom in. Past the native zoom of each tile source
+// Leaflet upscales the last available tile instead of requesting one, so keep
+// this close to the native cap — further in the imagery is just blur.
+export const MAX_ZOOM = 20;
+// Esri World Imagery only has z19 tiles over cities; outside them (where most
+// of our plots are) coverage stops at z18 and the server returns a
+// "Map data not yet available" placeholder tile instead of imagery.
+export const SATELLITE_MAX_NATIVE_ZOOM = 18;
+export const OSM_MAX_NATIVE_ZOOM = 19;
+
 // Polygon styling
 export const AREA_STYLE = {
   color: '#2563eb',
