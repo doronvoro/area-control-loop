@@ -58,9 +58,12 @@ export const SEVERITY_CONFIG: Record<string, { label: string; color: string }> =
   critical: { label: 'קריטית', color: '#dc2626' },
 };
 
-// State for the drawing/editing mode
+// State for the drawing/editing mode.
+// 'redraw' replaces an existing polygon: the old boundary stays on screen as a
+// ghost for reference and is only overwritten once the new one is completed,
+// so cancelling leaves the saved boundary untouched.
 export interface DrawingState {
-  mode: 'view' | 'draw' | 'edit';
+  mode: 'view' | 'draw' | 'edit' | 'redraw';
   targetAreaId?: string; // When drawing a sub-area, which area it belongs to
   targetEntityId?: string; // When editing existing polygon
   targetEntityType?: 'area' | 'sub_area';
@@ -114,4 +117,14 @@ export const SUB_AREA_PENDING_STYLE = {
 export const SELECTED_STYLE = {
   color: '#f59e0b',
   weight: 3,
+};
+
+// The boundary being replaced during 'redraw' — muted so the new polygon reads
+// as the live one, but still visible so the user can see what they are replacing.
+export const GHOST_STYLE = {
+  color: '#94a3b8',
+  fillColor: '#94a3b8',
+  fillOpacity: 0.08,
+  weight: 1,
+  dashArray: '4, 6',
 };
