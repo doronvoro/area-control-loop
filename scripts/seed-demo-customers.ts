@@ -83,8 +83,22 @@ const CUSTOMERS: DemoCustomer[] = [
     slug: 'galil',
     description: 'מטע גדול — מספר גידולים ותת-שטחים',
     areas: [
-      { name: 'חלקת תפוח צפון', crop: 'תפוח', size: 42.5, areaType: 'outdoor', variety: 'גאלה', subAreas: ['שורות 1-10', 'שורות 11-20', 'שורות 21-30'] },
-      { name: 'חלקת אפרסק מזרח', crop: 'אפרסק', size: 18.25, areaType: 'outdoor', variety: 'רד היבן', subAreas: ['גוש א', 'גוש ב'] },
+      {
+        name: 'חלקת תפוח צפון',
+        crop: 'תפוח',
+        size: 42.5,
+        areaType: 'outdoor',
+        variety: 'גאלה',
+        subAreas: ['שורות 1-10', 'שורות 11-20', 'שורות 21-30'],
+      },
+      {
+        name: 'חלקת אפרסק מזרח',
+        crop: 'אפרסק',
+        size: 18.25,
+        areaType: 'outdoor',
+        variety: 'רד היבן',
+        subAreas: ['גוש א', 'גוש ב'],
+      },
       { name: 'כרם ענבים', crop: 'ענבים', size: 30, areaType: 'outdoor', variety: 'סופיריור' },
       { name: 'חממת עגבניות', crop: 'עגבנייה', size: 3.4, areaType: 'indoor' },
     ],
@@ -100,7 +114,14 @@ const CUSTOMERS: DemoCustomer[] = [
     slug: 'sadot',
     description: 'משק בינוני — גידול אחד',
     areas: [
-      { name: 'מטע שזיפים', crop: 'שזיף', size: 12.8, areaType: 'outdoor', variety: 'בלאק אמבר', subAreas: ['צד מערבי', 'צד מזרחי'] },
+      {
+        name: 'מטע שזיפים',
+        crop: 'שזיף',
+        size: 12.8,
+        areaType: 'outdoor',
+        variety: 'בלאק אמבר',
+        subAreas: ['צד מערבי', 'צד מזרחי'],
+      },
       { name: 'מטע רימונים', crop: 'רימון', size: 7.2, areaType: 'outdoor', variety: 'ווندרפול' },
     ],
     workers: [{ name: 'רונית מנטרת', type: 'inspector' }],
@@ -133,15 +154,15 @@ async function removeDemoData() {
   console.log('🧹 Removing demo data...\n');
 
   const { data: customers } = await supabase.from('customers').select('id, name, user_id');
-  const demo = (customers || []).filter((c: any) => c.name.includes('(הדגמה)'));
+  const demo = (customers || []).filter((c: { name: string }) => c.name.includes('(הדגמה)'));
 
-  for (const c of demo as any[]) {
+  for (const c of demo) {
     // areas cascade to customer_areas, sub_areas and report_areas.
     const { data: links } = await supabase
       .from('customer_areas')
       .select('area_id')
       .eq('customer_id', c.id);
-    const areaIds = (links || []).map((l: any) => l.area_id);
+    const areaIds = (links || []).map((l: { area_id: string }) => l.area_id);
 
     if (areaIds.length > 0) {
       await supabase.from('report_areas').delete().in('area_id', areaIds);
@@ -204,13 +225,13 @@ async function attachRole(userId: string, roleName: string) {
     .from('user_roles')
     .select('user_id')
     .eq('user_id', userId)
-    .eq('role_id', (role as any).id)
+    .eq('role_id', role.id)
     .maybeSingle();
 
   if (!already) {
     const { error: insertError } = await supabase
       .from('user_roles')
-      .insert({ user_id: userId, role_id: (role as any).id } as any);
+      .insert({ user_id: userId, role_id: role.id });
     if (insertError) throw insertError;
   }
 }
@@ -224,10 +245,14 @@ async function main() {
   }
 
   const { data: crops } = await supabase.from('crops').select('id, name');
-  const cropByName = new Map((crops || []).map((c: any) => [c.name, c.id]));
+  const cropByName = new Map(
+    (crops || []).map((c: { name: string; id: string }) => [c.name, c.id])
+  );
 
   const { data: workerTypes } = await supabase.from('worker_types').select('id, name');
-  const typeByName = new Map((workerTypes || []).map((t: any) => [t.name, t.id]));
+  const typeByName = new Map(
+    (workerTypes || []).map((t: { name: string; id: string }) => [t.name, t.id])
+  );
 
   for (const demo of CUSTOMERS) {
     console.log(`👤 ${demo.name}`);
@@ -243,20 +268,20 @@ async function main() {
 
     let customerId: string;
     if (existingCustomer) {
-      customerId = (existingCustomer as any).id;
+      customerId = existingCustomer.id;
       await supabase
         .from('customers')
-        .update({ user_id: userId, description: demo.description } as any)
+        .update({ user_id: userId, description: demo.description })
         .eq('id', customerId);
       console.log('   customer exists — updated');
     } else {
       const { data, error } = await supabase
         .from('customers')
-        .insert({ user_id: userId, name: demo.name, description: demo.description } as any)
+        .insert({ user_id: userId, name: demo.name, description: demo.description })
         .select('id')
         .single();
       if (error) throw error;
-      customerId = (data as any).id;
+      customerId = data.id;
       console.log('   customer created');
     }
 
@@ -276,7 +301,7 @@ async function main() {
 
       let areaId: string;
       if (existingArea) {
-        areaId = (existingArea as any).id;
+        areaId = existingArea.id;
       } else {
         const { data, error } = await supabase
           .from('areas')
@@ -288,11 +313,11 @@ async function main() {
             size_unit_type: 'dunam',
             area_type: area.areaType,
             variety: area.variety || null,
-          } as any)
+          })
           .select('id')
           .single();
         if (error) throw error;
-        areaId = (data as any).id;
+        areaId = data.id;
       }
 
       const { data: link } = await supabase
@@ -302,9 +327,7 @@ async function main() {
         .eq('area_id', areaId)
         .maybeSingle();
       if (!link) {
-        await supabase
-          .from('customer_areas')
-          .insert({ customer_id: customerId, area_id: areaId } as any);
+        await supabase.from('customer_areas').insert({ customer_id: customerId, area_id: areaId });
       }
 
       for (const subName of area.subAreas || []) {
@@ -321,7 +344,7 @@ async function main() {
             level: 1,
             crop_id: cropId,
             display: `${area.name} / ${subName}`,
-          } as any);
+          });
         }
       }
     }
@@ -353,7 +376,7 @@ async function main() {
           user_id: workerUserId,
           name: worker.name,
           type_id: typeId,
-        } as any);
+        });
       }
     }
 
@@ -365,7 +388,9 @@ async function main() {
   for (const c of CUSTOMERS) {
     console.log(`   ${c.email.padEnd(28)} ${c.name}`);
   }
-  console.log('\n💡 Log in as an admin to see the switcher; these accounts see only their own data.');
+  console.log(
+    '\n💡 Log in as an admin to see the switcher; these accounts see only their own data.'
+  );
   console.log('   Remove everything with: npm run seed-demo-customers -- --clean');
 }
 
