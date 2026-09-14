@@ -20,12 +20,24 @@ interface Customer {
  * This is a focus control, not a security boundary — an admin may read every
  * tenant regardless of what is selected. See lib/api/customer-selection.ts.
  */
-export function CustomerSwitcher({ collapsed = false }: { collapsed?: boolean }) {
+export function CustomerSwitcher({
+  collapsed = false,
+  variant = 'default',
+}: {
+  collapsed?: boolean;
+  /**
+   * 'sidebar' re-colours the control for the dark sidebar panel. The mobile
+   * menu renders on the normal light sheet background and must NOT use it —
+   * the same override that makes this readable there makes it unreadable here.
+   */
+  variant?: 'default' | 'sidebar';
+}) {
   const { user, loading } = useUser();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [switching, setSwitching] = useState(false);
 
   const isAdmin = user?.isAdmin ?? false;
+  const isSidebar = variant === 'sidebar';
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -76,7 +88,12 @@ export function CustomerSwitcher({ collapsed = false }: { collapsed?: boolean })
   if (collapsed) {
     return (
       <div
-        className="flex h-10 w-10 items-center justify-center rounded-md border bg-muted/50 text-xs font-medium"
+        className={cn(
+          'flex h-10 w-10 items-center justify-center rounded-md border text-xs font-medium',
+          isSidebar
+            ? 'border-sidebar-border bg-sidebar-accent text-sidebar-foreground'
+            : 'bg-muted/50'
+        )}
         title={selected ? `לקוח נבחר: ${selected.name}` : 'לא נבחר לקוח'}
       >
         {selected ? selected.name.trim().charAt(0) : <Building2 className="h-4 w-4 opacity-60" />}
@@ -85,8 +102,15 @@ export function CustomerSwitcher({ collapsed = false }: { collapsed?: boolean })
   }
 
   return (
-    <div className="space-y-1.5">
-      <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+    // .customer-switcher re-points SearchableSelect's trigger at the sidebar
+    // palette; see the block at the end of app/globals.css.
+    <div className={cn('space-y-1.5', isSidebar && 'customer-switcher')}>
+      <div
+        className={cn(
+          'flex items-center gap-1.5 text-xs font-medium',
+          isSidebar ? 'text-sidebar-foreground/70' : 'text-muted-foreground'
+        )}
+      >
         <Building2 className="h-3.5 w-3.5" />
         <span>לקוח פעיל</span>
       </div>

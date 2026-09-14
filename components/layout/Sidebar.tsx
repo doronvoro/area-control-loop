@@ -138,7 +138,7 @@ export function Sidebar({ collapsed, onToggleCollapse }: SidebarProps) {
 
       {/* Active customer (admins only; renders nothing for everyone else) */}
       <div className={cn('pb-2', collapsed ? 'flex justify-center px-2' : 'px-3')}>
-        <CustomerSwitcher collapsed={collapsed} />
+        <CustomerSwitcher collapsed={collapsed} variant="sidebar" />
       </div>
 
       {/* Navigation */}
