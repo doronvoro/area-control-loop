@@ -16,6 +16,16 @@ export function AppShell({ children }: AppShellProps) {
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
+    // A recovery link clicked while already signed in lands on /dashboard rather
+    // than /login, because the root redirect is server-side and the token lives
+    // in the fragment, which never reaches the server. Without this the token is
+    // silently swallowed and the password is never changed.
+    if (window.location.hash.includes('type=recovery')) {
+      window.location.replace(`/reset-password${window.location.hash}`);
+    }
+  }, []);
+
+  useEffect(() => {
     const saved = localStorage.getItem('sidebar-collapsed') === 'true';
     setSidebarCollapsed(saved);
     setHydrated(true);

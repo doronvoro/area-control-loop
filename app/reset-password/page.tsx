@@ -14,14 +14,16 @@ const MIN_PASSWORD_LENGTH = 6;
 /**
  * Where the emailed recovery link lands. Sets a new password.
  *
- * Supabase delivers the recovery session before this page can use it, in one of
- * two shapes depending on the project's flow:
- *   - PKCE:     ?code=... , exchanged for a session
- *   - implicit: #access_token=...&type=recovery , picked up by the client
- *     automatically via detectSessionInUrl
+ * Supabase delivers the recovery credentials in one of two shapes, depending on
+ * the project's flow:
+ *   - PKCE:     ?code=...                     exchanged for a session
+ *   - implicit: #access_token=&refresh_token=  installed with setSession
  *
- * Both are handled below rather than assuming one, because which you get
- * depends on project configuration rather than on anything in this codebase.
+ * Both are handled explicitly. Leaving the fragment case to the client's
+ * detectSessionInUrl does NOT work here: the browser client from @supabase/ssr
+ * defaults to the PKCE flow and ignores implicit fragment tokens, so a
+ * perfectly valid link reported itself as expired. Verified with Playwright
+ * against a real emailed link before and after.
  *
  * The page refuses to show the form until a session exists: without one,
  * updateUser would fail with a confusing "Auth session missing" after the user
@@ -39,67 +41,72 @@ export default function ResetPasswordPage() {
   const lang = getLanguage();
 
   useEffect(() => {
-    let settled = false;
+    let cancelled = false;
 
-    const markReady = () => {
-      if (settled) return;
-      settled = true;
+    const fail = (message: string) => {
+      if (cancelled) return;
+      setChecking(false);
+      setError(message);
+    };
+
+    const succeed = () => {
+      if (cancelled) return;
       setReady(true);
       setChecking(false);
-      // Strip the token from the address bar — but ONLY once the session
-      // exists. Doing it earlier destroys the very hash that carries it.
+      // Only now is it safe to drop the token from the address bar.
       window.history.replaceState({}, '', '/reset-password');
     };
 
-    // The implicit flow delivers the token in the URL fragment, which
-    // supabase-js consumes asynchronously during client start-up
-    // (detectSessionInUrl). Waiting for the event is the only reliable way to
-    // know it has finished — polling getSession() alone loses the race and
-    // reports a perfectly good link as expired.
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session && ['PASSWORD_RECOVERY', 'SIGNED_IN', 'INITIAL_SESSION'].includes(event)) {
-        markReady();
-      }
-    });
-
     (async () => {
       try {
-        // PKCE projects send ?code= instead of a fragment. Handle both rather
-        // than assuming one: which you get is project configuration, not code.
-        const code = new URL(window.location.href).searchParams.get('code');
+        const url = new URL(window.location.href);
+
+        // PKCE projects deliver ?code=.
+        const code = url.searchParams.get('code');
         if (code) {
           const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
           if (exchangeError) throw exchangeError;
-          markReady();
+          succeed();
           return;
         }
 
+        // Otherwise the tokens arrive in the fragment. They are parsed and
+        // installed explicitly rather than leaving it to detectSessionInUrl:
+        // the browser client created by @supabase/ssr defaults to the PKCE
+        // flow and does not pick these up, so relying on that detection left
+        // a valid link reporting itself as expired.
+        const fragment = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+        const accessToken = fragment.get('access_token');
+        const refreshToken = fragment.get('refresh_token');
+
+        if (accessToken && refreshToken) {
+          const { error: sessionError } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+          if (sessionError) throw sessionError;
+          succeed();
+          return;
+        }
+
+        // No token in the URL at all — but an already-signed-in user can still
+        // change their password from here.
         const {
           data: { session },
         } = await supabase.auth.getSession();
-        if (session) markReady();
-      } catch (err) {
-        if (!settled) {
-          settled = true;
-          setChecking(false);
-          setError(err instanceof Error ? err.message : 'הקישור אינו תקף');
+        if (session) {
+          succeed();
+          return;
         }
+
+        fail('הקישור אינו תקף או שפג תוקפו. בקש קישור חדש מדף איפוס הסיסמה.');
+      } catch (err) {
+        fail(err instanceof Error ? err.message : 'הקישור אינו תקף');
       }
     })();
 
-    // If nothing has arrived by now, the link really is bad.
-    const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      setChecking(false);
-      setError('הקישור אינו תקף או שפג תוקפו. בקש קישור חדש מדף איפוס הסיסמה.');
-    }, 5000);
-
     return () => {
-      subscription.unsubscribe();
-      clearTimeout(timer);
+      cancelled = true;
     };
   }, []);
 
