@@ -23,6 +23,7 @@ import {
   AREA_PENDING_STYLE,
   SUB_AREA_PENDING_STYLE,
   SELECTED_STYLE,
+  GHOST_STYLE,
 } from './types';
 import { buildSeverityBadge, buildTreatmentHtml, createPinIcon } from './pin-marker-utils';
 
@@ -272,11 +273,14 @@ export function LeafletMap({
 
     // Remove previous editable layer
     if (editableLayerRef.current) {
-      (editableLayerRef.current as any).pm?.disable();
+      const pm = (editableLayerRef.current as any).pm;
+      // disable() leaves layer drag on, so turn it off explicitly.
+      pm?.disableLayerDrag();
+      pm?.disable();
       editableLayerRef.current = null;
     }
 
-    if (drawingState.mode === 'draw') {
+    if (drawingState.mode === 'draw' || drawingState.mode === 'redraw') {
       map.pm.enableDraw('Polygon', {
         snappable: true,
         snapDistance: 20,
@@ -331,19 +335,26 @@ export function LeafletMap({
 
     const isViewMode = drawingState.mode === 'view';
     const isEditMode = drawingState.mode === 'edit';
+    const isRedrawMode = drawingState.mode === 'redraw';
 
     areas.forEach((area) => {
       // Render area polygon
       if (area.geometry) {
+        // The boundary being replaced: shown for reference only until the
+        // replacement is drawn, so it must not swallow the drawing clicks.
+        const isGhost = isRedrawMode && drawingState.targetEntityId === area.id;
         const isSelected = selectedEntityId === area.id;
         const baseStyle =
           area.pending_monitoring > 0 ? AREA_PENDING_STYLE : AREA_STYLE;
-        const style = isSelected
-          ? { ...baseStyle, ...SELECTED_STYLE }
-          : baseStyle;
+        const style = isGhost
+          ? GHOST_STYLE
+          : isSelected
+            ? { ...baseStyle, ...SELECTED_STYLE }
+            : baseStyle;
 
         const polygon = L.geoJSON(area.geometry as any, {
           style: () => style,
+          interactive: !isGhost,
         });
 
         polygon.eachLayer((layer: any) => {
@@ -351,7 +362,7 @@ export function LeafletMap({
           layer.options.entityType = 'area';
 
           // Don't bind tooltip/popup in edit mode — they interfere with vertex dragging
-          if (!isEditMode) {
+          if (!isEditMode && !isGhost) {
             layer.bindTooltip(buildAreaTooltipContent(area), {
               permanent: false,
               direction: 'center',
@@ -366,9 +377,14 @@ export function LeafletMap({
             });
           }
 
-          layer.on('click', () => {
-            onEntitySelect(area.id, 'area');
-          });
+          // Only select in view mode: while drawing or editing, a click belongs
+          // to the polygon in progress, and selecting re-renders the layer group
+          // — which would destroy the edited layer and its unsaved changes.
+          if (isViewMode) {
+            layer.on('click', () => {
+              onEntitySelect(area.id, 'area');
+            });
+          }
 
           layer.on('pm:edit', () => {
             handleEditEnd(area.id, 'area', layer);
@@ -381,17 +397,22 @@ export function LeafletMap({
       // Render sub-area polygons
       area.sub_areas.forEach((subArea) => {
         if (subArea.geometry) {
+          const isGhost =
+            isRedrawMode && drawingState.targetEntityId === subArea.id;
           const isSelected = selectedEntityId === subArea.id;
           const baseStyle =
             subArea.pending_monitoring > 0
               ? SUB_AREA_PENDING_STYLE
               : SUB_AREA_STYLE;
-          const style = isSelected
-            ? { ...baseStyle, ...SELECTED_STYLE }
-            : baseStyle;
+          const style = isGhost
+            ? GHOST_STYLE
+            : isSelected
+              ? { ...baseStyle, ...SELECTED_STYLE }
+              : baseStyle;
 
           const polygon = L.geoJSON(subArea.geometry as any, {
             style: () => style,
+            interactive: !isGhost,
           });
 
           polygon.eachLayer((layer: any) => {
@@ -399,7 +420,7 @@ export function LeafletMap({
             layer.options.entityType = 'sub_area';
 
             // Don't bind tooltip/popup in edit mode — they interfere with vertex dragging
-            if (!isEditMode) {
+            if (!isEditMode && !isGhost) {
               layer.bindTooltip(buildSubAreaTooltipContent(subArea), {
                 permanent: false,
                 direction: 'center',
@@ -414,9 +435,12 @@ export function LeafletMap({
               });
             }
 
-            layer.on('click', () => {
-              onEntitySelect(subArea.id, 'sub_area');
-            });
+            // See the area polygon above: view mode only.
+            if (isViewMode) {
+              layer.on('click', () => {
+                onEntitySelect(subArea.id, 'sub_area');
+              });
+            }
 
             layer.on('pm:edit', () => {
               handleEditEnd(subArea.id, 'sub_area', layer);
@@ -453,7 +477,10 @@ export function LeafletMap({
     if (isEditMode && drawingState.targetEntityId) {
       // Clean up previous editable layer ref
       if (editableLayerRef.current) {
-        (editableLayerRef.current as any).pm?.disable();
+        const pm = (editableLayerRef.current as any).pm;
+        // disable() leaves layer drag on, so turn it off explicitly.
+        pm?.disableLayerDrag();
+        pm?.disable();
         editableLayerRef.current = null;
       }
 
@@ -466,6 +493,11 @@ export function LeafletMap({
               innerLayer.pm.enable({
                 allowSelfIntersection: false,
               });
+              // L.PM.Edit.Line.applyOptions (which Polygon inherits) only wires
+              // up snapping — unlike the Marker class it ignores the `draggable`
+              // option, so whole-shape dragging has to be turned on by hand.
+              // Without this a boundary can be reshaped in place but never moved.
+              innerLayer.pm.enableLayerDrag();
               editableLayerRef.current = innerLayer;
             }
           });

@@ -21,7 +21,9 @@ export default function LoginPage() {
 
   useEffect(() => {
     const checkUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (user) {
         router.replace('/dashboard');
       }
@@ -71,7 +73,8 @@ export default function LoginPage() {
         <div
           className="absolute inset-0"
           style={{
-            background: 'radial-gradient(ellipse at 30% 50%, oklch(0.35 0.10 155 / 40%) 0%, transparent 70%)',
+            background:
+              'radial-gradient(ellipse at 30% 50%, oklch(0.35 0.10 155 / 40%) 0%, transparent 70%)',
           }}
         />
         <div className="relative z-10 px-12 text-center max-w-md">
@@ -80,9 +83,7 @@ export default function LoginPage() {
               <img src="/logo.svg" alt="Logo" width={48} height={48} className="size-12" />
             </div>
           </div>
-          <h1 className="text-3xl font-bold text-white mb-3 tracking-tight">
-            Area Control Loop
-          </h1>
+          <h1 className="text-3xl font-bold text-white mb-3 tracking-tight">Area Control Loop</h1>
           <p className="text-[oklch(0.75_0.03_155)] text-base leading-relaxed">
             מערכת ניהול ובקרת שטחים חקלאיים.
             <br />
@@ -104,9 +105,7 @@ export default function LoginPage() {
 
           <div className="mb-6">
             <h2 className="text-2xl font-bold tracking-tight">התחברות</h2>
-            <p className="text-sm text-muted-foreground mt-1">
-              הכנס את פרטי ההתחברות שלך
-            </p>
+            <p className="text-sm text-muted-foreground mt-1">הכנס את פרטי ההתחברות שלך</p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-4">
@@ -131,9 +130,14 @@ export default function LoginPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <label htmlFor="password" className="text-sm font-medium">
-                סיסמה
-              </label>
+              <div className="flex items-center justify-between">
+                <label htmlFor="password" className="text-sm font-medium">
+                  סיסמה
+                </label>
+                <Link href="/forgot-password" className="text-xs text-primary hover:underline">
+                  שכחתי סיסמה
+                </Link>
+              </div>
               <Input
                 id="password"
                 type="password"

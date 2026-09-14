@@ -2,8 +2,18 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { showToast } from '@/lib/toast';
-import { MapPin, Pencil, Plus, Trash2, X, Loader2, Save } from 'lucide-react';
+import {
+  MapPin,
+  Pencil,
+  Plus,
+  Trash2,
+  X,
+  Loader2,
+  Save,
+  SquareDashedMousePointer,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { ConfirmationDialog } from '@/components/ui/confirmation-dialog';
 import { cn } from '@/lib/utils';
 import { InteractiveMap } from '@/components/map/InteractiveMap';
 import type {
@@ -37,11 +47,24 @@ export function OutdoorAreaEditor({
     selectedSubAreaId || area.id
   );
   const [fitToEntityId, setFitToEntityId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: string;
+    type: 'area' | 'sub_area';
+    name: string;
+  } | null>(null);
+
+  // Whether this editor has ever rendered map data. Only the first load may
+  // block the view with a spinner: a re-fetch (after saving a boundary, or when
+  // switching sub-area) must keep the map mounted, otherwise Leaflet is torn
+  // down and rebuilt — the boundary that was just saved disappears for the
+  // length of the request and the current pan/zoom is lost, which reads as
+  // "it saved but nothing showed up".
+  const hasLoadedRef = useRef(false);
 
   // Fetch map data for this specific area
   const fetchMapData = useCallback(async () => {
     try {
-      setLoading(true);
+      if (!hasLoadedRef.current) setLoading(true);
       const res = await fetch('/api/map/areas');
       if (!res.ok) throw new Error('Failed to fetch areas');
       const data = await res.json();
@@ -66,6 +89,7 @@ export function OutdoorAreaEditor({
       showToast.error('שגיאה בטעינת נתוני מפה');
       console.error(error);
     } finally {
+      hasLoadedRef.current = true;
       setLoading(false);
     }
   }, [area.id, selectedSubAreaId]);
@@ -184,15 +208,30 @@ export function OutdoorAreaEditor({
     setSelectedEntityId(entityId);
   };
 
-  const handleDeleteGeometry = (
+  // Draw a replacement boundary somewhere else. The saved geometry is left
+  // alone until the new polygon is finished, so cancelling costs nothing.
+  const handleRedrawStart = (
     entityId: string,
     entityType: 'area' | 'sub_area'
   ) => {
-    saveGeometry(entityId, entityType, null);
+    setDrawingState({
+      mode: 'redraw',
+      targetEntityId: entityId,
+      targetEntityType: entityType,
+    });
+    setSelectedEntityId(entityId);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    await saveGeometry(deleteTarget.id, deleteTarget.type, null);
+    setDeleteTarget(null);
   };
 
   const isDrawing =
-    drawingState.mode === 'draw' || drawingState.mode === 'edit';
+    drawingState.mode === 'draw' ||
+    drawingState.mode === 'edit' ||
+    drawingState.mode === 'redraw';
 
   const mapArea = mapAreas[0];
   const hasGeometry = !!mapArea?.geometry;
@@ -226,7 +265,9 @@ export function OutdoorAreaEditor({
               <span className="text-xs text-muted-foreground me-2">
                 {drawingState.mode === 'draw'
                   ? 'לחץ על המפה כדי לצייר מצולע'
-                  : 'גרור נקודות כדי לערוך'}
+                  : drawingState.mode === 'redraw'
+                    ? 'צייר מצולע חדש במיקום הרצוי — הגבול הנוכחי יוחלף רק בסיום'
+                    : 'גרור את המצולע כדי להזיז אותו, או את הנקודות כדי לשנות צורה'}
               </span>
               {drawingState.mode === 'edit' ? (
                 <>
@@ -265,22 +306,41 @@ export function OutdoorAreaEditor({
               {hasGeometry ? (
                 <>
                   {permissions.canUpdateArea && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 text-xs gap-1"
-                      onClick={() => handleEditStart(area.id, 'area')}
-                    >
-                      <Pencil className="h-3 w-3" />
-                      ערוך גבולות
-                    </Button>
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs gap-1"
+                        onClick={() => handleEditStart(area.id, 'area')}
+                      >
+                        <Pencil className="h-3 w-3" />
+                        ערוך גבולות
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs gap-1"
+                        title="צייר גבול חדש במיקום אחר"
+                        onClick={() => handleRedrawStart(area.id, 'area')}
+                      >
+                        <SquareDashedMousePointer className="h-3 w-3" />
+                        צייר מחדש
+                      </Button>
+                    </>
                   )}
                   {permissions.canDeleteArea && (
                     <Button
                       variant="ghost"
                       size="sm"
                       className="h-7 text-xs gap-1 text-destructive"
-                      onClick={() => handleDeleteGeometry(area.id, 'area')}
+                      title="מחק גבולות"
+                      onClick={() =>
+                        setDeleteTarget({
+                          id: area.id,
+                          type: 'area',
+                          name: area.name,
+                        })
+                      }
                     >
                       <Trash2 className="h-3 w-3" />
                     </Button>
@@ -371,6 +431,20 @@ export function OutdoorAreaEditor({
                           <Pencil className="h-2.5 w-2.5" />
                         </Button>
                       )}
+                      {permissions.canUpdateSubArea && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-5 w-5"
+                          title="צייר גבול חדש במיקום אחר"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRedrawStart(sa.id, 'sub_area');
+                          }}
+                        >
+                          <SquareDashedMousePointer className="h-2.5 w-2.5" />
+                        </Button>
+                      )}
                       {permissions.canDeleteSubArea && (
                         <Button
                           variant="ghost"
@@ -379,7 +453,11 @@ export function OutdoorAreaEditor({
                           title="מחק גבולות"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleDeleteGeometry(sa.id, 'sub_area');
+                            setDeleteTarget({
+                              id: sa.id,
+                              type: 'sub_area',
+                              name: sa.display || sa.name,
+                            });
                           }}
                         >
                           <Trash2 className="h-2.5 w-2.5" />
@@ -408,6 +486,16 @@ export function OutdoorAreaEditor({
           })}
         </div>
       )}
+
+      <ConfirmationDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title="מחיקת גבולות"
+        description={`הגבולות של "${deleteTarget?.name ?? ''}" יימחקו מהמפה. לא ניתן לשחזר את הפעולה — כדי להזיז את הגבול למיקום אחר השתמש ב"ערוך גבולות" או ב"צייר מחדש".`}
+        confirmText="מחק גבולות"
+        variant="destructive"
+        onConfirm={handleConfirmDelete}
+      />
     </div>
   );
 }

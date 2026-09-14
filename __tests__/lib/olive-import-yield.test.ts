@@ -8,6 +8,7 @@ import {
   type OwnYieldRow,
   type YieldPlotLike,
 } from '@/lib/olive/import-yield';
+import { parseBackup, type ProtoBackup } from '@/lib/olive/import-backup';
 
 /**
  * The yield matcher joins the prototype's ownYieldData sheet onto its plots.
@@ -157,24 +158,19 @@ const BACKUP_FILE =
   process.env.OLIVE_BACKUP_FILE ||
   join(homedir(), 'Downloads', 'גיבוי חיזוי מסיק ונתונים - 2026.html');
 
-/** `yieldEst` is the per-plot override the sheet has to defer to. */
-type BackupPlot = YieldPlotLike & { yieldEst?: string | number | null };
-
-interface ProtoBackup {
-  plots?: BackupPlot[];
-  ownYieldData?: OwnYieldRow[];
-}
-
-function readBackup(path: string): ProtoBackup {
-  const text = readFileSync(path, 'utf8');
-  const match = text.match(
-    /<script type="application\/json" id="raw-backup-data">([\s\S]*?)<\/script>/
-  );
-  return JSON.parse(match ? match[1] : text);
+/**
+ * The real parser, not a copy of it.
+ *
+ * This used to re-implement the extraction inline, which meant the checksums
+ * below could pass against a regex that no longer matched the one the importer
+ * actually runs.
+ */
+function readBackup(path: string) {
+  return parseBackup(readFileSync(path, 'utf8'));
 }
 
 describe.skipIf(!existsSync(BACKUP_FILE))('the 2026 Gashur export', () => {
-  const backup = existsSync(BACKUP_FILE)
+  const backup: ProtoBackup = existsSync(BACKUP_FILE)
     ? readBackup(BACKUP_FILE)
     : { plots: [], ownYieldData: [] };
   const plots = backup.plots || [];

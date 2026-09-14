@@ -32,6 +32,7 @@ const CROSS_TENANT_PREFIXES = [
   '/admin/pesticide-registry',
   '/admin/registry-sync',
   '/admin/api-checker',
+  '/admin/olive-import',
 ];
 
 export function SelectCustomerBanner() {

@@ -100,6 +100,9 @@ export const adminGroup: NavGroup = {
     // created customer shows an empty app and no way forward.
     { href: '/admin/customers', label: 'ניהול לקוחות', icon: Building2 },
     { href: '/admin/areas-management', label: 'שיוך שטחים ללקוחות', icon: MapPinned },
+    // The third step of onboarding an olive tenant: load their data. Replaces
+    // what is there, so it is an admin operation rather than a customer one.
+    { href: '/admin/olive-import', label: 'ייבוא נתוני מסיק', icon: FileUp },
     { href: '/admin/roles', label: 'תפקידים והרשאות', icon: Shield },
     { href: '/admin/monitoring', label: 'ניטור - מנהל', icon: ClipboardList },
     { href: '/admin/actions', label: 'פעולות - מנהל', icon: ListChecks },
