@@ -1145,6 +1145,50 @@ export interface Database {
           updated_at?: string;
         };
       };
+      plot_category_thresholds: {
+        // Single row, id always 'default'. Status-card bands only — the alert
+        // bands live in parameter_rules. NUMERIC arrives as a string over
+        // PostgREST; toCategoryThresholds() in lib/olive/adapt.ts coerces.
+        Row: {
+          id: string;
+          ready_oil_min: number;
+          ready_oil_max: number;
+          ready_water_min: number;
+          ready_water_max: number;
+          anomaly_water_low: number;
+          anomaly_water_high: number;
+          normal_oil_max: number;
+          normal_water_max: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          ready_oil_min: number;
+          ready_oil_max: number;
+          ready_water_min: number;
+          ready_water_max: number;
+          anomaly_water_low: number;
+          anomaly_water_high: number;
+          normal_oil_max: number;
+          normal_water_max: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          ready_oil_min?: number;
+          ready_oil_max?: number;
+          ready_water_min?: number;
+          ready_water_max?: number;
+          anomaly_water_low?: number;
+          anomaly_water_high?: number;
+          normal_oil_max?: number;
+          normal_water_max?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
       olive_plot_details: {
         Row: {
           area_id: string; // PK, 1:1 with areas
@@ -1405,6 +1449,8 @@ export type UserRole = Database['public']['Tables']['user_roles']['Row'];
 // Olive harvest module
 export type Parameter = Database['public']['Tables']['parameters']['Row'];
 export type ParameterRule = Database['public']['Tables']['parameter_rules']['Row'];
+export type PlotCategoryThresholdsRow =
+  Database['public']['Tables']['plot_category_thresholds']['Row'];
 export type OlivePlotDetails = Database['public']['Tables']['olive_plot_details']['Row'];
 export type Season = Database['public']['Tables']['seasons']['Row'];
 export type YieldEstimate = Database['public']['Tables']['yield_estimates']['Row'];

@@ -57,24 +57,42 @@ describe('parseBackup', () => {
     expect(parsed.exportedAt).toBe('2026-09-11T21:04:31.451Z');
   });
 
+  // Both threshold blocks travel in the export and they are not interchangeable:
+  // `categoryThresholds` is written to plot_category_thresholds, `thresholds`
+  // is only compared against parameter_rules and reported. Losing either at the
+  // parse step would be silent — the import would just not mention them.
+  it('keeps both threshold blocks', () => {
+    const parsed = parseBackup(
+      html(
+        JSON.stringify({
+          ...MINIMAL,
+          thresholds: { oilLow: 17, oilHigh: 20, dryLow: 38, dryHigh: 50 },
+          categoryThresholds: { normalOilMax: 17, normalWaterMax: 60, readyOilMin: 18 },
+        })
+      )
+    );
+    expect(parsed.thresholds?.dryLow).toBe(38);
+    expect(parsed.categoryThresholds?.normalOilMax).toBe(17);
+  });
+
   it('rejects a file that is not JSON at all', () => {
     expect(() => parseBackup('<html><body>just a web page</body></html>')).toThrow(
-      /Could not parse the backup/
+      /לא ניתן לקרוא את קובץ הגיבוי/
     );
   });
 
   it('rejects malformed JSON inside an otherwise correct script tag', () => {
-    expect(() => parseBackup(html('{ "plots": [ '))).toThrow(/Could not parse the backup/);
+    expect(() => parseBackup(html('{ "plots": [ '))).toThrow(/לא ניתן לקרוא את קובץ הגיבוי/);
   });
 
   // Valid JSON with no plots is the dangerous case: it parses, so without this
   // check the import would run happily and write nothing, reporting success.
   it('rejects valid JSON that carries no plots array', () => {
-    expect(() => parseBackup(JSON.stringify({ nirTests: [] }))).toThrow(/no plots array/);
+    expect(() => parseBackup(JSON.stringify({ nirTests: [] }))).toThrow(/אין מערך חלקות/);
   });
 
   it('rejects plots that is present but not an array', () => {
-    expect(() => parseBackup(JSON.stringify({ plots: 'many' }))).toThrow(/no plots array/);
+    expect(() => parseBackup(JSON.stringify({ plots: 'many' }))).toThrow(/אין מערך חלקות/);
   });
 
   it('accepts an empty plots array — an export with nothing in it is still a backup', () => {
@@ -106,15 +124,15 @@ describe('validateDefaultTaktCount', () => {
 
   it('rejects values the DB CHECK would reject, before any row is written', () => {
     for (const n of [0, -1, 11, 99]) {
-      expect(() => validateDefaultTaktCount(n)).toThrow(/between 1 and 10/);
+      expect(() => validateDefaultTaktCount(n)).toThrow(/בין 1 ל-10/);
     }
   });
 
   it('rejects a fraction — takts are whole subdivisions', () => {
-    expect(() => validateDefaultTaktCount(2.5)).toThrow(/whole number/);
+    expect(() => validateDefaultTaktCount(2.5)).toThrow(/מספר שלם/);
   });
 
   it('rejects NaN, which is what Number("") and Number("abc") produce', () => {
-    expect(() => validateDefaultTaktCount(Number('abc'))).toThrow(/between 1 and 10/);
+    expect(() => validateDefaultTaktCount(Number('abc'))).toThrow(/בין 1 ל-10/);
   });
 });

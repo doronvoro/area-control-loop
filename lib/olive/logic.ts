@@ -7,8 +7,11 @@
  * literal: the condition ORDER below is load-bearing, not stylistic.
  *
  * Everything here is pure — no Supabase, no fetch, no Date.now() without an
- * injected `now`. Thresholds arrive as `ParameterRule[]` rows rather than
- * constants, so the word "oil" never drives a branch.
+ * injected `now`. Thresholds arrive as rows rather than constants: alert bands
+ * as `ParameterRule[]`, where the word "oil" never drives a branch, and the
+ * status-card bands as `CategoryThresholds`, where it has to — "מוכן למסיק"
+ * is a box across oil and water at once, which a per-parameter cascade cannot
+ * express. See classifyPlotCategory.
  */
 
 import { ParameterStatus, type ParameterRule } from '@/types/database';
@@ -71,6 +74,23 @@ export interface PlotStatus {
 }
 
 export type PlotCategory = 'testing' | 'ready' | 'anomaly' | 'normal';
+
+/**
+ * Bands for the four status cards — the prototype's `categoryThresholds`.
+ *
+ * Deliberately NOT the same numbers as the parameter_rules bands, which drive
+ * alert urgency. See classifyPlotCategory for why the two sets exist.
+ */
+export interface CategoryThresholds {
+  readyOilMin: number;
+  readyOilMax: number;
+  readyWaterMin: number;
+  readyWaterMax: number;
+  anomalyWaterLow: number;
+  anomalyWaterHigh: number;
+  normalOilMax: number;
+  normalWaterMax: number;
+}
 
 // Thresholds the client set for yield load. Not in parameter_rules because
 // this reads an estimate, not a measurement.
@@ -236,30 +256,71 @@ export function computePlotStatus(
 /**
  * Which of the four dashboard status cards a plot belongs to.
  *
+ * WHY THIS READS `thresholds` AND NOT JUST `rules`
+ * The prototype keeps two independent threshold blocks. `thresholds` are the
+ * alert bands, ported to parameter_rules and read by computePlotStatus above.
+ * `categoryThresholds` are these — the status cards, and nothing else.
+ *
+ * The first port collapsed the two, mapping תקינה onto the oil PLAN band
+ * (17..20) when the prototype means oil at or BELOW normalOilMax (≤ 17). Every
+ * early-season sample therefore fell past תקינה into בבדיקות, where it sat
+ * next to plots nobody had sampled at all: the גשור 2026 backup read 43/0/7/0
+ * here against the prototype's own 37/6/7/0, the difference being its six
+ * plots at oil 9.2..11.8. Reading the card bands from their own source is the
+ * fix; `olive-logic.test.ts` pins that dataset so it cannot regress.
+ *
+ * ORDER. Ready is tested first, matching the old branch order. It no longer
+ * decides anything on its own — readyWater 51..54 sits inside the non-anomalous
+ * water band, so ready and anomaly cannot both hold — but leaving it first
+ * keeps the precedence visible if the client ever widens the ready box.
+ *
+ * DRY-MATTER IS RETAINED, AND IS THE ONE THING NOT FROM categoryThresholds.
+ * The prototype's categoryThresholds block carries no dry key, so a literal
+ * port would drop the dry-urgent → חריגה rule. The גשור data cannot settle
+ * which is right (every dry reading there is 14..28, far below the urgent
+ * band), and dropping it would silently retire a signal the app has been
+ * raising. It stays, sourced from parameter_rules, until the client says
+ * otherwise — that is open decision #1 in their design doc.
+ *
  * KNOWN DIVERGENCE FROM computePlotStatus — PRESERVED ON PURPOSE.
  * This function reads oil, water AND dry-matter; computePlotStatus reads only
  * oil. A plot at oil 19.4 / water 57.2 / dry 45.33 therefore reads "שקול
  * הקדמת מסיק" (plan) in the alerts list while counting as "חריגה" (anomaly)
- * on the status card.
+ * on the status card. Spec §7.2 forbids changing tuned logic without client
+ * approval; the tests pin both outputs so the split cannot close by accident.
  *
- * That is not a bug to fix here. It is the prototype's shipped behaviour, spec
- * §7.2 forbids changing tuned logic without client approval, and the client's
- * own design doc lists it as open decision #1. `olive-logic.test.ts` pins both
- * outputs so the split cannot be closed by accident.
+ * A measurement missing the value a band needs fails that band. Such a plot
+ * lands in בבדיקות, which is what it is — a sample that still has to be read.
  */
 export function classifyPlotCategory(
   latestNir: NirLike | null,
-  rules: ParameterRule[]
+  rules: ParameterRule[],
+  thresholds: CategoryThresholds
 ): PlotCategory {
   if (!latestNir) return 'testing';
 
-  const oil = evaluateParameter(rules, 'oil', latestNir.oil)?.status ?? null;
-  const water = evaluateParameter(rules, 'water', latestNir.water)?.status ?? null;
-  const dry = evaluateParameter(rules, 'dry', latestNir.dry)?.status ?? null;
+  const oil = toNumber(latestNir.oil);
+  const water = toNumber(latestNir.water);
 
-  if (oil === ParameterStatus.URGENT) return 'ready';
-  if (water === ParameterStatus.URGENT || dry === ParameterStatus.URGENT) return 'anomaly';
-  if (oil === ParameterStatus.PLAN) return 'normal';
+  const oilReady = within(oil, thresholds.readyOilMin, thresholds.readyOilMax);
+  const waterReady = within(water, thresholds.readyWaterMin, thresholds.readyWaterMax);
+  if (oilReady && waterReady) return 'ready';
+
+  if (water !== null && (water < thresholds.anomalyWaterLow || water > thresholds.anomalyWaterHigh))
+    return 'anomaly';
+
+  // Sourced from parameter_rules, not categoryThresholds — see the note above.
+  if (evaluateParameter(rules, 'dry', latestNir.dry)?.status === ParameterStatus.URGENT)
+    return 'anomaly';
+
+  if (
+    oil !== null &&
+    oil <= thresholds.normalOilMax &&
+    water !== null &&
+    water <= thresholds.normalWaterMax
+  )
+    return 'normal';
+
   return 'testing';
 }
 
@@ -363,6 +424,15 @@ function toNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === '') return null;
   const parsed = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+/**
+ * Inclusive band test. A missing value is never inside a band — the prototype's
+ * JS would coerce '' to 0 and call that in range, which is how a blank reading
+ * could read as "מוכן למסיק".
+ */
+function within(value: number | null, min: number, max: number): boolean {
+  return value !== null && value >= min && value <= max;
 }
 
 /** Local-date YYYY-MM-DD. Avoids toISOString(), which shifts across timezones. */

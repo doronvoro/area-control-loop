@@ -1,28 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getApiContext, resolveCustomerId } from '@/lib/api/auth-context';
 import { handleApiError } from '@/lib/api-utils';
-import { getAccessibleAreaIds } from '@/lib/services/customer-area.service';
-import { OLIVE_CROP_NAME } from '@/lib/olive/constants';
-
-/**
- * Does this user have any olive areas?
- *
- * Gating the olive nav on crop rather than on a customer id means the next
- * olive grower needs no code change. This only hides links — page-level
- * requireAuth and RLS remain the actual enforcement.
- */
-async function hasOliveAreas(ctx: Awaited<ReturnType<typeof getApiContext>>): Promise<boolean> {
-  const areaIds = await getAccessibleAreaIds(ctx.supabase, ctx.isAdmin, resolveCustomerId(ctx));
-  if (areaIds.length === 0) return false;
-
-  const { data } = await (ctx.supabase.from('areas') as any)
-    .select('id, crops!inner(name)')
-    .in('id', areaIds)
-    .eq('crops.name', OLIVE_CROP_NAME)
-    .limit(1);
-
-  return (data || []).length > 0;
-}
+import { hasOliveAreas } from '@/lib/olive/has-olive-areas';
 
 /**
  * The admin's currently selected customer, for the switcher to display.
@@ -57,7 +36,7 @@ export async function GET() {
 
     const [rolesResult, olive, selectedCustomer] = await Promise.all([
       (ctx.supabase.from('user_roles') as any).select('roles(name, display_name)').eq('user_id', ctx.user.id),
-      hasOliveAreas(ctx),
+      hasOliveAreas(ctx.supabase, ctx.isAdmin, resolveCustomerId(ctx)),
       selectedCustomerSummary(ctx),
     ]);
 

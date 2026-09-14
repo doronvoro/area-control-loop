@@ -1,308 +1,194 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
-import {
-  Loader2,
-  Trash2,
-  Pencil,
-  X,
-  Check,
-  MapPin,
-  Compass,
-  FlaskConical,
-  AlertTriangle,
-} from 'lucide-react';
+import { AlertTriangle, FlaskConical, Loader2, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from '@/components/ui/form';
-import { SearchableSelect } from '@/components/ui/searchable-select';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { ConfirmationDialog } from '@/components/ui/confirmation-dialog';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { TablePagination } from '@/components/ui/table-pagination';
+import { useApiData } from '@/hooks/useApiData';
+import { usePagination } from '@/hooks/usePagination';
+import { useTableSort } from '@/hooks/useTableSort';
 import { showToast } from '@/lib/toast';
-import { NIR_DIRECTIONS, PARAMETER_STATUS_CONFIG, type ParameterRule } from '@/types/database';
-import { evaluateParameter, daysSinceLabel } from '@/lib/olive/logic';
-import type { ApiPlot } from '@/lib/olive/adapt';
+import type { ParameterRule, Season } from '@/types/database';
+import type { ApiNirReport, ApiPlot } from '@/lib/olive/adapt';
+import {
+  EMPTY_NIR_FILTERS,
+  filterNirRows,
+  hasActiveNirFilters,
+  sortNirRows,
+  toNirRow,
+  type NirFilters,
+  type NirSortField,
+} from '@/lib/olive/nir-rows';
+import { NirFormSheet, type NirEditorState } from './NirFormSheet';
+import { NirLogToolbar } from './NirLogToolbar';
+import { NirLogTable } from './NirLogTable';
 
 /**
- * NIR entry.
+ * The NIR log.
  *
- * Laid out like the monitoring form — hero, progress steps, sectioned cards,
- * sticky submit — but the data model underneath stays flat. A ripeness reading
- * has no findings and no treatments, so there is nothing here to nest.
+ * The screen used to be the entry form with the log bolted underneath it, so
+ * reaching your own data meant scrolling past a form you had already used. It
+ * is the other way round now: the log is the page, and the form opens over it
+ * in a drawer — for a new reading, or pre-filled for one already recorded.
  *
- * The one thing this form has that monitoring does not: a live readout. Oil,
- * water and the derived dry-matter figure are scored against parameter_rules as
- * they are typed, so the sampler sees the harvest verdict before saving rather
- * than after navigating to the dashboard.
+ * Filtering, sorting and paging are all client-side over one season's rows.
+ * The season is the only control that goes back to the server.
  */
 
-const NONE = '__none__';
-
-const numericField = z
-  .string()
-  .optional()
-  .refine((v) => !v || !Number.isNaN(Number(v)), { message: 'נדרש מספר' });
-
-const nirSchema = z.object({
-  area_id: z.string().min(1, 'נדרש לבחור חלקה'),
-  report_date: z.string().min(1, 'נדרש תאריך'),
-  sub_area_id: z.string().optional(),
-  direction: z.string().optional(),
-  oil: numericField,
-  water: numericField,
-  green: numericField,
-  acid: numericField,
-  maturity: numericField,
-  irrig_amount: numericField,
-  notes: z.string().optional(),
-});
-
-type NirFormData = z.infer<typeof nirSchema>;
-
-const STEPS = [
-  { label: 'חלקה', icon: MapPin },
-  { label: 'דגימה', icon: Compass },
-  { label: 'מדידות', icon: FlaskConical },
-];
-
-const MEASUREMENTS: { name: keyof NirFormData; label: string; step: string }[] = [
-  { name: 'oil', label: 'אחוז שמן %', step: '0.1' },
-  { name: 'water', label: 'אחוז מים %', step: '0.1' },
-  { name: 'green', label: 'אחוז צבע ירוק %', step: '1' },
-  { name: 'acid', label: 'חומציות %', step: '0.01' },
-  { name: 'maturity', label: 'אינדקס הבשלה', step: '0.1' },
-  { name: 'irrig_amount', label: 'השקיה (קוב/דונם/יום)', step: '0.25' },
-];
-
-function todayString(): string {
-  const now = new Date();
-  return [
-    now.getFullYear(),
-    String(now.getMonth() + 1).padStart(2, '0'),
-    String(now.getDate()).padStart(2, '0'),
-  ].join('-');
+interface NirPayload {
+  reports: ApiNirReport[];
+  season: Season | null;
+  scope: 'season' | 'all';
+  truncated: boolean;
 }
 
-/** '' → null so a blank field is stored as NULL rather than 0. */
-function optionalNumber(value?: string) {
-  if (value === undefined || value.trim() === '') return null;
-  return Number(value);
-}
-
-const EMPTY_FORM = {
-  report_date: todayString(),
-  sub_area_id: NONE,
-  direction: NONE,
-  oil: '',
-  water: '',
-  green: '',
-  acid: '',
-  maturity: '',
-  irrig_amount: '',
-  notes: '',
+const SORT_DEFAULT_DIRECTIONS: Partial<Record<NirSortField, 'asc' | 'desc'>> = {
+  areaName: 'asc',
 };
 
+const NO_RULES: ParameterRule[] = [];
+
+function messageOf(err: unknown, fallback: string): string {
+  return err instanceof Error && err.message ? err.message : fallback;
+}
+
 export function NirPageContent({ initialAreaId }: { initialAreaId: string | null }) {
-  const [plots, setPlots] = useState<ApiPlot[]>([]);
-  const [rules, setRules] = useState<ParameterRule[]>([]);
-  const [reports, setReports] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  // Lazy initial state rather than an effect, so arriving from the plots page
+  // opens the drawer on the first render with nothing to reconcile afterwards.
+  const [editor, setEditor] = useState<NirEditorState | null>(
+    initialAreaId ? { mode: 'create', areaId: initialAreaId } : null
+  );
+  const [seasonId, setSeasonId] = useState<string>('');
+  const [filters, setFilters] = useState<NirFilters>(() =>
+    initialAreaId ? { ...EMPTY_NIR_FILTERS, areaId: initialAreaId } : EMPTY_NIR_FILTERS
+  );
+  const [pendingDelete, setPendingDelete] = useState<ReturnType<typeof toNirRow> | null>(null);
+
+  // Reference data. None of it changes while the screen is open.
+  const { data: plots, loading: plotsLoading } = useApiData<ApiPlot[]>('/api/olive/plots');
+  const { data: parameters, loading: parametersLoading } = useApiData<{
+    parameterRules: ParameterRule[];
+  }>('/api/olive/parameters');
+  const { data: seasons } = useApiData<Season[]>('/api/olive/seasons');
+
+  // The log itself. Not useApiData: that flips `loading` on every url change,
+  // which is the full-table spinner this screen is meant to avoid, and it has
+  // no race guard for someone toggling the season twice quickly.
+  const [payload, setPayload] = useState<NirPayload | null>(null);
+  const [reportsLoading, setReportsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [justCompleted, setJustCompleted] = useState<Set<number>>(new Set());
-  const prevStep = useRef(0);
+  const requestId = useRef(0);
 
-  const form = useForm<NirFormData>({
-    resolver: zodResolver(nirSchema),
-    defaultValues: { area_id: initialAreaId ?? '', ...EMPTY_FORM },
-  });
-
-  const areaId = form.watch('area_id');
-  const subAreaId = form.watch('sub_area_id');
-  const direction = form.watch('direction');
-  const oil = form.watch('oil');
-  const water = form.watch('water');
-  const watched = form.watch();
-
-  const loadData = useCallback(async () => {
-    try {
-      setError(null);
-      const [plotsRes, dashRes, nirRes] = await Promise.all([
-        fetch('/api/olive/plots'),
-        fetch('/api/olive/dashboard'),
-        fetch('/api/olive/nir'),
-      ]);
-      if (!plotsRes.ok) throw new Error('שגיאה בטעינת החלקות');
-      setPlots(await plotsRes.json());
-      if (dashRes.ok) setRules((await dashRes.json()).parameterRules || []);
-      if (nirRes.ok) setReports(await nirRes.json());
-    } catch (err: any) {
-      setError(err.message || 'שגיאה בטעינת הנתונים');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const fetchReports = useCallback(
+    async (showLoader = false) => {
+      const id = ++requestId.current;
+      if (showLoader) setReportsLoading(true);
+      try {
+        const query = seasonId ? `?seasonId=${encodeURIComponent(seasonId)}` : '';
+        const response = await fetch(`/api/olive/nir${query}`);
+        if (!response.ok) throw new Error('שגיאה בטעינת הבדיקות');
+        const data: NirPayload = await response.json();
+        if (id !== requestId.current) return; // a newer request already won
+        setPayload(data);
+        setError(null);
+      } catch (err) {
+        if (id !== requestId.current) return;
+        setError(messageOf(err, 'שגיאה בטעינת הנתונים'));
+      } finally {
+        if (id === requestId.current) setReportsLoading(false);
+      }
+    },
+    [seasonId]
+  );
 
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    fetchReports(true);
+  }, [fetchReports]);
+
+  // Adopt whichever season the server resolved, so the picker shows what is
+  // actually on screen rather than an empty box.
+  useEffect(() => {
+    if (!seasonId && payload) setSeasonId(payload.season?.id ?? 'all');
+  }, [payload, seasonId]);
+
+  // Consume the deep link once. Empty deps on purpose: with initialAreaId in
+  // them this re-runs and loops.
+  useEffect(() => {
+    if (initialAreaId) window.history.replaceState(null, '', '/olive/nir');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // A shared empty array, not a fresh `[]`, so the memos below do not
+  // recompute on every render while the rules are still loading.
+  const rules = parameters?.parameterRules ?? NO_RULES;
+
+  const taktNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const plot of plots ?? []) {
+      for (const takt of plot.takts ?? []) map.set(takt.id, takt.name);
+    }
+    return map;
+  }, [plots]);
 
   const plotOptions = useMemo(
     () =>
-      plots.map((p) => ({
+      (plots ?? []).map((p) => ({
         value: p.id,
         label: [p.name, p.variety].filter(Boolean).join(' · '),
       })),
     [plots]
   );
 
-  const takts = useMemo(() => plots.find((p) => p.id === areaId)?.takts ?? [], [plots, areaId]);
+  const rows = useMemo(
+    () => (payload?.reports ?? []).map((report) => toNirRow(report, taktNameById)),
+    [payload, taktNameById]
+  );
 
-  const hasSampleLocation =
-    (!!subAreaId && subAreaId !== NONE) || (!!direction && direction !== NONE);
-  const hasMeasurement = MEASUREMENTS.some((m) => {
-    const value = watched[m.name] as string | undefined;
-    return !!value && value.trim() !== '';
+  const { sort, toggle } = useTableSort<NirSortField>(
+    'reportDate',
+    'desc',
+    SORT_DEFAULT_DIRECTIONS
+  );
+
+  const visibleRows = useMemo(() => {
+    const filtered = filterNirRows(rows, filters, rules);
+    return sortNirRows(filtered, sort, rules);
+  }, [rows, filters, rules, sort]);
+
+  const pagination = usePagination(visibleRows, {
+    resetKey: [
+      filters.search,
+      filters.areaId,
+      filters.status,
+      filters.direction,
+      sort.field,
+      sort.direction,
+      seasonId,
+    ].join('|'),
   });
 
-  const currentStep = !areaId ? 0 : !hasSampleLocation && !hasMeasurement ? 1 : 2;
-
-  // Pulse a step circle the moment it is satisfied.
-  useEffect(() => {
-    if (currentStep > prevStep.current) {
-      const newly = new Set<number>();
-      for (let i = prevStep.current; i < currentStep; i++) newly.add(i);
-      setJustCompleted(newly);
-      const timer = setTimeout(() => setJustCompleted(new Set()), 600);
-      prevStep.current = currentStep;
-      return () => clearTimeout(timer);
-    }
-    prevStep.current = currentStep;
-  }, [currentStep]);
-
-  /** Live verdict for what has been typed. dry mirrors the DB's generated column. */
-  const readout = useMemo(() => {
-    const oilNum = optionalNumber(oil);
-    const waterNum = optionalNumber(water);
-    const dryNum =
-      oilNum !== null && waterNum !== null && waterNum < 100
-        ? Math.round((oilNum / (100 - waterNum)) * 100 * 100) / 100
-        : null;
-
-    return [
-      { label: 'שמן', value: oilNum, match: evaluateParameter(rules, 'oil', oilNum) },
-      { label: 'מים', value: waterNum, match: evaluateParameter(rules, 'water', waterNum) },
-      { label: 'שמן בחו״י', value: dryNum, match: evaluateParameter(rules, 'dry', dryNum) },
-    ].filter((row) => row.value !== null);
-  }, [oil, water, rules]);
-
-  const onSubmit = async (values: NirFormData) => {
+  const handleDelete = async () => {
+    if (!pendingDelete) return;
     try {
-      setSaving(true);
-      setError(null);
-      setSuccess(null);
-
-      const response = await fetch('/api/olive/nir', {
-        method: editingId ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...(editingId ? { report_area_id: editingId } : { area_id: values.area_id }),
-          report_date: values.report_date,
-          sub_area_id: values.sub_area_id === NONE ? null : values.sub_area_id || null,
-          direction: values.direction === NONE ? null : values.direction || null,
-          oil: optionalNumber(values.oil),
-          water: optionalNumber(values.water),
-          green: optionalNumber(values.green),
-          acid: optionalNumber(values.acid),
-          maturity: optionalNumber(values.maturity),
-          irrig_amount: optionalNumber(values.irrig_amount),
-          notes: values.notes || null,
-        }),
-      });
-
-      if (!response.ok) {
-        const body = await response.json().catch(() => ({}));
-        throw new Error(body.error || 'שגיאה בשמירת הבדיקה');
-      }
-
-      const plotName = plots.find((p) => p.id === values.area_id)?.name ?? '';
-      setSuccess(editingId ? 'הבדיקה עודכנה' : `הבדיקה נשמרה — ${plotName}`);
-      showToast.success(editingId ? 'הבדיקה עודכנה' : 'הבדיקה נשמרה');
-
-      // Keep the plot and date: a sampler records several readings in a row.
-      form.reset({ ...form.getValues(), ...EMPTY_FORM, report_date: values.report_date });
-      setEditingId(null);
-      prevStep.current = 1;
-      await loadData();
-    } catch (err: any) {
-      setError(err.message || 'שגיאה בשמירת הבדיקה');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const startEdit = (report: any) => {
-    const detail = report.detail || {};
-    setEditingId(report.id);
-    setError(null);
-    setSuccess(null);
-    form.reset({
-      area_id: report.area?.id ?? '',
-      report_date: report.report_date ? String(report.report_date).slice(0, 10) : todayString(),
-      sub_area_id: detail.sub_area_id ?? NONE,
-      direction: detail.direction ?? NONE,
-      oil: detail.oil != null ? String(detail.oil) : '',
-      water: detail.water != null ? String(detail.water) : '',
-      green: detail.green != null ? String(detail.green) : '',
-      acid: detail.acid != null ? String(detail.acid) : '',
-      maturity: detail.maturity != null ? String(detail.maturity) : '',
-      irrig_amount: detail.irrig_amount != null ? String(detail.irrig_amount) : '',
-      notes: report.description ?? '',
-    });
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const cancelEdit = () => {
-    setEditingId(null);
-    setSuccess(null);
-    form.reset({ area_id: initialAreaId ?? '', ...EMPTY_FORM });
-  };
-
-  const handleDelete = async (reportAreaId: string) => {
-    if (!confirm('למחוק את הבדיקה הזו?')) return;
-    try {
-      const response = await fetch(`/api/olive/nir?id=${reportAreaId}`, { method: 'DELETE' });
+      const response = await fetch(`/api/olive/nir?id=${pendingDelete.id}`, { method: 'DELETE' });
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
         throw new Error(body.error || 'שגיאה במחיקה');
       }
       showToast.success('הבדיקה נמחקה');
-      if (editingId === reportAreaId) cancelEdit();
-      await loadData();
-    } catch (err: any) {
-      showToast.error(err.message || 'שגיאה במחיקה');
+      if (editor?.mode === 'edit' && editor.row.id === pendingDelete.id) setEditor(null);
+      await fetchReports();
+    } catch (err) {
+      showToast.error(messageOf(err, 'שגיאה במחיקה'));
     }
   };
 
-  if (loading) {
+  // The first load only. After that the rows stay on screen while refetching.
+  const firstLoad = plotsLoading || parametersLoading || (reportsLoading && !payload);
+
+  if (firstLoad) {
     return (
       <div className="flex items-center justify-center py-12">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -311,406 +197,142 @@ export function NirPageContent({ initialAreaId }: { initialAreaId: string | null
     );
   }
 
+  const seasonLabel =
+    payload?.scope === 'season' && payload.season ? `עונת ${payload.season.name}` : 'כל העונות';
+
   return (
-    <div className="space-y-6">
-      <div className="olive-form-container mx-auto max-w-4xl">
-        {/* Hero */}
-        <div className="olive-form-hero px-6 py-5 md:px-8 md:py-6">
-          <div className="olive-hero-pattern" />
-          <div className="relative z-10 flex items-center justify-center gap-3">
-            <div className="flex size-10 items-center justify-center rounded-xl bg-white/15 backdrop-blur-sm">
-              <FlaskConical className="size-5 text-white" />
-            </div>
-            <h2 className="olive-hero-title text-2xl tracking-tight md:text-3xl">
-              {editingId ? 'עריכת בדיקת NIR' : 'בדיקת NIR חדשה'}
-            </h2>
-          </div>
+    <div className="space-y-4">
+      <PageHeader
+        icon={FlaskConical}
+        title="בדיקות NIR"
+        description={`יומן בדיקות בשלות — ${seasonLabel}`}
+      >
+        <Button type="button" onClick={() => setEditor({ mode: 'create', areaId: null })}>
+          <Plus className="ml-1 size-4" />
+          בדיקה חדשה
+        </Button>
+      </PageHeader>
+
+      {error && (
+        <div className="olive-error-banner flex items-center gap-3 p-4">
+          <AlertTriangle className="size-5 shrink-0" />
+          <p className="text-sm font-medium">{error}</p>
         </div>
+      )}
 
-        {/* Progress */}
-        <div className="olive-steps">
-          {STEPS.map((step, i) => (
-            <div key={step.label} className="olive-step">
-              <div className="flex flex-col items-center gap-1">
-                <div
-                  className={`olive-step-circle ${
-                    i < currentStep
-                      ? 'olive-step-complete'
-                      : i === currentStep
-                        ? 'olive-step-active'
-                        : 'olive-step-pending'
-                  } ${justCompleted.has(i) ? 'olive-step-just-completed' : ''}`}
-                >
-                  {i < currentStep ? (
-                    <Check className="size-3.5" />
-                  ) : (
-                    <step.icon className="size-3.5" />
-                  )}
-                </div>
-                <span
-                  className={`olive-step-label ${i === currentStep ? 'olive-step-label-active' : ''}`}
-                >
-                  {step.label}
-                </span>
-              </div>
-              {i < STEPS.length - 1 && (
-                <div
-                  className={`olive-step-connector ${
-                    i < currentStep ? 'olive-step-connector-complete' : ''
-                  }`}
-                />
-              )}
-            </div>
-          ))}
+      {payload?.truncated && (
+        <div className="olive-error-banner flex items-center gap-3 p-4">
+          <AlertTriangle className="size-5 shrink-0" />
+          <p className="text-sm font-medium">
+            מוצגות הבדיקות האחרונות בלבד — יש יותר בדיקות בטווח שנבחר. צמצם את הטווח כדי לראות את
+            כולן.
+          </p>
         </div>
+      )}
 
-        <div className="p-4 md:p-6">
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
-              {error && (
-                <div className="olive-error-banner flex items-center gap-3 p-4">
-                  <AlertTriangle className="size-5 shrink-0" />
-                  <p className="text-sm font-medium">{error}</p>
-                </div>
-              )}
-              {success && (
-                <div className="olive-success-banner flex items-center gap-3 p-4">
-                  <Check className="size-5 shrink-0" />
-                  <p className="text-sm font-bold">{success}</p>
-                </div>
-              )}
+      <section className="olive-card overflow-hidden">
+        <NirLogToolbar
+          filters={filters}
+          onFiltersChange={setFilters}
+          onClear={() => setFilters(EMPTY_NIR_FILTERS)}
+          plotOptions={plotOptions}
+          seasons={seasons ?? []}
+          seasonId={seasonId}
+          onSeasonChange={setSeasonId}
+          seasonLoading={reportsLoading}
+          shown={visibleRows.length}
+          total={rows.length}
+        />
 
-              {/* 1 — plot and date */}
-              <section
-                className={`olive-section olive-section-plot px-5 py-4 ${
-                  currentStep > 0 ? 'olive-section-completed' : ''
-                }`}
-              >
-                <div className="olive-section-header">
-                  <div className="olive-section-icon olive-icon-plot">
-                    <MapPin className="size-4" />
-                  </div>
-                  <h3 className="text-base font-bold">חלקה ותאריך</h3>
-                  {areaId && (
-                    <span className="olive-field-check">
-                      <Check className="size-2.5" />
-                    </span>
-                  )}
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-2">
-                  <FormField
-                    control={form.control}
-                    name="area_id"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-sm font-semibold">חלקה *</FormLabel>
-                        <FormControl>
-                          <SearchableSelect
-                            options={plotOptions}
-                            value={field.value}
-                            onValueChange={field.onChange}
-                            placeholder="בחר חלקה"
-                            searchPlaceholder="חיפוש בדיקה לפי חלקה..."
-                            // The plot is fixed once saved — moving a reading to
-                            // another plot would make it a different reading.
-                            disabled={editingId !== null}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="report_date"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-sm font-semibold">תאריך *</FormLabel>
-                        <FormControl>
-                          <Input type="date" className="h-9" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-              </section>
-
-              {/* 2 — where the sample came from */}
-              <section
-                className={`olive-section olive-section-sample px-5 py-4 ${
-                  currentStep > 1 ? 'olive-section-completed' : ''
-                }`}
-              >
-                <div className="olive-section-header">
-                  <div className="olive-section-icon olive-icon-sample">
-                    <Compass className="size-4" />
-                  </div>
-                  <h3 className="text-base font-bold">מיקום הדגימה</h3>
-                  {hasSampleLocation && (
-                    <span className="olive-field-check">
-                      <Check className="size-2.5" />
-                    </span>
-                  )}
-                  <span className="olive-muted mr-auto text-xs">לא חובה</span>
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-2">
-                  <FormField
-                    control={form.control}
-                    name="sub_area_id"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-sm font-semibold">טאקט</FormLabel>
-                        <Select
-                          onValueChange={field.onChange}
-                          value={field.value || NONE}
-                          disabled={!areaId}
-                        >
-                          <FormControl>
-                            <SelectTrigger className="h-9">
-                              <SelectValue
-                                placeholder={
-                                  !areaId
-                                    ? 'בחר חלקה תחילה'
-                                    : takts.length
-                                      ? 'כל החלקה'
-                                      : 'אין טאקטים בחלקה זו'
-                                }
-                              />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent position="popper" sideOffset={4}>
-                            <SelectItem value={NONE}>כל החלקה</SelectItem>
-                            {takts.map((takt: any) => (
-                              <SelectItem key={takt.id} value={takt.id}>
-                                {takt.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="direction"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-sm font-semibold">כיוון דגימה</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value || NONE}>
-                          <FormControl>
-                            <SelectTrigger className="h-9">
-                              <SelectValue placeholder="בחר כיוון" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent position="popper" sideOffset={4}>
-                            <SelectItem value={NONE}>—</SelectItem>
-                            {NIR_DIRECTIONS.map((dir) => (
-                              <SelectItem key={dir} value={dir}>
-                                {dir}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-              </section>
-
-              {/* 3 — the readings */}
-              <section className="olive-section olive-section-values px-5 py-4">
-                <div className="olive-section-header">
-                  <div className="olive-section-icon olive-icon-values">
-                    <FlaskConical className="size-4" />
-                  </div>
-                  <h3 className="text-base font-bold">מדידות</h3>
-                  {hasMeasurement && (
-                    <span className="olive-field-check">
-                      <Check className="size-2.5" />
-                    </span>
-                  )}
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {MEASUREMENTS.map((m) => (
-                    <FormField
-                      key={m.name}
-                      control={form.control}
-                      name={m.name}
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="text-sm font-semibold">{m.label}</FormLabel>
-                          <FormControl>
-                            <Input
-                              type="number"
-                              step={m.step}
-                              inputMode="decimal"
-                              className="h-9"
-                              {...field}
-                              value={(field.value as string) ?? ''}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  ))}
-                </div>
-
-                {/* Live verdict — the reason this form exists */}
-                {readout.length > 0 && (
-                  <div className="olive-readout mt-4">
-                    <span className="olive-muted text-xs font-semibold">לפי הערכים שהוזנו:</span>
-                    {readout.map((row) => (
-                      <span key={row.label} className="flex items-center gap-1.5 text-xs">
-                        <span className="font-semibold">
-                          {row.label} {row.value}%
-                        </span>
-                        {row.match ? (
-                          <span
-                            className={`olive-pill ${PARAMETER_STATUS_CONFIG[row.match.status].pillClass}`}
-                          >
-                            {row.match.message}
-                          </span>
-                        ) : (
-                          <span className="olive-muted">—</span>
-                        )}
-                      </span>
-                    ))}
-                  </div>
-                )}
-
-                <p className="olive-muted mt-3 text-xs">
-                  אחוז שמן בחומר יבש מחושב אוטומטית מהשמן והמים ואינו נרשם ידנית.
-                </p>
-
-                <FormField
-                  control={form.control}
-                  name="notes"
-                  render={({ field }) => (
-                    <FormItem className="mt-4">
-                      <FormLabel className="text-sm font-semibold">הערות</FormLabel>
-                      <FormControl>
-                        <Textarea rows={2} {...field} value={field.value ?? ''} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </section>
-
-              {/* Sticky submit */}
-              <div className="olive-sticky-footer">
-                <div className="flex items-center justify-between gap-4">
-                  <div className="olive-muted flex items-center gap-2 text-xs">
-                    <FlaskConical className="size-3.5" />
-                    <span>
-                      {reports.length} {reports.length === 1 ? 'בדיקה' : 'בדיקות'} בעונה
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {editingId && (
-                      <Button type="button" variant="ghost" onClick={cancelEdit}>
-                        <X className="ml-1 size-4" />
-                        בטל עריכה
-                      </Button>
-                    )}
-                    <button type="submit" className="olive-submit px-6 py-2.5" disabled={saving}>
-                      {saving && <Loader2 className="ml-2 inline size-4 animate-spin" />}
-                      {editingId ? 'עדכן בדיקה' : 'שמור בדיקה'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </form>
-          </Form>
-        </div>
-      </div>
-
-      {/* Log */}
-      <section className="olive-card mx-auto max-w-4xl overflow-hidden">
-        <h2 className="p-4 pb-2 font-bold">יומן בדיקות</h2>
-        {reports.length === 0 ? (
-          <p className="olive-muted p-4 pt-0 text-sm">אין בדיקות עדיין</p>
+        {visibleRows.length === 0 ? (
+          <EmptyState
+            filtered={hasActiveNirFilters(filters)}
+            onClear={() => setFilters(EMPTY_NIR_FILTERS)}
+            onCreate={() => setEditor({ mode: 'create', areaId: null })}
+          />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b text-xs text-muted-foreground">
-                  <th className="p-2 text-start">תאריך</th>
-                  <th className="p-2 text-start">חלקה</th>
-                  <th className="p-2 text-start">שמן %</th>
-                  <th className="p-2 text-start">מים %</th>
-                  <th className="p-2 text-start">שמן בחו״י %</th>
-                  <th className="p-2 text-start">סטטוס</th>
-                  <th className="p-2 text-start"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {reports.map((report) => {
-                  const detail = report.detail || {};
-                  const oilMatch = evaluateParameter(rules, 'oil', detail.oil);
-                  return (
-                    <tr
-                      key={report.id}
-                      className={`border-b last:border-0 ${
-                        editingId === report.id ? 'bg-muted/40' : ''
-                      }`}
-                    >
-                      <td className="p-2 whitespace-nowrap">
-                        {report.report_date ? String(report.report_date).slice(0, 10) : '—'}
-                        <span className="olive-muted block text-xs">
-                          {daysSinceLabel(report.report_date, new Date()) ?? ''}
-                        </span>
-                      </td>
-                      <td className="p-2">{report.area?.name || '—'}</td>
-                      <td className="p-2">{detail.oil ?? '—'}</td>
-                      <td className="p-2">{detail.water ?? '—'}</td>
-                      <td className="p-2">{detail.dry ?? '—'}</td>
-                      <td className="p-2">
-                        {oilMatch && (
-                          <span
-                            className={`olive-pill ${PARAMETER_STATUS_CONFIG[oilMatch.status].pillClass}`}
-                          >
-                            {oilMatch.message}
-                          </span>
-                        )}
-                      </td>
-                      <td className="p-2 whitespace-nowrap">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => startEdit(report)}
-                          aria-label="ערוך בדיקה"
-                        >
-                          <Pencil className="size-4" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDelete(report.id)}
-                          aria-label="מחק בדיקה"
-                        >
-                          <Trash2 className="size-4" />
-                        </Button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          <div
+            aria-busy={reportsLoading}
+            className={reportsLoading ? 'opacity-60 transition-opacity' : undefined}
+          >
+            <NirLogTable
+              rows={pagination.pageItems}
+              rules={rules}
+              sort={sort}
+              onSort={toggle}
+              onEdit={(row) => setEditor({ mode: 'edit', row })}
+              onDelete={setPendingDelete}
+              activeId={editor?.mode === 'edit' ? editor.row.id : null}
+              now={new Date()}
+            />
+            <TablePagination
+              page={pagination.page}
+              pageCount={pagination.pageCount}
+              total={pagination.total}
+              from={pagination.from}
+              to={pagination.to}
+              pageSize={pagination.pageSize}
+              onPageChange={pagination.setPage}
+              onPageSizeChange={pagination.setPageSize}
+              itemLabel="בדיקות"
+            />
           </div>
         )}
       </section>
+
+      <NirFormSheet
+        editor={editor}
+        onOpenChange={(open) => !open && setEditor(null)}
+        plots={plots ?? []}
+        rules={rules}
+        onSaved={fetchReports}
+      />
+
+      <ConfirmationDialog
+        open={pendingDelete !== null}
+        onOpenChange={(open) => !open && setPendingDelete(null)}
+        title="מחיקת בדיקה"
+        description={
+          pendingDelete
+            ? `למחוק את הבדיקה מתאריך ${pendingDelete.reportDate ?? '—'} בחלקה ${pendingDelete.areaName || '—'}? פעולה זו אינה ניתנת לביטול.`
+            : ''
+        }
+        confirmText="מחק"
+        variant="destructive"
+        onConfirm={handleDelete}
+      />
+    </div>
+  );
+}
+
+function EmptyState({
+  filtered,
+  onClear,
+  onCreate,
+}: {
+  filtered: boolean;
+  onClear: () => void;
+  onCreate: () => void;
+}) {
+  return (
+    <div className="flex flex-col items-center gap-3 p-10 text-center">
+      <FlaskConical className="text-muted-foreground/40 size-8" />
+      {filtered ? (
+        <>
+          <p className="olive-muted text-sm">לא נמצאו בדיקות התואמות לסינון</p>
+          <Button type="button" variant="ghost" size="sm" onClick={onClear}>
+            נקה סינון
+          </Button>
+        </>
+      ) : (
+        <>
+          <p className="olive-muted text-sm">אין בדיקות עדיין</p>
+          <Button type="button" onClick={onCreate}>
+            <Plus className="ml-1 size-4" />
+            בדיקה חדשה
+          </Button>
+        </>
+      )}
     </div>
   );
 }

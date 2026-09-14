@@ -3,8 +3,11 @@ import { HarvestPageContent } from '@/components/olive/HarvestPageContent';
 import '../olive.css';
 
 /**
- * No PageHeader: the form carries its own hero, matching /monitoring and
- * /olive/nir.
+ * The harvest log, and the entry form that opens over it.
+ *
+ * An `areaId` opens the form straight away with that plot already chosen, for
+ * anyone arriving from a plot. Arriving without one lands on the log, which is
+ * where the season's totals are. Matches /olive/nir.
  */
 export default async function OliveHarvestPage({
   searchParams,

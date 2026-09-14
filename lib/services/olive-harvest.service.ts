@@ -168,19 +168,63 @@ export async function deleteHarvestReport(
   if (error) throw error;
 }
 
+export interface HarvestReportFilter {
+  /** Inclusive calendar day, YYYY-MM-DD. */
+  from?: string | null;
+  /** Inclusive calendar day, YYYY-MM-DD. */
+  to?: string | null;
+  limit?: number;
+}
+
+/**
+ * A ceiling so an unbounded archive cannot become an unbounded payload. The log
+ * screen surfaces it rather than silently showing a truncated count.
+ */
+export const HARVEST_ROW_CAP = 2000;
+
+/**
+ * Harvest passes for the given areas, newest first.
+ *
+ * `filter` is optional so existing unbounded callers keep their behaviour.
+ * Note getNextPassNumber below deliberately does NOT go through here — a pass
+ * number must be derived from every pass ever recorded on the plot, not from
+ * whatever window the log happens to be showing.
+ */
 export async function getHarvestReports(
   supabase: SupabaseClient,
-  areaIds: string[]
+  areaIds: string[],
+  filter: HarvestReportFilter = {}
 ): Promise<any[]> {
   if (areaIds.length === 0) return [];
 
-  const { data, error } = await (supabase.from('report_areas') as any)
+  let query = (supabase.from('report_areas') as any)
     .select(HARVEST_SELECT)
     .eq('area_type_id', AreaTypeId.HARVEST)
-    .in('area_id', areaIds)
+    .in('area_id', areaIds);
+
+  if (filter.from) {
+    query = query.gte('report_date', `${filter.from}T00:00:00+00:00`);
+  }
+  if (filter.to) {
+    // Half-open on purpose. report_date is timestamptz while a season's ends_on
+    // is a DATE, and the form posts a bare 'YYYY-MM-DD' that Postgres stores as
+    // midnight. A .lte('report_date', ends_on) would drop every pass recorded
+    // ON the season's last day — which for harvest is the busiest day there is.
+    query = query.lt('report_date', `${dayAfter(filter.to)}T00:00:00+00:00`);
+  }
+
+  const { data, error } = await query
     .order('report_date', { ascending: false, nullsFirst: false })
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .limit(filter.limit ?? HARVEST_ROW_CAP);
 
   if (error) throw error;
   return (data || []).map(flattenDetail);
+}
+
+/** The calendar day after `day` (YYYY-MM-DD), for a half-open upper bound. */
+function dayAfter(day: string): string {
+  const next = new Date(`${day}T00:00:00Z`);
+  next.setUTCDate(next.getUTCDate() + 1);
+  return next.toISOString().slice(0, 10);
 }

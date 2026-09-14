@@ -16,8 +16,8 @@ export function AppShell({ children }: AppShellProps) {
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    // A recovery link clicked while already signed in lands on /dashboard rather
-    // than /login, because the root redirect is server-side and the token lives
+    // A recovery link clicked while already signed in lands inside the app rather
+    // than on /login, because the root redirect is server-side and the token lives
     // in the fragment, which never reaches the server. Without this the token is
     // silently swallowed and the password is never changed.
     if (window.location.hash.includes('type=recovery')) {

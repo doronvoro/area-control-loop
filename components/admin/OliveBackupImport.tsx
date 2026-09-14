@@ -65,6 +65,7 @@ interface ImportResponse {
     nir: { created: number; skipped: number; taktLinked: number; dryMismatches: number };
     varietyWindows: number;
     weatherRows: number;
+    categoryThresholds: boolean;
     issues: string[];
   };
 }
@@ -348,6 +349,12 @@ function ImportSummaryCard({ title, data }: { title: string; data: ImportRespons
             ? ` · יוצא ב-${new Date(data.exportedAt).toLocaleDateString('he-IL')}`
             : ''}
         </p>
+        {result.categoryThresholds && (
+          <p className="text-sm text-muted-foreground">
+            ספי הקטגוריות של כרטיסי הסטטוס (מוכן למסיק / תקין / חריגה) נלקחו מהקובץ. אלה ספים
+            גלובליים — הם חלים על כל הלקוחות, לא רק על זה.
+          </p>
+        )}
         {result.takts.fromDefault > 0 && (
           <p className="text-sm text-amber-600 dark:text-amber-500">
             {result.takts.fromDefault} חלקות קיבלו את מספר הטאקטים שהוזן כאן, לא מהקובץ. זהו נתון

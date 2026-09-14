@@ -148,6 +148,11 @@ async function main() {
 
   console.log(`📅 variety windows: ${result.varietyWindows}`);
   console.log(`🌦️  weather rows: ${result.weatherRows}`);
+  console.log(
+    `🎯 status-card thresholds: ${
+      result.categoryThresholds ? 'taken from the file' : 'left as they are'
+    }`
+  );
 
   // --- summary ---
   console.log('\n📊 Summary');
@@ -158,6 +163,7 @@ async function main() {
   );
   console.log(`   variety windows  ${result.varietyWindows}`);
   console.log(`   weather rows     ${result.weatherRows}`);
+  console.log(`   card thresholds  ${result.categoryThresholds ? 'from file' : 'unchanged'}`);
 
   if (result.issues.length > 0) {
     console.log(`\n⚠️  ${result.issues.length} value(s) could not be carried across as-is:`);

@@ -29,6 +29,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { OLIVE_CROP_NAME } from '@/lib/olive/constants';
+import { ALERT_BAND_FIELDS, CATEGORY_BAND_FIELDS } from '@/lib/olive/thresholds';
 import { resolveYieldRows, type YieldPlotLike } from '@/lib/olive/import-yield';
 
 // --- Types (the prototype's own shapes, not ours) ---
@@ -76,6 +77,15 @@ export interface ProtoBackup {
     days?: { date: string; tempMin: number; tempMax: number; rainMm: number; windKmh: number }[];
   };
   ownYieldData?: { block: string; year: string; variety: string; kg: number | null }[];
+  /**
+   * Alert bands (oilLow/oilHigh/waterLow/waterOpt/waterHigh/dryLow/dryHigh).
+   * NOT imported — parameter_rules owns these, and rewriting tuned alert logic
+   * from a file is not something an import should do quietly. Values that
+   * disagree with the stored rules are reported instead.
+   */
+  thresholds?: Record<string, unknown>;
+  /** Status-card bands. Imported into plot_category_thresholds. */
+  categoryThresholds?: Record<string, unknown>;
   harvestYear?: string;
   harvestYearType?: string;
   exportedAt?: string;
@@ -145,8 +155,54 @@ export interface ImportResult {
   nir: { created: number; skipped: number; taktLinked: number; dryMismatches: number };
   varietyWindows: number;
   weatherRows: number;
+  /**
+   * Whether the backup's status-card bands were (or would be) written.
+   * False when the file carries none, or carries an incomplete set.
+   */
+  categoryThresholds: boolean;
   issues: string[];
 }
+
+// --- Prototype threshold keys -> where the value lives here ---
+
+/**
+ * `categoryThresholds` key -> plot_category_thresholds column.
+ *
+ * The prototype's key names and our CategoryThresholds keys are the same eight
+ * words, which is why this reads off CATEGORY_BAND_FIELDS instead of listing
+ * them again — the settings dialog writes the same columns, and two lists would
+ * eventually disagree about one of them.
+ *
+ * All eight are required: a partial set would leave the status cards judging
+ * against a mix of two tunings, which is how they diverged from the prototype
+ * in the first place.
+ */
+const CATEGORY_BAND_COLUMNS: [string, string, string][] = CATEGORY_BAND_FIELDS.map((f) => [
+  f.key,
+  f.column,
+  f.label,
+]);
+
+/**
+ * `thresholds` key -> the parameter_rules row that should carry the same bound.
+ *
+ * Read-only here: this drives the drift report, never a write. The גשור 2026
+ * export trips it on dry — the file says 38/50 where the seed says 40/45 —
+ * which is exactly the kind of quiet disagreement the operator should see.
+ *
+ * Taken from ALERT_BAND_FIELDS rather than listed again, because the settings
+ * dialog writes those same seven rows. Two lists would let this report name a
+ * different rule than the editor edits.
+ *
+ * readyOilHighlight has no counterpart on either side; it is a display-only
+ * emphasis in the prototype and is deliberately not carried.
+ */
+const ALERT_BAND_RULES = ALERT_BAND_FIELDS.map((f) => ({
+  key: f.key,
+  parameter: f.parameterCode,
+  sortOrder: f.sortOrder,
+  label: f.label,
+}));
 
 // --- Hebrew UI value -> stored English code ---
 
@@ -231,7 +287,7 @@ function createReporter() {
     if (value === null || value === undefined || value === '') return null;
     const parsed = Number(value);
     if (Number.isFinite(parsed)) return parsed;
-    flag(`${where}: "${value}" is not a number — stored as null`);
+    flag(`${where}: הערך "${value}" אינו מספר — לא נקלט`);
     return null;
   };
 
@@ -246,13 +302,13 @@ function createReporter() {
     if (!raw) return null;
     const match = String(raw).match(/(\d{4})/);
     if (!match) {
-      flag(`${where}: planting year "${raw}" has no 4-digit year — date left null, label kept`);
+      flag(
+        `${where}: שנת הנטיעה "${raw}" אינה מכילה שנה בת 4 ספרות — התאריך נשאר ריק, הערך נשמר כתווית`
+      );
       return null;
     }
     if (!/^\d{4}$/.test(String(raw).trim())) {
-      flag(
-        `${where}: planting year "${raw}" kept as a label; date approximated to ${match[1]}-01-01`
-      );
+      flag(`${where}: שנת הנטיעה "${raw}" נשמרה כתווית; התאריך קורב ל-1 בינואר ${match[1]}`);
     }
     return `${match[1]}-01-01`;
   };
@@ -266,7 +322,7 @@ function createReporter() {
     if (!value) return null;
     const code = table[value.trim()];
     if (!code) {
-      flag(`${where}: unknown ${field} "${value}" — stored as null`);
+      flag(`${where}: ${field} "${value}" אינו מוכר — לא נקלט`);
       return null;
     }
     return code;
@@ -285,8 +341,8 @@ function createReporter() {
     if (parsed === null || parsed === 0) return null;
     if (!Number.isInteger(parsed) || parsed < 1 || parsed > MAX_TAKT_COUNT) {
       flag(
-        `${where}: takt count ${parsed} is outside 1..${MAX_TAKT_COUNT}` +
-          ' — plot details kept, no takts created'
+        `${where}: מספר הטאקטים ${parsed} מחוץ לטווח 1..${MAX_TAKT_COUNT}` +
+          ' — פרטי החלקה נשמרו, לא נוצרו טאקטים'
       );
       return null;
     }
@@ -306,7 +362,7 @@ function createReporter() {
 export function validateDefaultTaktCount(value: number | null | undefined): number | null {
   if (value === null || value === undefined) return null;
   if (!Number.isInteger(value) || value < 1 || value > MAX_TAKT_COUNT) {
-    throw new Error(`Takts per plot must be a whole number between 1 and ${MAX_TAKT_COUNT}.`);
+    throw new Error(`מספר הטאקטים לחלקה חייב להיות מספר שלם בין 1 ל-${MAX_TAKT_COUNT}.`);
   }
   return value;
 }
@@ -330,11 +386,11 @@ export function parseBackup(text: string): ProtoBackup {
     parsed = JSON.parse(raw);
   } catch {
     throw new Error(
-      'Could not parse the backup. Expected the dashboard HTML with its raw-backup-data block, or a .json export.'
+      'לא ניתן לקרוא את קובץ הגיבוי. יש להעלות את קובץ ה-HTML של דשבורד המסיק (עם בלוק raw-backup-data) או קובץ ייצוא JSON.'
     );
   }
   if (!Array.isArray(parsed.plots)) {
-    throw new Error('Backup contains no plots array — is this a dashboard backup?');
+    throw new Error('בקובץ הגיבוי אין מערך חלקות (plots) — האם זהו גיבוי של דשבורד המסיק?');
   }
   return parsed;
 }
@@ -358,7 +414,7 @@ export async function importBackup(
     .maybeSingle();
 
   if (!crop) {
-    throw new Error(`No crop named "${OLIVE_CROP_NAME}". Create it before importing.`);
+    throw new Error(`לא קיים גידול בשם "${OLIVE_CROP_NAME}". יש ליצור אותו לפני הייבוא.`);
   }
   const cropId = (crop as any).id;
 
@@ -441,10 +497,10 @@ export async function importBackup(
   for (const plot of backup.plots || []) {
     const name = (plot.name || '').trim();
     if (!name) {
-      flag(`plot ${plot.id}: no name — skipped`);
+      flag(`חלקה ${plot.id}: אין שם — דולגה`);
       continue;
     }
-    const where = `plot "${name}"`;
+    const where = `חלקה "${name}"`;
 
     const existingId = byName.get(name);
     if (existingId) {
@@ -496,9 +552,9 @@ export async function importBackup(
     const details = {
       grower_name: plot.grower || null,
       region: plot.region || null,
-      plot_type: mapped(PLOT_TYPE_MAP, plot.type, where, 'plot type'),
-      harvester: mapped(HARVESTER_MAP, plot.harvester, where, 'harvester'),
-      water_type: mapped(WATER_TYPE_MAP, plot.waterType, where, 'water type'),
+      plot_type: mapped(PLOT_TYPE_MAP, plot.type, where, 'סוג מגדל'),
+      harvester: mapped(HARVESTER_MAP, plot.harvester, where, 'סוג מוסקת'),
+      water_type: mapped(WATER_TYPE_MAP, plot.waterType, where, 'סוג מים'),
       takt_count: effectiveTaktCount,
       plant_year_label: plot.plantYear || null,
     };
@@ -617,26 +673,26 @@ export async function importBackup(
 
     for (const { key, plots } of resolved.ambiguous) {
       flag(
-        `yield: ${plots.length} plots share block/year/variety "${key.replace(/\u0000/g, ' / ')}"` +
-          ` (${plots.map((p) => p.name).join(', ')}) — no estimate written for any of them`
+        `יבול: ${plots.length} חלקות חולקות את הצירוף גוש/שנה/זן "${key.replace(/\u0000/g, ' / ')}"` +
+          ` (${plots.map((p) => p.name).join(', ')}) — לא נכתב אומדן לאף אחת מהן`
       );
     }
     for (const { row, reason } of resolved.skipped) {
-      flag(`yield row ${row.block} / ${row.year} / ${row.variety}: ${reason} — skipped`);
+      flag(`שורת יבול ${row.block} / ${row.year} / ${row.variety}: ${reason} — דולגה`);
     }
     for (const { row, nearest, candidates } of resolved.unmatched) {
       let detail = '';
       if (nearest) {
         detail =
-          ` — the only plot in that block and variety still without an estimate is` +
-          ` "${nearest.name}"; confirm the year before using it`;
+          ` — החלקה היחידה באותו גוש ובאותו זן שעדיין ללא אומדן היא` +
+          ` "${nearest.name}"; יש לוודא את השנה לפני שיוך הערך אליה`;
       } else if (candidates.length > 0) {
         detail =
-          ` — same block and variety exists for ${candidates.map((c) => c.plantYear).join(', ')}` +
-          `, none of them clearly the intended one`;
+          ` — אותו גוש ואותו זן קיימים בשנים ${candidates.map((c) => c.plantYear).join(', ')}` +
+          `, ואף אחת מהן אינה בבירור המתאימה`;
       }
       flag(
-        `yield row ${row.block} / ${row.year} / ${row.variety} = ${row.kg} matches no plot${detail}`
+        `שורת יבול ${row.block} / ${row.year} / ${row.variety} = ${row.kg} אינה מתאימה לאף חלקה${detail}`
       );
     }
 
@@ -659,7 +715,7 @@ export async function importBackup(
     let yieldConflicts = 0;
 
     if (apply && !seasonId) {
-      flag(`yield: no season resolved — ${resolved.matched.length} estimates skipped`);
+      flag(`יבול: לא זוהתה עונה — ${resolved.matched.length} אומדנים דולגו`);
     } else {
       for (const { plot, kg } of resolved.matched) {
         const mappedId = plotIdMap.get(plot.id);
@@ -676,8 +732,8 @@ export async function importBackup(
           if (!overwriteYield) {
             yieldConflicts += 1;
             flag(
-              `yield "${plot.name}": stored ${current} kg/dunam but the backup says ${kg}` +
-                ' — left as is; pass --overwrite-yield to replace'
+              `יבול "${plot.name}": במערכת ${current} ק"ג/דונם ובקובץ ${kg}` +
+                ' — נשמר הערך הקיים; להחלפה יש להריץ עם --overwrite-yield'
             );
             continue;
           }
@@ -732,9 +788,9 @@ export async function importBackup(
 
   for (const test of backup.nirTests || []) {
     const areaId = plotIdMap.get(test.plotId);
-    const where = `NIR ${test.date || test.id}`;
+    const where = `בדיקת NIR ${test.date || test.id}`;
     if (!areaId) {
-      flag(`${where}: references unknown plot ${test.plotId} — skipped`);
+      flag(`${where}: מפנה לחלקה לא מוכרת (${test.plotId}) — דולגה`);
       continue;
     }
 
@@ -754,8 +810,8 @@ export async function importBackup(
       const match = known?.get(rawTakt) ?? known?.get(taktName(Number(rawTakt))) ?? null;
       if (!match) {
         flag(
-          `${where}: recorded on takt "${rawTakt}" but plot "${plotNameById.get(test.plotId) ?? test.plotId}"` +
-            ` has no such takt — reading imported against the whole plot`
+          `${where}: נרשמה על טאקט "${rawTakt}" אך לחלקה "${plotNameById.get(test.plotId) ?? test.plotId}"` +
+            ` אין טאקט כזה — הבדיקה יובאה ברמת החלקה כולה`
         );
       } else {
         taktLinked += 1;
@@ -775,7 +831,7 @@ export async function importBackup(
       if (Math.abs(computed - storedDry) > 0.05) {
         dryMismatches += 1;
         flag(
-          `${where}: stored dry ${storedDry}% but oil/water compute to ${computed}% — computed value wins`
+          `${where}: בקובץ שמן בחומר יבש ${storedDry}% אך לפי השמן והמים מתקבל ${computed}% — הערך המחושב גובר`
         );
       }
     }
@@ -817,7 +873,7 @@ export async function importBackup(
   let windowCount = 0;
   for (const w of backup.varietyWindows || []) {
     if (!w.variety || !w.start || !w.end) {
-      flag(`variety window "${w.variety}": incomplete — skipped`);
+      flag(`חלון זן "${w.variety}": חסרים נתונים — דולג`);
       continue;
     }
     if (apply) {
@@ -860,6 +916,70 @@ export async function importBackup(
     weatherCount = weatherRows.length;
   }
 
+  // --- status-card thresholds (the prototype's `categoryThresholds`) ---
+  //
+  // Global config, like variety_windows and weather_days above: this is the
+  // dashboard's classification for every tenant, not just the one being
+  // imported. It is written anyway because the alternative — the app judging
+  // גשור's plots against bands גשור never set — is the defect this import
+  // exists to correct.
+  let categoryThresholdsApplied = false;
+  if (backup.categoryThresholds) {
+    const bands: Record<string, number> = {};
+    const missing: string[] = [];
+
+    for (const [key, column, label] of CATEGORY_BAND_COLUMNS) {
+      const value = num(backup.categoryThresholds[key], `ספי כרטיסי הסטטוס — ${label}`);
+      if (value === null) missing.push(label);
+      else bands[column] = value;
+    }
+
+    if (missing.length > 0) {
+      flag(
+        `ספי כרטיסי הסטטוס: חסרים בקובץ ${missing.join(', ')}` +
+          ' — הכרטיסים נשארים עם הספים הנוכחיים'
+      );
+    } else {
+      if (apply) {
+        const { error } = await supabase.from('plot_category_thresholds').upsert(
+          {
+            id: 'default',
+            ...bands,
+            updated_at: new Date().toISOString(),
+          } as any,
+          { onConflict: 'id' }
+        );
+        if (error) throw error;
+      }
+      categoryThresholdsApplied = true;
+    }
+  }
+
+  // --- alert thresholds: compared, never written ---
+  if (backup.thresholds) {
+    const { data: ruleRows, error: ruleError } = await supabase
+      .from('parameter_rules')
+      .select('parameter_code, upper_bound, sort_order');
+    if (ruleError) throw ruleError;
+
+    for (const band of ALERT_BAND_RULES) {
+      const fromFile = num(backup.thresholds[band.key], `סף התראה — ${band.label}`);
+      if (fromFile === null) continue;
+
+      const row = ((ruleRows || []) as any[]).find(
+        (r) => r.parameter_code === band.parameter && r.sort_order === band.sortOrder
+      );
+      // upper_bound is NUMERIC — a string over PostgREST.
+      const stored = row ? Number(row.upper_bound) : null;
+      if (stored === null || !Number.isFinite(stored) || stored === fromFile) continue;
+
+      flag(
+        `${band.label} (${band.key}): בקובץ ${fromFile}, במערכת ${stored} — ` +
+          'ספי ההתראה אינם מיובאים; אם הלקוח שינה אותם יש לעדכן בהגדרות הספים'
+      );
+    }
+  }
+
   return {
     season: { name: seasonName, yearType, outcome: seasonOutcome },
     plots: { created, reused },
@@ -868,6 +988,7 @@ export async function importBackup(
     nir: { created: nirCount, skipped: nirSkipped, taktLinked, dryMismatches },
     varietyWindows: windowCount,
     weatherRows: weatherCount,
+    categoryThresholds: categoryThresholdsApplied,
     issues,
   };
 }

@@ -6,7 +6,14 @@
  * one place so the dashboard, the plot list and any future screen agree on it.
  */
 
-import type { NirLike, PlotLike, VarietyWindowLike, WeatherDayLike } from './logic';
+import type {
+  CategoryThresholds,
+  NirLike,
+  PlotLike,
+  VarietyWindowLike,
+  WeatherDayLike,
+} from './logic';
+import { DEFAULT_CATEGORY_THRESHOLDS } from './constants';
 
 /** An `areas` row joined with its olive_plot_details, as /api/olive returns it. */
 export interface ApiPlot {
@@ -83,6 +90,35 @@ export function toWeatherDayLike(row: Record<string, unknown>): WeatherDayLike {
     rain_mm: numeric(row.rain_mm),
     wind_kmh: numeric(row.wind_kmh),
     is_manual: Boolean(row.is_manual),
+  };
+}
+
+/**
+ * Flatten the plot_category_thresholds row into the bands the logic reads.
+ *
+ * Every column is NUMERIC, so PostgREST sends strings — comparing those
+ * directly is lexical, where "9" > "17", and the bands would misfire on real
+ * data while fixture-based tests kept passing. That is the same trap
+ * evaluateParameter() documents for upper_bound.
+ *
+ * A missing row (or a column that somehow arrives unparseable) falls back to
+ * the prototype's default for that band rather than to zero, so the dashboard
+ * degrades to the shipped behaviour instead of classifying everything as ready.
+ */
+export function toCategoryThresholds(
+  row: Record<string, unknown> | null | undefined
+): CategoryThresholds {
+  const band = (key: string, fallback: number) => numeric(row?.[key]) ?? fallback;
+
+  return {
+    readyOilMin: band('ready_oil_min', DEFAULT_CATEGORY_THRESHOLDS.readyOilMin),
+    readyOilMax: band('ready_oil_max', DEFAULT_CATEGORY_THRESHOLDS.readyOilMax),
+    readyWaterMin: band('ready_water_min', DEFAULT_CATEGORY_THRESHOLDS.readyWaterMin),
+    readyWaterMax: band('ready_water_max', DEFAULT_CATEGORY_THRESHOLDS.readyWaterMax),
+    anomalyWaterLow: band('anomaly_water_low', DEFAULT_CATEGORY_THRESHOLDS.anomalyWaterLow),
+    anomalyWaterHigh: band('anomaly_water_high', DEFAULT_CATEGORY_THRESHOLDS.anomalyWaterHigh),
+    normalOilMax: band('normal_oil_max', DEFAULT_CATEGORY_THRESHOLDS.normalOilMax),
+    normalWaterMax: band('normal_water_max', DEFAULT_CATEGORY_THRESHOLDS.normalWaterMax),
   };
 }
 

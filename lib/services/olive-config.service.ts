@@ -1,4 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { toCategoryColumns, type AlertBoundUpdate } from '@/lib/olive/thresholds';
+import type { CategoryThresholds } from '@/lib/olive/logic';
 
 /**
  * Olive configuration lookups: measurement parameters, their threshold rules,
@@ -45,6 +47,131 @@ export async function getParameterRules(supabase: SupabaseClient) {
 
   if (error) throw error;
   return data || [];
+}
+
+/**
+ * The status-card bands, or null when the seed row is missing.
+ *
+ * Single row by construction (plot_category_thresholds.id is CHECKed to
+ * 'default'), so maybeSingle() cannot be ambiguous. Callers hand the result to
+ * toCategoryThresholds(), which supplies the prototype defaults for a null.
+ */
+export async function getCategoryThresholds(supabase: SupabaseClient) {
+  const { data, error } = await supabase
+    .from('plot_category_thresholds')
+    .select('*')
+    .eq('id', 'default')
+    .maybeSingle();
+
+  // 42P01 is undefined_table. Merging deploys this code through Vercel while
+  // production schema is applied by hand afterwards (docs/rollout/README.md),
+  // so there is a window where the table is not there yet. toCategoryThresholds
+  // turns a null into the same defaults the table is seeded with, which keeps
+  // the dashboard up; throwing would 500 the entire payload over a config row.
+  if (error && (error as { code?: string }).code === '42P01') return null;
+  if (error) throw error;
+  return data || null;
+}
+
+/**
+ * Write the status-card bands.
+ *
+ * Upsert rather than update: on a database where the rollout SQL has run but
+ * the row was lost (a TRUNCATE, a partial restore) this recreates it, and
+ * plot_category_thresholds.id is CHECKed to 'default', so ON CONFLICT (id) can
+ * never be ambiguous — the migration makes that the contract. Same shape the
+ * backup importer uses, so there is exactly one way this row gets written.
+ *
+ * GLOBAL: no customer_id. This changes the dashboard for every tenant, the
+ * reach variety_windows and weather_days already have.
+ *
+ * Callers MUST validate with parseCategoryThresholds() first. Every column
+ * carries a CHECK, and handleApiError would hand a violation to the operator as
+ * a raw 500 in English.
+ */
+export async function upsertCategoryThresholds(
+  adminClient: SupabaseClient,
+  bands: CategoryThresholds
+): Promise<any> {
+  const { data, error } = await (adminClient.from('plot_category_thresholds') as any)
+    .upsert(
+      { id: 'default', ...toCategoryColumns(bands), updated_at: new Date().toISOString() },
+      { onConflict: 'id' }
+    )
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Change ONLY `upper_bound`, only on the rule rows the caller names.
+ *
+ * Never inserts, deletes, reorders, or touches status / severity / message /
+ * upper_inclusive. That is the whole reason the alert editor is safe to expose:
+ * the cascade's shape and idx_parameter_rules_order are never in play, so no
+ * edit can leave parameter_rules in a state evaluateParameter cannot read.
+ *
+ * Reads first, then updates by primary key. The read costs one query and buys
+ * three things an update-by-(parameter_code, sort_order) would not have: a
+ * single-row target that does not lean on the unique index, a diff so an
+ * unchanged bound issues no write at all, and a real error when a rule row is
+ * missing instead of a silent no-op.
+ *
+ * PARTIAL FAILURE IS TOLERATED ON PURPOSE. The writes run in order, one at a
+ * time — never Promise.all, which would make a failure unordered as well as
+ * partial. Because validation ran over the complete set first and only a
+ * numeric bound is ever written, a failure halfway leaves the cascade
+ * well-formed: correctly ordered, no gaps, no NULL introduced, one bound simply
+ * still the old number. And because the operation is a diff, retrying re-reads,
+ * skips what already landed, and converges exactly. Do not "fix" this into a
+ * batch.
+ *
+ * Returns the number of rows actually changed.
+ */
+export async function updateParameterRuleBounds(
+  adminClient: SupabaseClient,
+  updates: AlertBoundUpdate[]
+): Promise<number> {
+  const { data: rows, error } = await adminClient
+    .from('parameter_rules')
+    .select('id, parameter_code, sort_order, upper_bound');
+  if (error) throw error;
+
+  let changed = 0;
+
+  for (const update of updates) {
+    const row = ((rows || []) as any[]).find(
+      (r) => r.parameter_code === update.parameterCode && r.sort_order === update.sortOrder
+    );
+
+    if (!row) {
+      throw new Error(`כלל סף חסר במסד הנתונים: ${update.parameterCode} #${update.sortOrder}`);
+    }
+
+    // A NULL bound is the cascade's catch-all. Reaching one here means the
+    // stored sort_order no longer matches ALERT_BAND_FIELDS, and writing a
+    // bound into it would drop the last band of that parameter entirely.
+    if (row.upper_bound === null) {
+      throw new Error(
+        `כלל הסף ${update.parameterCode} #${update.sortOrder} הוא כלל ברירת מחדל ואינו ניתן לעריכה`
+      );
+    }
+
+    // upper_bound is NUMERIC, so it arrives as a string — Number() or the diff
+    // never matches and every bound is rewritten on every save.
+    if (Number(row.upper_bound) === update.upperBound) continue;
+
+    const { error: updateError } = await (adminClient.from('parameter_rules') as any)
+      .update({ upper_bound: update.upperBound, updated_at: new Date().toISOString() })
+      .eq('id', row.id);
+    if (updateError) throw updateError;
+
+    changed += 1;
+  }
+
+  return changed;
 }
 
 export async function getSeasons(supabase: SupabaseClient) {
