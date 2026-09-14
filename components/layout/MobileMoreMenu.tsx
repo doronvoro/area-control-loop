@@ -5,9 +5,15 @@ import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/components/providers/UserProvider';
 import { getVisibleNavGroups } from '@/lib/navigation';
+import { useCollapsedNavGroups } from '@/hooks/useCollapsedNavGroups';
 import { getDirection } from '@/lib/rtl';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
+import {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from '@/components/ui/collapsible';
 import { CustomerSwitcher } from './CustomerSwitcher';
 import {
   Sheet,
@@ -16,7 +22,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { supabase } from '@/lib/supabase/client';
-import { LogOut, ChevronLeft } from 'lucide-react';
+import { LogOut, ChevronLeft, ChevronDown } from 'lucide-react';
 
 interface MobileMoreMenuProps {
   open: boolean;
@@ -45,6 +51,10 @@ export function MobileMoreMenu({ open, onOpenChange }: MobileMoreMenuProps) {
 
   // Filter out the workflow group since those are already in the bottom nav
   const menuGroups = navGroups.filter((g) => g.id !== 'workflow');
+
+  // Same key as the sidebar: sharing the preference across form factors is the
+  // point, and only one of the two is ever mounted visibly.
+  const { collapsedGroupIds, setGroupOpen } = useCollapsedNavGroups();
 
   const handleLogout = async () => {
     onOpenChange(false);
@@ -95,35 +105,70 @@ export function MobileMoreMenu({ open, onOpenChange }: MobileMoreMenuProps) {
 
         {/* Menu groups */}
         <div className="max-h-[50vh] overflow-y-auto">
-          {menuGroups.map((group) => (
-            <div key={group.id} className="py-2">
-              <p className="px-5 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                {group.label}
-              </p>
-              {group.items.map((item) => {
-                const Icon = item.icon;
-                const active = pathname === item.href;
+          {menuGroups.map((group) => {
+            const isGroupOpen = !group.collapsible || !collapsedGroupIds.includes(group.id);
+            const hasActiveItem = group.items.some((item) => pathname === item.href);
 
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => onOpenChange(false)}
-                    className={cn(
-                      'flex items-center gap-3 px-5 py-3 transition-colors',
-                      active
-                        ? 'bg-accent text-primary font-medium'
-                        : 'text-foreground active:bg-muted',
-                    )}
-                  >
-                    <Icon className="size-5 shrink-0" />
-                    <span className="flex-1 text-sm">{item.label}</span>
-                    <ChevronLeft className="size-4 text-muted-foreground" />
-                  </Link>
-                );
-              })}
-            </div>
-          ))}
+            return (
+              <Collapsible
+                key={group.id}
+                open={isGroupOpen}
+                onOpenChange={(open) => setGroupOpen(group.id, open)}
+              >
+                <div className="py-2">
+                  {group.collapsible ? (
+                    <CollapsibleTrigger
+                      className={cn(
+                        'flex w-full items-center justify-between gap-2 px-5 py-2',
+                        'text-xs font-semibold uppercase tracking-wider transition-colors active:bg-muted',
+                        !isGroupOpen && hasActiveItem ? 'text-primary' : 'text-muted-foreground',
+                      )}
+                    >
+                      <span className="truncate">{group.label}</span>
+                      {/* Vertical, unlike the per-item ChevronLeft below: that
+                          one means "forward", which is leftward in RTL. */}
+                      <ChevronDown
+                        className={cn(
+                          'size-4 shrink-0 transition-transform duration-200',
+                          isGroupOpen && 'rotate-180',
+                        )}
+                        aria-hidden="true"
+                      />
+                    </CollapsibleTrigger>
+                  ) : (
+                    <p className="px-5 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      {group.label}
+                    </p>
+                  )}
+
+                  <CollapsibleContent className="overflow-hidden data-[state=open]:animate-collapsible-down data-[state=closed]:animate-collapsible-up">
+                    {group.items.map((item) => {
+                      const Icon = item.icon;
+                      const active = pathname === item.href;
+
+                      return (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          onClick={() => onOpenChange(false)}
+                          className={cn(
+                            'flex items-center gap-3 px-5 py-3 transition-colors',
+                            active
+                              ? 'bg-accent text-primary font-medium'
+                              : 'text-foreground active:bg-muted',
+                          )}
+                        >
+                          <Icon className="size-5 shrink-0" />
+                          <span className="flex-1 text-sm">{item.label}</span>
+                          <ChevronLeft className="size-4 text-muted-foreground" />
+                        </Link>
+                      );
+                    })}
+                  </CollapsibleContent>
+                </div>
+              </Collapsible>
+            );
+          })}
 
           {menuGroups.length === 0 && (
             <div className="px-5 py-6 text-center text-sm text-muted-foreground">

@@ -27,7 +27,7 @@ export default function LoginPage() {
     //
     // It has to be handled BEFORE the getUser() check below, because a recovery
     // token establishes a real session — so that check would see a logged-in
-    // user and bounce them to /dashboard, silently swallowing the recovery and
+    // user and bounce them into the app, silently swallowing the recovery and
     // leaving the password unchanged.
     const hash = window.location.hash;
     if (hash.includes('type=recovery')) {
@@ -43,7 +43,8 @@ export default function LoginPage() {
         data: { user },
       } = await supabase.auth.getUser();
       if (user) {
-        router.replace('/dashboard');
+        // The root decides where to land; login has no opinion about it.
+        router.replace('/');
       }
     };
     checkUser();
@@ -78,7 +79,10 @@ export default function LoginPage() {
 
       if (data.user && data.session) {
         await new Promise((resolve) => setTimeout(resolve, 200));
-        window.location.href = '/dashboard';
+        // Full load, not router.push: the sleep and the hard navigation exist so
+        // the session cookie is written before the server reads it. The root
+        // resolves the actual landing page from there.
+        window.location.href = '/';
       } else {
         throw new Error('Login failed - no session created');
       }

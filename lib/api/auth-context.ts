@@ -33,14 +33,19 @@ async function isBearerRequest(): Promise<boolean> {
   return !!authHeader?.startsWith('Bearer ');
 }
 
+/** Everything getApiContext resolves except the service-role client. */
+export type RequestScope = Omit<ApiContext, 'adminClient'>;
+
 /**
- * Get a unified API context with a single auth check and parallel data fetching.
- * Replaces the pattern of calling requireAuth + getCurrentWorker + getCurrentCustomer + hasRole separately.
- * Throws AuthError (401) for Bearer requests without a valid user, or redirects to /login for web requests.
+ * Who is calling and which tenant they are scoped to.
+ *
+ * Separate from getApiContext because the service-role client is a hard
+ * requirement there — createAdminClient throws when SUPABASE_SERVICE_ROLE_KEY
+ * is unset — and the root landing page must not 500 on an env that only has the
+ * anon key. Same auth check, same precedence, no admin powers.
  */
-export async function getApiContext(): Promise<ApiContext> {
+export async function getRequestScope(): Promise<RequestScope> {
   const supabase = await createClient();
-  const adminClient = createAdminClient();
 
   // Single auth check
   const {
@@ -85,7 +90,6 @@ export async function getApiContext(): Promise<ApiContext> {
 
   return {
     supabase,
-    adminClient,
     user,
     worker: workerResult,
     customer: customerResult,
@@ -97,6 +101,16 @@ export async function getApiContext(): Promise<ApiContext> {
       workerCustomerId: (workerResult as { customer_id?: string } | null)?.customer_id ?? null,
     }),
   };
+}
+
+/**
+ * Get a unified API context with a single auth check and parallel data fetching.
+ * Replaces the pattern of calling requireAuth + getCurrentWorker + getCurrentCustomer + hasRole separately.
+ * Throws AuthError (401) for Bearer requests without a valid user, or redirects to /login for web requests.
+ */
+export async function getApiContext(): Promise<ApiContext> {
+  const scope = await getRequestScope();
+  return { ...scope, adminClient: createAdminClient() };
 }
 
 /**
@@ -182,7 +196,7 @@ export async function requireAdminOrCustomerOwner(ctx: ApiContext): Promise<Next
  * falling back would silently restore the unscoped view and make the switcher
  * look broken. `scopedCustomerId` already encodes that precedence.
  */
-export function resolveCustomerId(ctx: ApiContext, override?: string | null): string | null {
+export function resolveCustomerId(ctx: RequestScope, override?: string | null): string | null {
   if (ctx.isAdmin && override) return override;
   return ctx.scopedCustomerId;
 }

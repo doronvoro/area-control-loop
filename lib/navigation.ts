@@ -46,11 +46,21 @@ export interface NavGroup {
    * code change.
    */
   requiredFeature?: keyof NavFeatures;
+  /**
+   * The group header becomes an expand/collapse toggle. Off for olive: it leads
+   * the menu and is the reason those tenants are here, so hiding it behind a
+   * click would undo the ordering below.
+   */
+  collapsible?: boolean;
+  /** Folded on a first visit, before the user has toggled anything. */
+  defaultCollapsed?: boolean;
 }
 
 export const workflowGroup: NavGroup = {
   id: 'workflow',
   label: 'תהליך עבודה',
+  collapsible: true,
+  defaultCollapsed: true,
   items: [
     { href: '/dashboard', label: 'דשבורד', icon: LayoutDashboard },
     { href: '/monitoring', label: 'ניטור', icon: Search },
@@ -79,6 +89,8 @@ export const managementGroup: NavGroup = {
   id: 'management',
   label: 'ניהול',
   requiredRole: 'customer_owner',
+  collapsible: true,
+  defaultCollapsed: true,
   items: [
     { href: '/admin/workers', label: 'ניהול עובדים', icon: Users },
     { href: '/admin/crops', label: 'ניהול גידולים', icon: Sprout },
@@ -93,6 +105,8 @@ export const adminGroup: NavGroup = {
   id: 'admin',
   label: 'מנהל מערכת',
   requiredRole: 'admin',
+  collapsible: true,
+  defaultCollapsed: true,
   items: [
     // Both of these existed and worked but were reachable only by typing the
     // URL. They are also the two halves of onboarding a tenant: create the
@@ -109,9 +123,27 @@ export const adminGroup: NavGroup = {
   ],
 };
 
-export const allNavGroups: NavGroup[] = [workflowGroup, oliveGroup, managementGroup, adminGroup];
+/**
+ * Olive leads. For a grower with an olive licence the harvest module is the
+ * job, and the generic workflow pages are the supporting cast. It is hidden
+ * entirely for everyone else (requiredFeature), so this costs non-olive tenants
+ * nothing.
+ */
+export const allNavGroups: NavGroup[] = [oliveGroup, workflowGroup, managementGroup, adminGroup];
 
 export const bottomNavItems: NavItem[] = workflowGroup.items;
+
+/**
+ * Where a signed-in user lands when they ask for no page in particular.
+ *
+ * Derived from the group consts rather than hardcoded strings so it cannot
+ * drift from the menu: whatever leads the olive group is what `/` resolves to.
+ * Falls back to the dashboard when the olive module is off, which is also the
+ * case for an admin who has selected no customer.
+ */
+export function getLandingPath(features: NavFeatures = {}): string {
+  return features.olive ? oliveGroup.items[0].href : workflowGroup.items[0].href;
+}
 
 export function getVisibleNavGroups(
   isAdmin: boolean,
