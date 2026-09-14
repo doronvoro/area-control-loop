@@ -13,7 +13,7 @@ import {
   daysSinceLabel,
   classifyPlotCategory,
 } from '@/lib/olive/logic';
-import { toPlotLike, toNirLike, type ApiPlot } from '@/lib/olive/adapt';
+import { toPlotLike, toNirLike, toCategoryThresholds, type ApiPlot } from '@/lib/olive/adapt';
 import {
   PARAMETER_STATUS_CONFIG,
   PLOT_TYPE_LABELS,
@@ -29,6 +29,7 @@ interface DashboardPayload {
   yieldEstimates: Record<string, any>;
   harvestedAreaIds: string[];
   parameterRules: ParameterRule[];
+  categoryThresholds: Record<string, unknown> | null;
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -54,6 +55,7 @@ export function OlivePlotsContent() {
   const rows = useMemo(() => {
     if (!data) return [];
     const harvested = new Set(data.harvestedAreaIds || []);
+    const bands = toCategoryThresholds(data.categoryThresholds);
 
     return (data.plots || []).map((plot) => {
       const nir = toNirLike(data.latestNir?.[plot.id]);
@@ -62,7 +64,7 @@ export function OlivePlotsContent() {
         plotLike: toPlotLike(plot),
         nir,
         harvested: harvested.has(plot.id),
-        category: classifyPlotCategory(nir, data.parameterRules || []),
+        category: classifyPlotCategory(nir, data.parameterRules || [], bands),
         lastMeasured: daysSinceLabel(nir?.report_date ?? null, now),
         yieldLoad: yieldLoadInfo(data.yieldEstimates?.[plot.id]?.kg_per_dunam),
       };

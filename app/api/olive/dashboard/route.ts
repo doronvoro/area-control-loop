@@ -12,6 +12,7 @@ import { getYieldEstimatesBySeason } from '@/lib/services/olive-yield.service';
 import { getWeatherDays } from '@/lib/services/olive-weather.service';
 import {
   getParameterRules,
+  getCategoryThresholds,
   getVarietyWindows,
   getActiveSeason,
 } from '@/lib/services/olive-config.service';
@@ -35,12 +36,22 @@ export async function GET(request: Request) {
     const areaIds = await getAccessibleAreaIds(ctx.supabase, ctx.isAdmin, customerId);
 
     if (areaIds.length === 0) {
+      // The threshold config still comes back. It belongs to no customer, and
+      // the settings dialog reads both sets straight out of this payload — blank
+      // them here and an admin with no customer selected opens the dialog to an
+      // empty alert tab. Two small global lookups, no area scan.
+      const [parameterRules, categoryThresholds] = await Promise.all([
+        getParameterRules(ctx.supabase),
+        getCategoryThresholds(ctx.supabase),
+      ]);
+
       return NextResponse.json({
         plots: [],
         latestNir: {},
         yieldEstimates: {},
         harvestedAreaIds: [],
-        parameterRules: [],
+        parameterRules,
+        categoryThresholds,
         varietyWindows: [],
         weatherDays: [],
         season: null,
@@ -60,6 +71,7 @@ export async function GET(request: Request) {
       latestNir,
       harvestedAreaIds,
       parameterRules,
+      categoryThresholds,
       varietyWindows,
       weatherDays,
       season,
@@ -68,6 +80,7 @@ export async function GET(request: Request) {
       getLatestNirByArea(ctx.supabase, areaIds),
       getHarvestedAreaIds(ctx.supabase, areaIds),
       getParameterRules(ctx.supabase),
+      getCategoryThresholds(ctx.supabase),
       getVarietyWindows(ctx.supabase),
       getWeatherDays(ctx.supabase, fromDate),
       getActiveSeason(ctx.supabase),
@@ -83,6 +96,7 @@ export async function GET(request: Request) {
       yieldEstimates,
       harvestedAreaIds,
       parameterRules,
+      categoryThresholds,
       varietyWindows,
       weatherDays,
       season,

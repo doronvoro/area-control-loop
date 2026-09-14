@@ -12,7 +12,11 @@ import {
   type PlotLike,
   type NirLike,
   type WeatherDayLike,
+  type CategoryThresholds,
 } from '@/lib/olive/logic';
+import { toCategoryThresholds } from '@/lib/olive/adapt';
+import { readAlertBounds, DEFAULT_ALERT_BOUNDS } from '@/lib/olive/thresholds';
+import { DEFAULT_CATEGORY_THRESHOLDS } from '@/lib/olive/constants';
 import { ParameterStatus, type ParameterRule } from '@/types/database';
 
 /**
@@ -68,6 +72,18 @@ const RULES: ParameterRule[] = [
   rule('dry', 45, true, ParameterStatus.PLAN, 2, 'תשומת לב / החלטה', 2),
   rule('dry', null, true, ParameterStatus.URGENT, 3, 'מסיק', 3),
 ];
+
+/** Mirrors the seed in 20260915100000_create_olive_category_thresholds.sql exactly. */
+const BANDS: CategoryThresholds = {
+  readyOilMin: 18,
+  readyOilMax: 24,
+  readyWaterMin: 51,
+  readyWaterMax: 54,
+  anomalyWaterLow: 50,
+  anomalyWaterHigh: 60,
+  normalOilMax: 17,
+  normalWaterMax: 60,
+};
 
 const PLOT: PlotLike = {
   id: 'p1',
@@ -291,32 +307,196 @@ describe('computePlotStatus', () => {
 
 describe('classifyPlotCategory', () => {
   it('is testing with no measurement', () => {
-    expect(classifyPlotCategory(null, RULES)).toBe('testing');
+    expect(classifyPlotCategory(null, RULES, BANDS)).toBe('testing');
   });
 
-  it('is ready when oil is urgent', () => {
-    expect(classifyPlotCategory(nir({ oil: 21 }), RULES)).toBe('ready');
+  it('is ready when oil and water are both inside the ready box', () => {
+    expect(classifyPlotCategory(nir({ oil: 18, water: 52 }), RULES, BANDS)).toBe('ready');
+    expect(classifyPlotCategory(nir({ oil: 24, water: 54 }), RULES, BANDS)).toBe('ready');
+  });
+
+  // Both ends are inclusive — readyOilMin 18 and readyOilMax 24 are IN.
+  it('is not ready one step outside either end of the oil box', () => {
+    expect(classifyPlotCategory(nir({ oil: 17.9, water: 52 }), RULES, BANDS)).not.toBe('ready');
+    expect(classifyPlotCategory(nir({ oil: 24.1, water: 52 }), RULES, BANDS)).not.toBe('ready');
+  });
+
+  /**
+   * CHANGED DELIBERATELY — was 'ready' when the card read the oil alert band.
+   *
+   * The prototype's categoryThresholds require water 51..54 for מוכן למסיק, so
+   * high oil alone is not enough and a plot whose water is out of range cannot
+   * be ready at all. This is why the old "oil-urgent wins over water-urgent"
+   * precedence no longer decides anything: the two can no longer both hold.
+   */
+  it('is anomaly, not ready, when oil is high but water is out of range', () => {
+    expect(classifyPlotCategory(nir({ oil: 21, water: 70 }), RULES, BANDS)).toBe('anomaly');
   });
 
   it('is anomaly on water stress', () => {
-    expect(classifyPlotCategory(nir({ oil: 12, water: 45 }), RULES)).toBe('anomaly');
+    expect(classifyPlotCategory(nir({ oil: 12, water: 45 }), RULES, BANDS)).toBe('anomaly');
   });
 
+  // The one band still sourced from parameter_rules — categoryThresholds has no
+  // dry key, and dropping the signal outright is the client's call, not ours.
   it('is anomaly on high dry-matter oil', () => {
-    expect(classifyPlotCategory(nir({ oil: 12, dry: 46 }), RULES)).toBe('anomaly');
+    expect(classifyPlotCategory(nir({ oil: 12, dry: 46 }), RULES, BANDS)).toBe('anomaly');
   });
 
-  it('is normal when oil is planned and nothing is out of range', () => {
-    expect(classifyPlotCategory(nir({ oil: 18, water: 52 }), RULES)).toBe('normal');
+  /**
+   * THE REGRESSION THIS SUITE EXISTS FOR.
+   *
+   * The first port read תקינה as "oil in the PLAN band" (17..20) and sent every
+   * early-season sample to בבדיקות instead — the bucket for plots nobody has
+   * sampled. The prototype means oil at or BELOW normalOilMax.
+   */
+  it('is normal when oil is still below the ready range and water is in range', () => {
+    expect(classifyPlotCategory(nir({ oil: 12, water: 52 }), RULES, BANDS)).toBe('normal');
+    expect(classifyPlotCategory(nir({ oil: 17, water: 60 }), RULES, BANDS)).toBe('normal');
   });
 
-  it('is testing when oil is below range and nothing is out of range', () => {
-    expect(classifyPlotCategory(nir({ oil: 12, water: 52 }), RULES)).toBe('testing');
+  // Between normalOilMax and readyOilMin, with water outside the ready box, a
+  // plot belongs to no card but בבדיקות — it is mid-climb and not yet a call.
+  it('is testing when oil has passed normal but the ready box is not met', () => {
+    expect(classifyPlotCategory(nir({ oil: 17.5, water: 58 }), RULES, BANDS)).toBe('testing');
   });
 
-  // Order matters: oil-urgent is checked BEFORE water/dry-urgent.
-  it('reports ready, not anomaly, when oil is urgent AND water is out of range', () => {
-    expect(classifyPlotCategory(nir({ oil: 21, water: 70 }), RULES)).toBe('ready');
+  // A band cannot be judged on a value that is not there.
+  it('is testing when the measurement is missing the value a band needs', () => {
+    expect(classifyPlotCategory(nir({ oil: 21 }), RULES, BANDS)).toBe('testing');
+    expect(classifyPlotCategory(nir({ water: 52 }), RULES, BANDS)).toBe('testing');
+  });
+});
+
+// ─── the גשור 2026 backup, end to end ───────────────────────────────────────
+
+describe('status-card counts for the גשור 2026 backup', () => {
+  /**
+   * Every NIR sample in "גיבוי חיזוי מסיק ונתונים - 2026", as [oil, water, dry].
+   *
+   * The prototype's own status cards read 37 / 6 / 7 / 0 for this file against
+   * 50 plots. The app read 43 / 0 / 7 / 0 — the six תקינות plots collapsed into
+   * בבדיקות. This pins the file, not a fixture, so the two cannot drift again.
+   */
+  const SAMPLES: [number, number, number][] = [
+    [10.7, 57, 24.82],
+    [10.2, 58, 24.32],
+    [9.2, 56, 20.84],
+    [8.2, 61.7, 21.45],
+    [8, 60.7, 20.26],
+    [6, 66.6, 18.02],
+    [9, 60.2, 22.72],
+    [9.3, 51.1, 21.25],
+    [11.8, 57.9, 28.12],
+    [5.2, 63.5, 14.17],
+    [5.7, 64.9, 16.13],
+    [10.3, 60.6, 26.22],
+    [10.5, 54.4, 22.91],
+  ];
+
+  /** 50 plots in the file, 13 of them sampled. */
+  const UNSAMPLED = 37;
+
+  it('matches the prototype card for card', () => {
+    const counts = { testing: UNSAMPLED, normal: 0, anomaly: 0, ready: 0 };
+    for (const [oil, water, dry] of SAMPLES) {
+      counts[classifyPlotCategory(nir({ oil, water, dry }), RULES, BANDS)] += 1;
+    }
+
+    expect(counts).toEqual({ testing: 37, normal: 6, anomaly: 7, ready: 0 });
+    expect(Object.values(counts).reduce((a, b) => a + b, 0)).toBe(50);
+  });
+
+  it('flags exactly the seven samples whose water is over the band', () => {
+    const anomalies = SAMPLES.filter(
+      ([oil, water, dry]) =>
+        classifyPlotCategory(nir({ oil, water, dry }), RULES, BANDS) === 'anomaly'
+    );
+    expect(anomalies.map(([, water]) => water)).toEqual([61.7, 60.7, 66.6, 60.2, 63.5, 64.9, 60.6]);
+  });
+
+  /**
+   * The settings dialog's live preview claims that retuning a band moves these
+   * counts. This is that claim as a test, on the one dataset the repo already
+   * trusts — so the preview is covered without a DOM.
+   *
+   * Widening the water bands to 67 puts every sample inside the normal range:
+   * the seven water anomalies (61.7 .. 66.6) stop being anomalies, and all 13
+   * sampled plots land in תקינות.
+   */
+  it('moves as the preview predicts when the water bands are widened', () => {
+    const widened = { ...BANDS, anomalyWaterHigh: 67, normalWaterMax: 67 };
+    const counts = { testing: UNSAMPLED, normal: 0, anomaly: 0, ready: 0 };
+    for (const [oil, water, dry] of SAMPLES) {
+      counts[classifyPlotCategory(nir({ oil, water, dry }), RULES, widened)] += 1;
+    }
+
+    expect(counts).toEqual({ testing: 37, normal: 13, anomaly: 0, ready: 0 });
+  });
+
+  /**
+   * The same, driven from the OTHER threshold set — proof that the alert bands
+   * on tab 2 reach the status cards. Dropping the dry-matter bands to 10/20
+   * puts every sample above 20% dry into "מסיק", which classifyPlotCategory
+   * reads as חריגה: the 7 water anomalies plus all 6 previously-normal plots.
+   */
+  it('moves when the dry-matter alert bounds change, not just the card bands', () => {
+    const retuned = RULES.map((r) =>
+      r.parameter_code === 'dry' && r.upper_bound !== null
+        ? { ...r, upper_bound: r.sort_order === 1 ? 10 : 20 }
+        : r
+    );
+    const counts = { testing: UNSAMPLED, normal: 0, anomaly: 0, ready: 0 };
+    for (const [oil, water, dry] of SAMPLES) {
+      counts[classifyPlotCategory(nir({ oil, water, dry }), retuned, BANDS)] += 1;
+    }
+
+    expect(counts).toEqual({ testing: 37, normal: 0, anomaly: 13, ready: 0 });
+  });
+});
+
+// ─── the constants that back "restore defaults" ──────────────────────────────
+
+describe('threshold defaults', () => {
+  /**
+   * DEFAULT_CATEGORY_THRESHOLDS and DEFAULT_ALERT_BOUNDS are what the settings
+   * dialog writes into the form when someone presses "שחזר ברירות מחדל". Both
+   * are documented as mirrors of their migration seeds, and the RULES / BANDS
+   * fixtures above are this file's copy of those same seeds.
+   *
+   * Pin the constants to the fixtures rather than deriving the fixtures from
+   * the constants: a wrong edit to a constant must fail here, not pass by
+   * definition.
+   */
+  it('match the seeded fixtures, so restoring defaults restores the seed', () => {
+    expect(BANDS).toEqual(DEFAULT_CATEGORY_THRESHOLDS);
+    expect(readAlertBounds(RULES)).toEqual(DEFAULT_ALERT_BOUNDS);
+  });
+});
+
+// ─── toCategoryThresholds ────────────────────────────────────────────────────
+
+describe('toCategoryThresholds', () => {
+  // NUMERIC arrives as a string over PostgREST. Left as strings, "9" > "17"
+  // lexically and every band would misfire on real data.
+  it('coerces the NUMERIC strings a PostgREST row actually carries', () => {
+    const bands = toCategoryThresholds({
+      ready_oil_min: '18.00',
+      ready_oil_max: '24.00',
+      ready_water_min: '51.00',
+      ready_water_max: '54.00',
+      anomaly_water_low: '50.00',
+      anomaly_water_high: '60.00',
+      normal_oil_max: '17.00',
+      normal_water_max: '60.00',
+    });
+
+    expect(bands).toEqual(BANDS);
+    expect(classifyPlotCategory(nir({ oil: 9, water: 52 }), RULES, bands)).toBe('normal');
+  });
+
+  it('falls back to the prototype defaults when the row is missing', () => {
+    expect(toCategoryThresholds(null)).toEqual(BANDS);
   });
 });
 
@@ -347,7 +527,7 @@ describe('computePlotStatus vs classifyPlotCategory divergence', () => {
   });
 
   it('counts the same plot as an anomaly on the status card', () => {
-    expect(classifyPlotCategory(sample, RULES)).toBe('anomaly');
+    expect(classifyPlotCategory(sample, RULES, BANDS)).toBe('anomaly');
   });
 
   it('confirms each input band individually', () => {
