@@ -31,6 +31,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { OLIVE_CROP_NAME } from '@/lib/olive/constants';
 import { ALERT_BAND_FIELDS, CATEGORY_BAND_FIELDS } from '@/lib/olive/thresholds';
 import { resolveYieldRows, type YieldPlotLike } from '@/lib/olive/import-yield';
+import type { ImportIssue, IssueCategory } from '@/lib/olive/import-issues';
 
 // --- Types (the prototype's own shapes, not ours) ---
 
@@ -160,7 +161,7 @@ export interface ImportResult {
    * False when the file carries none, or carries an incomplete set.
    */
   categoryThresholds: boolean;
-  issues: string[];
+  issues: ImportIssue[];
 }
 
 // --- Prototype threshold keys -> where the value lives here ---
@@ -267,6 +268,99 @@ function dryRunTaktId(plotId: string, index: number): string {
  */
 const MAX_TAKT_COUNT = 10;
 
+/** For the planting-date flags, which name the month the file turned out to hold. */
+const HEBREW_MONTHS = [
+  'ינואר',
+  'פברואר',
+  'מרץ',
+  'אפריל',
+  'מאי',
+  'יוני',
+  'יולי',
+  'אוגוסט',
+  'ספטמבר',
+  'אוקטובר',
+  'נובמבר',
+  'דצמבר',
+];
+
+/**
+ * How much of the planting date the file actually recorded.
+ *
+ * Not a detail: it decides both what goes into areas.planting_time and whether
+ * the operator has anything to chase. 'year' means the day and month are this
+ * importer's default, not the grower's record.
+ */
+export type PlantingPrecision = 'day' | 'month' | 'year' | 'none';
+
+export interface ParsedPlantingDate {
+  /** ISO date for areas.planting_time, or null when no year could be found. */
+  date: string | null;
+  precision: PlantingPrecision;
+}
+
+/**
+ * Read the prototype's free-text planting year into a DATE.
+ *
+ * '2006/7' IS A YEAR AND A MONTH — July 2006, confirmed with the grower. An
+ * earlier reading of it as "planted across the 2006/7 season" is what put every
+ * such plot on 1 January; that lost the month the file did record, and left the
+ * plot sorting six months early against everything planted the same year.
+ *
+ * Accepted, with '/', '-' or '.' between the parts:
+ *   2006            → 2006-01-01, precision 'year'  (the common case)
+ *   2006/7, 7/2006  → 2006-07-01, precision 'month'
+ *   15/7/2006       → 2006-07-15, precision 'day'
+ *   2006/13         → 2006-01-01, precision 'year'  (13 is not a month)
+ *
+ * The year is whichever part has four digits, which is what makes both orders
+ * readable without guessing at a convention. Anything else falls back to the
+ * first four-digit run anywhere in the string, so free text like
+ * 'נטע 2006' still places the plot in its year.
+ *
+ * Pure and exported so the parsing can be tested against the real file's
+ * values without a database.
+ */
+export function parsePlantingDate(raw: string | undefined | null): ParsedPlantingDate {
+  const text = String(raw ?? '').trim();
+  if (!text) return { date: null, precision: 'none' };
+
+  const iso = (year: number, month: number, day: number) =>
+    `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
+  const parts = text.split(/[/\-.]/).map((part) => part.trim());
+  if (parts.length >= 2 && parts.length <= 3 && parts.every((part) => /^\d{1,4}$/.test(part))) {
+    const numbers = parts.map(Number);
+    const yearIndex = parts.findIndex((part) => part.length === 4);
+
+    if (yearIndex === 0 || yearIndex === parts.length - 1) {
+      const year = numbers[yearIndex];
+      // The remaining parts, in the order they sit next to the year:
+      // year-first reads month then day, year-last reads day then month.
+      const rest = yearIndex === 0 ? numbers.slice(1) : numbers.slice(0, -1).reverse();
+      const [month, day = 1] = rest;
+
+      if (month >= 1 && month <= 12 && isRealDate(year, month, day)) {
+        return { date: iso(year, month, day), precision: rest.length > 1 ? 'day' : 'month' };
+      }
+      // A second part that is not a month leaves the year standing on its own
+      // rather than dropping the whole value.
+      return { date: iso(year, 1, 1), precision: 'year' };
+    }
+  }
+
+  const match = text.match(/(\d{4})/);
+  if (!match) return { date: null, precision: 'none' };
+  return { date: iso(Number(match[1]), 1, 1), precision: 'year' };
+}
+
+/** Rejects 31 September and 29 February in a common year, which Date rolls over silently. */
+function isRealDate(year: number, month: number, day: number): boolean {
+  if (day < 1 || day > 31) return false;
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
 // --- Dirty-data reporting ---
 
 /**
@@ -276,10 +370,10 @@ const MAX_TAKT_COUNT = 10;
  * where a shared array would let one import report the previous one's flags.
  */
 function createReporter() {
-  const issues: string[] = [];
+  const issues: ImportIssue[] = [];
 
-  const flag = (message: string) => {
-    issues.push(message);
+  const flag = (category: IssueCategory, message: string) => {
+    issues.push({ category, message });
   };
 
   /** Number or null, flagging anything non-empty that will not parse. */
@@ -287,30 +381,50 @@ function createReporter() {
     if (value === null || value === undefined || value === '') return null;
     const parsed = Number(value);
     if (Number.isFinite(parsed)) return parsed;
-    flag(`${where}: הערך "${value}" אינו מספר — לא נקלט`);
+    flag('numberValue', `${where}: הערך "${value}" אינו מספר — לא נקלט`);
     return null;
   };
 
   /**
-   * The planting year, which the prototype stores as free text.
+   * The planting date, from a field the prototype stores as free text.
    *
-   * areas.planting_time is a DATE and cannot hold '2006/7', so the first four
-   * digits become 1 January of that year and the raw label is kept verbatim on
-   * olive_plot_details.plant_year_label.
+   * Flags by how much of the date the file actually recorded, because that is
+   * the only thing the operator can act on: a missing day is nothing to chase,
+   * a missing month means the date is a placeholder.
    */
   const plantingDate = (raw: string | undefined, where: string): string | null => {
+    const parsed = parsePlantingDate(raw);
     if (!raw) return null;
-    const match = String(raw).match(/(\d{4})/);
-    if (!match) {
+
+    if (parsed.precision === 'none') {
       flag(
+        'plantYear',
         `${where}: שנת הנטיעה "${raw}" אינה מכילה שנה בת 4 ספרות — התאריך נשאר ריק, הערך נשמר כתווית`
       );
       return null;
     }
-    if (!/^\d{4}$/.test(String(raw).trim())) {
-      flag(`${where}: שנת הנטיעה "${raw}" נשמרה כתווית; התאריך קורב ל-1 בינואר ${match[1]}`);
+
+    const [year, month] = (parsed.date as string).split('-');
+
+    if (parsed.precision === 'month') {
+      flag(
+        'plantYear',
+        `${where}: שנת הנטיעה "${raw}" נקראה כשנה וחודש — ${HEBREW_MONTHS[Number(month) - 1]} ${year};` +
+          ` התאריך נקבע ל-1 בחודש, משום שהיום אינו רשום בקובץ`
+      );
+    } else if (parsed.precision === 'year' && String(raw).trim() !== year) {
+      // A bare "2006" is the normal case and says nothing worth flagging. This
+      // is the other one: something was written next to the year and could not
+      // be read as a month, so the date is 1 January by default rather than by
+      // the file.
+      flag(
+        'plantYear',
+        `${where}: שנת הנטיעה "${raw}" — לא זוהה בה חודש;` +
+          ` התאריך נקבע ל-1 בינואר ${year} והערך המלא נשמר כתווית`
+      );
     }
-    return `${match[1]}-01-01`;
+
+    return parsed.date;
   };
 
   const mapped = (
@@ -322,7 +436,7 @@ function createReporter() {
     if (!value) return null;
     const code = table[value.trim()];
     if (!code) {
-      flag(`${where}: ${field} "${value}" אינו מוכר — לא נקלט`);
+      flag('lookupValue', `${where}: ${field} "${value}" אינו מוכר — לא נקלט`);
       return null;
     }
     return code;
@@ -341,6 +455,7 @@ function createReporter() {
     if (parsed === null || parsed === 0) return null;
     if (!Number.isInteger(parsed) || parsed < 1 || parsed > MAX_TAKT_COUNT) {
       flag(
+        'taktCount',
         `${where}: מספר הטאקטים ${parsed} מחוץ לטווח 1..${MAX_TAKT_COUNT}` +
           ' — פרטי החלקה נשמרו, לא נוצרו טאקטים'
       );
@@ -497,7 +612,7 @@ export async function importBackup(
   for (const plot of backup.plots || []) {
     const name = (plot.name || '').trim();
     if (!name) {
-      flag(`חלקה ${plot.id}: אין שם — דולגה`);
+      flag('plotSkipped', `חלקה ${plot.id}: אין שם — דולגה`);
       continue;
     }
     const where = `חלקה "${name}"`;
@@ -673,12 +788,16 @@ export async function importBackup(
 
     for (const { key, plots } of resolved.ambiguous) {
       flag(
+        'yieldAmbiguous',
         `יבול: ${plots.length} חלקות חולקות את הצירוף גוש/שנה/זן "${key.replace(/\u0000/g, ' / ')}"` +
           ` (${plots.map((p) => p.name).join(', ')}) — לא נכתב אומדן לאף אחת מהן`
       );
     }
     for (const { row, reason } of resolved.skipped) {
-      flag(`שורת יבול ${row.block} / ${row.year} / ${row.variety}: ${reason} — דולגה`);
+      flag(
+        'yieldMissingValue',
+        `שורת יבול ${row.block} / ${row.year} / ${row.variety}: ${reason} — דולגה`
+      );
     }
     for (const { row, nearest, candidates } of resolved.unmatched) {
       let detail = '';
@@ -692,6 +811,7 @@ export async function importBackup(
           `, ואף אחת מהן אינה בבירור המתאימה`;
       }
       flag(
+        'yieldUnmatched',
         `שורת יבול ${row.block} / ${row.year} / ${row.variety} = ${row.kg} אינה מתאימה לאף חלקה${detail}`
       );
     }
@@ -715,7 +835,7 @@ export async function importBackup(
     let yieldConflicts = 0;
 
     if (apply && !seasonId) {
-      flag(`יבול: לא זוהתה עונה — ${resolved.matched.length} אומדנים דולגו`);
+      flag('yieldNoSeason', `יבול: לא זוהתה עונה — ${resolved.matched.length} אומדנים דולגו`);
     } else {
       for (const { plot, kg } of resolved.matched) {
         const mappedId = plotIdMap.get(plot.id);
@@ -732,6 +852,7 @@ export async function importBackup(
           if (!overwriteYield) {
             yieldConflicts += 1;
             flag(
+              'yieldConflict',
               `יבול "${plot.name}": במערכת ${current} ק"ג/דונם ובקובץ ${kg}` +
                 ' — נשמר הערך הקיים; להחלפה יש להריץ עם --overwrite-yield'
             );
@@ -790,7 +911,7 @@ export async function importBackup(
     const areaId = plotIdMap.get(test.plotId);
     const where = `בדיקת NIR ${test.date || test.id}`;
     if (!areaId) {
-      flag(`${where}: מפנה לחלקה לא מוכרת (${test.plotId}) — דולגה`);
+      flag('nirOrphan', `${where}: מפנה לחלקה לא מוכרת (${test.plotId}) — דולגה`);
       continue;
     }
 
@@ -810,6 +931,7 @@ export async function importBackup(
       const match = known?.get(rawTakt) ?? known?.get(taktName(Number(rawTakt))) ?? null;
       if (!match) {
         flag(
+          'nirTakt',
           `${where}: נרשמה על טאקט "${rawTakt}" אך לחלקה "${plotNameById.get(test.plotId) ?? test.plotId}"` +
             ` אין טאקט כזה — הבדיקה יובאה ברמת החלקה כולה`
         );
@@ -831,6 +953,7 @@ export async function importBackup(
       if (Math.abs(computed - storedDry) > 0.05) {
         dryMismatches += 1;
         flag(
+          'nirDry',
           `${where}: בקובץ שמן בחומר יבש ${storedDry}% אך לפי השמן והמים מתקבל ${computed}% — הערך המחושב גובר`
         );
       }
@@ -873,7 +996,7 @@ export async function importBackup(
   let windowCount = 0;
   for (const w of backup.varietyWindows || []) {
     if (!w.variety || !w.start || !w.end) {
-      flag(`חלון זן "${w.variety}": חסרים נתונים — דולג`);
+      flag('varietyWindow', `חלון זן "${w.variety}": חסרים נתונים — דולג`);
       continue;
     }
     if (apply) {
@@ -936,6 +1059,7 @@ export async function importBackup(
 
     if (missing.length > 0) {
       flag(
+        'categoryThresholds',
         `ספי כרטיסי הסטטוס: חסרים בקובץ ${missing.join(', ')}` +
           ' — הכרטיסים נשארים עם הספים הנוכחיים'
       );
@@ -974,6 +1098,7 @@ export async function importBackup(
       if (stored === null || !Number.isFinite(stored) || stored === fromFile) continue;
 
       flag(
+        'alertThresholds',
         `${band.label} (${band.key}): בקובץ ${fromFile}, במערכת ${stored} — ` +
           'ספי ההתראה אינם מיובאים; אם הלקוח שינה אותם יש לעדכן בהגדרות הספים'
       );

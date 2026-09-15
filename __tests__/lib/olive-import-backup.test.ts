@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { parseBackup, validateDefaultTaktCount } from '@/lib/olive/import-backup';
+import {
+  parseBackup,
+  parsePlantingDate,
+  validateDefaultTaktCount,
+} from '@/lib/olive/import-backup';
 
 /**
  * The backup parser is the first thing an uploaded file meets.
@@ -97,6 +101,65 @@ describe('parseBackup', () => {
 
   it('accepts an empty plots array — an export with nothing in it is still a backup', () => {
     expect(parseBackup(JSON.stringify({ plots: [] })).plots).toEqual([]);
+  });
+});
+
+/**
+ * The planting date.
+ *
+ * '2006/7' is July 2006 — the grower's notation, confirmed against the source
+ * file. Reading it as "the 2006/7 season" is what put three מיצר plots on
+ * 1 January 2006, half a year from where the file placed them, so the month
+ * being kept is the point of every case below.
+ */
+describe('parsePlantingDate', () => {
+  it('reads year/month as a year and a month', () => {
+    expect(parsePlantingDate('2006/7')).toEqual({ date: '2006-07-01', precision: 'month' });
+    expect(parsePlantingDate('2006/07')).toEqual({ date: '2006-07-01', precision: 'month' });
+    expect(parsePlantingDate('2006/12')).toEqual({ date: '2006-12-01', precision: 'month' });
+  });
+
+  it('takes the four-digit part as the year, whichever side it sits on', () => {
+    expect(parsePlantingDate('7/2006')).toEqual({ date: '2006-07-01', precision: 'month' });
+    expect(parsePlantingDate('07/2006')).toEqual({ date: '2006-07-01', precision: 'month' });
+  });
+
+  it('accepts - and . as separators, which is how the same field gets typed', () => {
+    expect(parsePlantingDate('2006-7')).toEqual({ date: '2006-07-01', precision: 'month' });
+    expect(parsePlantingDate('2006.7')).toEqual({ date: '2006-07-01', precision: 'month' });
+  });
+
+  it('keeps the day when the file records one', () => {
+    expect(parsePlantingDate('15/7/2006')).toEqual({ date: '2006-07-15', precision: 'day' });
+    expect(parsePlantingDate('2006-07-15')).toEqual({ date: '2006-07-15', precision: 'day' });
+  });
+
+  // The common case, and the one the flags stay quiet about: nothing was lost,
+  // because nothing beyond the year was ever written down.
+  it('places a bare year on 1 January and says so', () => {
+    expect(parsePlantingDate('2003')).toEqual({ date: '2003-01-01', precision: 'year' });
+  });
+
+  // Falling back to the year beats dropping the plot's date entirely.
+  it('falls back to the year when the second part is not a month', () => {
+    expect(parsePlantingDate('2006/13')).toEqual({ date: '2006-01-01', precision: 'year' });
+    expect(parsePlantingDate('2006/0')).toEqual({ date: '2006-01-01', precision: 'year' });
+  });
+
+  it('rejects a day that does not exist rather than rolling it into next month', () => {
+    expect(parsePlantingDate('31/9/2006')).toEqual({ date: '2006-01-01', precision: 'year' });
+    expect(parsePlantingDate('29/2/2007')).toEqual({ date: '2007-01-01', precision: 'year' });
+    expect(parsePlantingDate('29/2/2008')).toEqual({ date: '2008-02-29', precision: 'day' });
+  });
+
+  it('finds a year inside free text, which is what the field really holds', () => {
+    expect(parsePlantingDate('נטע 2006')).toEqual({ date: '2006-01-01', precision: 'year' });
+  });
+
+  it('returns nothing for a value with no year in it', () => {
+    expect(parsePlantingDate('לא ידוע')).toEqual({ date: null, precision: 'none' });
+    expect(parsePlantingDate('')).toEqual({ date: null, precision: 'none' });
+    expect(parsePlantingDate(undefined)).toEqual({ date: null, precision: 'none' });
   });
 });
 

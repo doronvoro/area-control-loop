@@ -23,12 +23,17 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { ConfirmationDialog } from '@/components/ui/confirmation-dialog';
+import { Badge } from '@/components/ui/badge';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { showToast } from '@/lib/toast';
+import { groupIssues, type ImportIssue } from '@/lib/olive/import-issues';
 import {
   AlertCircle,
   AlertTriangle,
   CheckCircle2,
+  ChevronDown,
   FileUp,
+  HelpCircle,
   Loader2,
   RotateCcw,
   Trash2,
@@ -66,7 +71,7 @@ interface ImportResponse {
     varietyWindows: number;
     weatherRows: number;
     categoryThresholds: boolean;
-    issues: string[];
+    issues: ImportIssue[];
   };
 }
 
@@ -373,12 +378,19 @@ function ImportSummaryCard({ title, data }: { title: string; data: ImportRespons
 }
 
 /**
- * The data-quality flags.
+ * The data-quality flags, grouped by what kind of problem they are.
  *
  * Shown in full, never truncated: this list is what goes back to the customer
  * when their export needs fixing, and a hidden flag is one nobody acts on.
+ *
+ * The label carries what a single message cannot — whether the value was
+ * imported with a caveat or not imported at all — so it sits next to the count,
+ * and the three-part explanation behind it opens per group rather than
+ * repeating itself into every line. Closed by default: an operator who already
+ * knows what "טאקט שאינו קיים" means should still be able to scan forty
+ * flags in one screen.
  */
-function IssuesCard({ issues }: { issues: string[] }) {
+function IssuesCard({ issues }: { issues: ImportIssue[] }) {
   if (issues.length === 0) {
     return (
       <Alert>
@@ -388,27 +400,76 @@ function IssuesCard({ issues }: { issues: string[] }) {
     );
   }
 
+  const groups = groupIssues(issues);
+
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-amber-600 dark:text-amber-500">
           <AlertTriangle className="h-5 w-5" />
           {issues.length} ערכים שלא נטענו כמות שהם
+          <span className="text-sm font-normal text-muted-foreground">
+            ב-{groups.length} קבוצות
+          </span>
         </CardTitle>
       </CardHeader>
-      <CardContent>
-        <ul className="space-y-2">
-          {issues.map((issue, i) => (
-            <li key={i} className="text-sm border-s-2 border-amber-500/40 ps-3 py-0.5">
-              {issue}
-            </li>
-          ))}
-        </ul>
-        <p className="text-xs text-muted-foreground mt-4">
+      <CardContent className="space-y-5">
+        {groups.map((group) => (
+          <IssueGroup key={group.category} {...group} />
+        ))}
+        <p className="text-xs text-muted-foreground">
           אלו מדווחים ולא מנוחשים. יש להשוות אותם מול הקובץ המקורי.
         </p>
       </CardContent>
     </Card>
+  );
+}
+
+/** One label: the badge, its messages, and the explanation behind it. */
+function IssueGroup({ info, messages }: ReturnType<typeof groupIssues>[number]) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2 flex-wrap">
+        <Badge variant="outline" className="border-amber-500/50 text-amber-700 dark:text-amber-400">
+          {info.label}
+        </Badge>
+        <span className="text-sm text-muted-foreground">{messages.length}</span>
+        <Collapsible open={open} onOpenChange={setOpen}>
+          <CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
+            <HelpCircle className="h-3.5 w-3.5" />
+            מה זה אומר?
+            <ChevronDown
+              className={`h-3.5 w-3.5 transition-transform${open ? ' rotate-180' : ''}`}
+            />
+          </CollapsibleTrigger>
+          <CollapsibleContent className="pt-2">
+            <dl className="text-xs space-y-1.5 bg-muted/50 rounded-md p-3 max-w-prose">
+              <ExplanationRow term="מדוע זה קורה" text={info.what} />
+              <ExplanationRow term="מה נשמר במערכת" text={info.effect} />
+              <ExplanationRow term="מה לעשות" text={info.action} />
+            </dl>
+          </CollapsibleContent>
+        </Collapsible>
+      </div>
+      <ul className="space-y-2">
+        {messages.map((message, i) => (
+          <li key={i} className="text-sm border-s-2 border-amber-500/40 ps-3 py-0.5">
+            {message}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function ExplanationRow({ term, text }: { term: string; text: string }) {
+  return (
+    <div>
+      <dt className="inline font-semibold text-foreground">{term}: </dt>
+      <dd className="inline text-muted-foreground">{text}</dd>
+    </div>
   );
 }
 

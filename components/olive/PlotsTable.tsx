@@ -12,12 +12,8 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { SortableTableHead, type SortState } from '@/components/ui/sortable-table-head';
-import {
-  HARVESTER_LABELS,
-  PARAMETER_STATUS_CONFIG,
-  PLOT_TYPE_LABELS,
-  WATER_TYPE_LABELS,
-} from '@/types/database';
+import { PARAMETER_STATUS_CONFIG, PLOT_TYPE_LABELS } from '@/types/database';
+import type { RowFlash } from '@/hooks/useRowFlash';
 import { categoryLabel, type PlotRow, type PlotSortField } from '@/lib/olive/plot-rows';
 import type { PlotCategory } from '@/lib/olive/logic';
 import { cn } from '@/lib/utils';
@@ -50,18 +46,15 @@ interface PlotsTableProps {
   onSort: (field: PlotSortField) => void;
   onEdit: (row: PlotRow) => void;
   activeId?: string | null;
+  /** The row to highlight briefly, and why. */
+  flash?: RowFlash | null;
 }
 
 function num(value: number | null, digits = 0): string {
   return value === null ? '—' : value.toFixed(digits);
 }
 
-function label(map: Record<string, string>, value: string | null): string {
-  if (!value) return '—';
-  return map[value] ?? value;
-}
-
-export function PlotsTable({ rows, sort, onSort, onEdit, activeId }: PlotsTableProps) {
+export function PlotsTable({ rows, sort, onSort, onEdit, activeId, flash }: PlotsTableProps) {
   return (
     <Table>
       <TableHeader>
@@ -93,15 +86,6 @@ export function PlotsTable({ rows, sort, onSort, onEdit, activeId }: PlotsTableP
           >
             גודל (דונם)
           </SortableTableHead>
-          <SortableTableHead
-            field="taktCount"
-            sort={sort}
-            onSort={onSort}
-            className="hidden xl:table-cell"
-          >
-            טאקטים
-          </SortableTableHead>
-          <TableHead className="hidden xl:table-cell">מים · מוסקת</TableHead>
           <SortableTableHead field="category" sort={sort} onSort={onSort}>
             קטגוריה
           </SortableTableHead>
@@ -143,7 +127,11 @@ export function PlotsTable({ rows, sort, onSort, onEdit, activeId }: PlotsTableP
             onClick={() => onEdit(row)}
             className={cn(
               'cursor-pointer hover:bg-muted/50',
-              activeId === row.id && 'bg-primary/10 hover:bg-primary/15'
+              activeId === row.id && 'bg-primary/10 hover:bg-primary/15',
+              // A running animation outranks the hover rule, so moving the
+              // mouse over the row mid-highlight does not cut it short.
+              flash?.id === row.id &&
+                (flash.kind === 'saved' ? 'olive-row-flash' : 'olive-row-release')
             )}
           >
             <TableCell>
@@ -162,12 +150,6 @@ export function PlotsTable({ rows, sort, onSort, onEdit, activeId }: PlotsTableP
               {row.region ?? '—'}
             </TableCell>
             <TableCell className="hidden tabular-nums md:table-cell">{num(row.size, 1)}</TableCell>
-            <TableCell className="hidden tabular-nums xl:table-cell">{row.taktCount}</TableCell>
-            <TableCell className="olive-muted hidden text-xs xl:table-cell">
-              {[label(WATER_TYPE_LABELS, row.waterType), label(HARVESTER_LABELS, row.harvester)]
-                .filter((v) => v !== '—')
-                .join(' · ') || '—'}
-            </TableCell>
             <TableCell>
               <span className={`olive-pill ${CATEGORY_PILL[row.category]}`}>
                 {categoryLabel(row.category)}

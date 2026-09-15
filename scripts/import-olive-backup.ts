@@ -29,6 +29,7 @@
 import { readFileSync } from 'fs';
 import { createClient } from '@supabase/supabase-js';
 import { importBackup, parseBackup } from '../lib/olive/import-backup';
+import { groupIssues } from '../lib/olive/import-issues';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -166,8 +167,18 @@ async function main() {
   console.log(`   card thresholds  ${result.categoryThresholds ? 'from file' : 'unchanged'}`);
 
   if (result.issues.length > 0) {
-    console.log(`\n⚠️  ${result.issues.length} value(s) could not be carried across as-is:`);
-    for (const issue of result.issues) console.log(`   · ${issue}`);
+    const groups = groupIssues(result.issues);
+    console.log(
+      `\n⚠️  ${result.issues.length} value(s) could not be carried across as-is,` +
+        ` in ${groups.length} group(s):`
+    );
+    // Grouped the same way the admin page groups them, so a flag discussed off
+    // one output can be found in the other.
+    for (const group of groups) {
+      console.log(`\n   [${group.info.label}] ×${group.messages.length}`);
+      console.log(`   מה נשמר במערכת: ${group.info.effect}`);
+      for (const message of group.messages) console.log(`   · ${message}`);
+    }
     console.log('\n   These are reported rather than guessed at. Review them against the source.');
   } else {
     console.log('\n✅ No data-quality issues found.');

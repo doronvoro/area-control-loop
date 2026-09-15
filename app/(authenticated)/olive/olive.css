@@ -595,13 +595,74 @@
   }
 }
 
+/*
+ * "This is the row you just changed."
+ *
+ * background-color rather than the transform the three keyframes above use:
+ * a scale() on a <tr> breaks table layout. Holding the tint through the first
+ * quarter and fading over the rest reads as a highlight rather than a blink.
+ */
+@keyframes oliveRowFlash {
+  0%,
+  25% {
+    background-color: oklch(0.92 0.05 128);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.olive-row-flash {
+  animation: oliveRowFlash 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/*
+ * "This is the one you had open" — after a close that changed nothing.
+ *
+ * Deliberately not the flash above. That green is the app's "saved / ok", and
+ * playing it when nothing was written would claim a save that never happened.
+ * This starts from the selection tint the row was already wearing and lets go
+ * of it, so it reads as a release rather than an announcement: no hold, and
+ * over in two thirds of the time.
+ */
+@keyframes oliveRowRelease {
+  from {
+    background-color: oklch(0.448 0.119 152 / 12%);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+
+.olive-row-release {
+  animation: oliveRowRelease 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* An explicit opt-in list, not a blanket rule — a new animation is not covered
+   here unless it is named. */
 @media (prefers-reduced-motion: reduce) {
   .olive-field-check,
   .olive-step-just-completed,
   .olive-error-banner,
-  .olive-success-banner {
+  .olive-success-banner,
+  /* The release carries no information a reader would otherwise lose — the
+     drawer closing already said it — so it is safe to drop entirely. */
+  .olive-row-release {
     animation: none;
   }
+
+  /*
+   * Deliberately not in the list above. For those four the animation decorates
+   * something already on screen, so dropping it loses nothing. Here the
+   * animation IS the message — kill it outright and the row that just changed
+   * becomes indistinguishable from every other row. Reduce the motion, keep the
+   * signal: a flat tint, no fade, cleared by the same timer.
+   */
+  .olive-row-flash {
+    animation: none;
+    background-color: oklch(0.92 0.05 128);
+  }
+
   .olive-submit:hover:not(:disabled) {
     transform: none;
   }

@@ -26,6 +26,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
+import { cn } from '@/lib/utils';
 import { showToast } from '@/lib/toast';
 import { HARVESTER_OPTIONS } from '@/types/database';
 import type { ApiPlot } from '@/lib/olive/adapt';
@@ -150,6 +151,13 @@ interface HarvestFormSheetProps {
   /** Per-area planned yield, keyed by area id, for the live readout. */
   estimates: Record<string, { kg_per_dunam?: unknown }>;
   onSaved: () => void;
+  /**
+   * Opened on top of another drawer. Narrows this one and lightens its scrim so
+   * the drawer underneath stays visible rather than being buried.
+   */
+  stacked?: boolean;
+  /** The plot is implied by where this was opened from — show it, fix it. */
+  lockPlot?: boolean;
 }
 
 export function HarvestFormSheet({
@@ -158,6 +166,8 @@ export function HarvestFormSheet({
   plots,
   estimates,
   onSaved,
+  stacked = false,
+  lockPlot = false,
 }: HarvestFormSheetProps) {
   return (
     <Sheet open={editor !== null} onOpenChange={onOpenChange}>
@@ -167,7 +177,14 @@ export function HarvestFormSheet({
         side="left"
         dir="rtl"
         showCloseButton={false}
-        className="flex w-full flex-col gap-0 p-0 sm:max-w-2xl"
+        // Stacked, this is 576px against the plot drawer's 672px, so ~96px of
+        // it stays visible — in RTL, its leading edge rather than its margin.
+        className={cn(
+          'flex w-full flex-col gap-0 p-0',
+          stacked ? 'sm:max-w-xl sm:shadow-2xl' : 'sm:max-w-2xl'
+        )}
+        // A second bg-black/50 over the first composites to 75% black.
+        overlayClassName={stacked ? 'bg-black/20' : undefined}
         aria-describedby={undefined}
       >
         {editor && (
@@ -179,6 +196,7 @@ export function HarvestFormSheet({
             editor={editor}
             plots={plots}
             estimates={estimates}
+            lockPlot={lockPlot}
             onSaved={onSaved}
             onClose={() => onOpenChange(false)}
           />
@@ -192,12 +210,14 @@ function HarvestFormBody({
   editor,
   plots,
   estimates,
+  lockPlot,
   onSaved,
   onClose,
 }: {
   editor: HarvestEditorState;
   plots: ApiPlot[];
   estimates: Record<string, { kg_per_dunam?: unknown }>;
+  lockPlot: boolean;
   onSaved: () => void;
   onClose: () => void;
 }) {
@@ -464,10 +484,12 @@ function HarvestFormBody({
                           onValueChange={field.onChange}
                           placeholder="בחר חלקה"
                           searchPlaceholder="חיפוש חלקה..."
-                          // Fixed once saved: the pass number was derived from
-                          // this plot's history, so moving the pass elsewhere
-                          // would renumber two plots at once.
-                          disabled={isEdit}
+                          // Two independent reasons to fix it: once saved, the
+                          // pass number was derived from this plot's history so
+                          // moving the pass would renumber two plots at once;
+                          // and opened from a plot's own drawer, the plot is
+                          // what you opened.
+                          disabled={isEdit || lockPlot}
                         />
                       </FormControl>
                       <FormMessage />
