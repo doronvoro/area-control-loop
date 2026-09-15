@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Loader2, MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { TablePagination } from '@/components/ui/table-pagination';
@@ -9,6 +9,7 @@ import { PlotsToolbar } from './PlotsToolbar';
 import { PlotsTable } from './PlotsTable';
 import { useApiData } from '@/hooks/useApiData';
 import { usePagination } from '@/hooks/usePagination';
+import { useRowFlash } from '@/hooks/useRowFlash';
 import { useTableSort } from '@/hooks/useTableSort';
 import { classifyPlotCategory } from '@/lib/olive/logic';
 import { toNirLike, toCategoryThresholds, type ApiPlot } from '@/lib/olive/adapt';
@@ -68,6 +69,7 @@ export function OlivePlotsContent() {
   const { data, loading, error, refetch } = useApiData<DashboardPayload>('/api/olive/dashboard');
   const [filters, setFilters] = useState<PlotFilters>(EMPTY_PLOT_FILTERS);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const { flashId, arm, commit } = useRowFlash();
 
   const now = useMemo(() => new Date(), []);
 
@@ -94,6 +96,21 @@ export function OlivePlotsContent() {
   // cards in that drawer read them from here. The id is stable across a
   // refetch, so the drawer itself does not remount.
   const selected = useMemo(() => rows.find((r) => r.id === selectedId) ?? null, [rows, selectedId]);
+
+  // Arm, do not flash. A save reaches here while the drawer is still covering
+  // the table — and a create-save from the drawer stacked on top of it leaves
+  // that one open for the next reading, so this can fire several times before
+  // anything closes.
+  const handleSaved = useCallback(() => {
+    arm(selectedId);
+    return refetch();
+  }, [arm, refetch, selectedId]);
+
+  // Both conditions carry weight: without the first the flash plays behind the
+  // closing drawer, without the second it plays under the refetch's dim.
+  useEffect(() => {
+    if (selectedId === null && !loading) commit();
+  }, [selectedId, loading, commit]);
 
   const { sort, toggle } = useTableSort<PlotSortField>('name', 'asc', SORT_DEFAULT_DIRECTIONS);
 
@@ -161,6 +178,7 @@ export function OlivePlotsContent() {
               onSort={toggle}
               onEdit={(row: PlotRow) => setSelectedId(row.id)}
               activeId={selectedId}
+              flashId={flashId}
             />
             <TablePagination
               page={pagination.page}
@@ -189,7 +207,7 @@ export function OlivePlotsContent() {
         plots={data?.plots ?? NO_PLOTS}
         estimates={data?.yieldEstimates ?? NO_ESTIMATES}
         seasonId={data?.season?.id ?? null}
-        onSaved={refetch}
+        onSaved={handleSaved}
       />
     </div>
   );

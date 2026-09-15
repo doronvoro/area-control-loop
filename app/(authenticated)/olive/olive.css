@@ -595,6 +595,29 @@
   }
 }
 
+/*
+ * "This is the row you just changed."
+ *
+ * background-color rather than the transform the three keyframes above use:
+ * a scale() on a <tr> breaks table layout. Holding the tint through the first
+ * quarter and fading over the rest reads as a highlight rather than a blink.
+ */
+@keyframes oliveRowFlash {
+  0%,
+  25% {
+    background-color: oklch(0.92 0.05 128);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.olive-row-flash {
+  animation: oliveRowFlash 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* An explicit opt-in list, not a blanket rule — a new animation is not covered
+   here unless it is named. */
 @media (prefers-reduced-motion: reduce) {
   .olive-field-check,
   .olive-step-just-completed,
@@ -602,6 +625,19 @@
   .olive-success-banner {
     animation: none;
   }
+
+  /*
+   * Deliberately not in the list above. For those four the animation decorates
+   * something already on screen, so dropping it loses nothing. Here the
+   * animation IS the message — kill it outright and the row that just changed
+   * becomes indistinguishable from every other row. Reduce the motion, keep the
+   * signal: a flat tint, no fade, cleared by the same timer.
+   */
+  .olive-row-flash {
+    animation: none;
+    background-color: oklch(0.92 0.05 128);
+  }
+
   .olive-submit:hover:not(:disabled) {
     transform: none;
   }
