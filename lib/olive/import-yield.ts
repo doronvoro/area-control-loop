@@ -106,7 +106,7 @@ export function resolveYieldRows(
 
   for (const row of rows) {
     if (!isUsableNumber(row.kg)) {
-      skipped.push({ row, reason: 'no kg/dunam value' });
+      skipped.push({ row, reason: 'אין ערך ק"ג/דונם' });
       continue;
     }
 

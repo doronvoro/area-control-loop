@@ -4,12 +4,13 @@
 -- is explicit that the planting year is free text in practice, because the
 -- client's real data contains values a date cannot hold:
 --
---   '2006/7'   a block planted across two seasons
+--   '2006/7'   July 2006 — a year and a month, in the grower's notation
 --   '2003'     a year with no month or day
 --
--- Casting those to a DATE either fails or invents precision that was never
--- recorded — '2006/7' would silently become 2006-01-01 and the fact that it
--- spans two seasons would be lost.
+-- Casting those to a DATE invents the parts that were never recorded: '2003'
+-- has no month or day at all, and a naive read of '2006/7' as a season label
+-- puts it on 1 January, six months from where the file says it belongs.
+-- (parsePlantingDate() in lib/olive/import-backup.ts is what reads them now.)
 --
 -- So the DATE column stays authoritative for anything doing date arithmetic,
 -- and this column carries the label the grower actually uses. The UI prefers

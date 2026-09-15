@@ -51,14 +51,15 @@ DELETE FROM public.weather_days WHERE entry_date >= CURRENT_DATE - 1;
 -- -----------------------------------------------------------------------------
 -- Plots — six olive areas, all crop = זית so the nav feature gate switches on
 -- -----------------------------------------------------------------------------
--- planting_time is a DATE, so it gets 1 January of the planting year. The
--- label the grower actually uses — including '2006/7', which no date can
--- express — lives in olive_plot_details.plant_year_label below.
+-- planting_time is a DATE. '2006/7' is July 2006, so it gets the first of that
+-- month; a bare year gets 1 January, the day being the one part nobody records.
+-- The label the grower actually writes lives in
+-- olive_plot_details.plant_year_label below.
 INSERT INTO public.areas (id, name, description, crop_id, size, size_unit_type, area_type, variety, planting_time)
 SELECT v.id, v.name, 'חלקת זית — נתוני הדגמה', c.id, v.size, 'dunam', 'outdoor', v.variety, v.plant_date
 FROM (VALUES
   ('a8ff0000-0000-4000-8000-000000000001'::uuid, 'מיצר אגוזי — 2003 — ארבקינה',  18.2, 'ארבקינה',  DATE '2003-01-01'),
-  ('a8ff0000-0000-4000-8000-000000000002'::uuid, 'מיצר אגוזי — 2006/7 — קורנייקי', 54.6, 'קורנייקי', DATE '2006-01-01'),
+  ('a8ff0000-0000-4000-8000-000000000002'::uuid, 'מיצר אגוזי — 2006/7 — קורנייקי', 54.6, 'קורנייקי', DATE '2006-07-01'),
   ('a8ff0000-0000-4000-8000-000000000003'::uuid, 'בית זרע — 2014 — ארבקינה',      12.5, 'ארבקינה',  DATE '2014-01-01'),
   ('a8ff0000-0000-4000-8000-000000000004'::uuid, 'כנות — 2018 — ברנע',            35.7, 'ברנע',     DATE '2018-01-01'),
   ('a8ff0000-0000-4000-8000-000000000005'::uuid, 'שקמים — 2023 — קורנייקי',       60.0, 'קורנייקי', DATE '2023-01-01'),
@@ -86,8 +87,8 @@ INSERT INTO public.sub_areas (id, area_id, level, name, variety, size, size_unit
 -- -----------------------------------------------------------------------------
 -- Olive-specific plot attributes
 -- -----------------------------------------------------------------------------
--- plant_year_label carries '2006/7' verbatim — the case that proves why the
--- DATE column alone is not enough.
+-- plant_year_label carries '2006/7' verbatim — the grower's own notation for
+-- July 2006, which the DATE column can hold but cannot show back to them.
 INSERT INTO public.olive_plot_details (area_id, grower_name, region, plot_type, harvester, water_type, takt_count, plant_year_label) VALUES
   ('a8ff0000-0000-4000-8000-000000000001', 'קיבוץ גשור',    'מיצר אגוזי', 'owner',      '1190x', 'fresh',     3,    '2003'),
   ('a8ff0000-0000-4000-8000-000000000002', 'קיבוץ גשור',    'מיצר אגוזי', 'owner',      '1190x', 'fresh',     3,    '2006/7'),
