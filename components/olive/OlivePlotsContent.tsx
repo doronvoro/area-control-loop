@@ -47,9 +47,15 @@ interface DashboardPayload {
   harvestedAreaIds: string[];
   parameterRules: ParameterRule[];
   categoryThresholds: Record<string, unknown> | null;
+  /** The active season. A yield estimate cannot be written without one. */
+  season: { id: string; name: string } | null;
 }
 
+// Module-level so the stacked forms' memos do not see a new identity on every
+// render of this page — an inline [] or {} would bust them on each keystroke.
 const NO_RULES: ParameterRule[] = [];
+const NO_PLOTS: ApiPlot[] = [];
+const NO_ESTIMATES: Record<string, { kg_per_dunam?: unknown }> = {};
 
 const SORT_DEFAULT_DIRECTIONS: Partial<Record<PlotSortField, 'asc' | 'desc'>> = {
   name: 'asc',
@@ -61,7 +67,7 @@ const SORT_DEFAULT_DIRECTIONS: Partial<Record<PlotSortField, 'asc' | 'desc'>> = 
 export function OlivePlotsContent() {
   const { data, loading, error, refetch } = useApiData<DashboardPayload>('/api/olive/dashboard');
   const [filters, setFilters] = useState<PlotFilters>(EMPTY_PLOT_FILTERS);
-  const [selected, setSelected] = useState<PlotRow | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const now = useMemo(() => new Date(), []);
 
@@ -82,6 +88,12 @@ export function OlivePlotsContent() {
       });
     });
   }, [data, now]);
+
+  // Derived, not a snapshot: a reading saved from the drawer stacked on top of
+  // the plot drawer moves this plot's category and last-measured, and the stat
+  // cards in that drawer read them from here. The id is stable across a
+  // refetch, so the drawer itself does not remount.
+  const selected = useMemo(() => rows.find((r) => r.id === selectedId) ?? null, [rows, selectedId]);
 
   const { sort, toggle } = useTableSort<PlotSortField>('name', 'asc', SORT_DEFAULT_DIRECTIONS);
 
@@ -147,8 +159,8 @@ export function OlivePlotsContent() {
               rows={pagination.pageItems}
               sort={sort}
               onSort={toggle}
-              onEdit={setSelected}
-              activeId={selected?.id ?? null}
+              onEdit={(row: PlotRow) => setSelectedId(row.id)}
+              activeId={selectedId}
             />
             <TablePagination
               page={pagination.page}
@@ -172,8 +184,11 @@ export function OlivePlotsContent() {
       */}
       <PlotDetailSheet
         row={selected}
-        onOpenChange={(open) => !open && setSelected(null)}
+        onOpenChange={(open) => !open && setSelectedId(null)}
         rules={data?.parameterRules ?? NO_RULES}
+        plots={data?.plots ?? NO_PLOTS}
+        estimates={data?.yieldEstimates ?? NO_ESTIMATES}
+        seasonId={data?.season?.id ?? null}
         onSaved={refetch}
       />
     </div>

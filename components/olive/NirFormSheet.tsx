@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
+import { cn } from '@/lib/utils';
 import { showToast } from '@/lib/toast';
 import { NIR_DIRECTIONS, PARAMETER_STATUS_CONFIG, type ParameterRule } from '@/types/database';
 import { evaluateParameter } from '@/lib/olive/logic';
@@ -153,9 +154,24 @@ interface NirFormSheetProps {
   rules: ParameterRule[];
   /** Called after a successful save or update so the log can refresh. */
   onSaved: () => void;
+  /**
+   * Opened on top of another drawer. Narrows this one and lightens its scrim so
+   * the drawer underneath stays visible rather than being buried.
+   */
+  stacked?: boolean;
+  /** The plot is implied by where this was opened from — show it, fix it. */
+  lockPlot?: boolean;
 }
 
-export function NirFormSheet({ editor, onOpenChange, plots, rules, onSaved }: NirFormSheetProps) {
+export function NirFormSheet({
+  editor,
+  onOpenChange,
+  plots,
+  rules,
+  onSaved,
+  stacked = false,
+  lockPlot = false,
+}: NirFormSheetProps) {
   return (
     <Sheet open={editor !== null} onOpenChange={onOpenChange}>
       <SheetContent
@@ -168,7 +184,17 @@ export function NirFormSheet({ editor, onOpenChange, plots, rules, onSaved }: Ni
         showCloseButton={false}
         // gap-0/p-0 undo SheetContent's own spacing, which would otherwise
         // wedge gaps between the hero, the stepper and the body.
-        className="flex w-full flex-col gap-0 p-0 sm:max-w-2xl"
+        //
+        // Stacked, this is 576px against the plot drawer's 672px, so ~96px of
+        // it stays visible. In RTL that band is the drawer's LEADING edge —
+        // the start of its title and the rim of its cards — rather than the
+        // line-ending whitespace an inset would have exposed.
+        className={cn(
+          'flex w-full flex-col gap-0 p-0',
+          stacked ? 'sm:max-w-xl sm:shadow-2xl' : 'sm:max-w-2xl'
+        )}
+        // A second bg-black/50 over the first composites to 75% black.
+        overlayClassName={stacked ? 'bg-black/20' : undefined}
         aria-describedby={undefined}
       >
         {editor && (
@@ -182,6 +208,7 @@ export function NirFormSheet({ editor, onOpenChange, plots, rules, onSaved }: Ni
             editor={editor}
             plots={plots}
             rules={rules}
+            lockPlot={lockPlot}
             onSaved={onSaved}
             onClose={() => onOpenChange(false)}
           />
@@ -195,12 +222,14 @@ function NirFormBody({
   editor,
   plots,
   rules,
+  lockPlot,
   onSaved,
   onClose,
 }: {
   editor: NirEditorState;
   plots: ApiPlot[];
   rules: ParameterRule[];
+  lockPlot: boolean;
   onSaved: () => void;
   onClose: () => void;
 }) {
@@ -437,9 +466,11 @@ function NirFormBody({
                           onValueChange={field.onChange}
                           placeholder="בחר חלקה"
                           searchPlaceholder="חיפוש בדיקה לפי חלקה..."
-                          // The plot is fixed once saved — moving a reading to
-                          // another plot would make it a different reading.
-                          disabled={isEdit}
+                          // Two independent reasons to fix it: once saved,
+                          // moving a reading to another plot would make it a
+                          // different reading; and opened from a plot's own
+                          // drawer, the plot is what you opened.
+                          disabled={isEdit || lockPlot}
                         />
                       </FormControl>
                       <FormMessage />
