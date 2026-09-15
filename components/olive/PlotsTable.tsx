@@ -18,6 +18,7 @@ import {
   PLOT_TYPE_LABELS,
   WATER_TYPE_LABELS,
 } from '@/types/database';
+import type { RowFlash } from '@/hooks/useRowFlash';
 import { categoryLabel, type PlotRow, type PlotSortField } from '@/lib/olive/plot-rows';
 import type { PlotCategory } from '@/lib/olive/logic';
 import { cn } from '@/lib/utils';
@@ -50,8 +51,8 @@ interface PlotsTableProps {
   onSort: (field: PlotSortField) => void;
   onEdit: (row: PlotRow) => void;
   activeId?: string | null;
-  /** The row that was just saved — highlighted briefly, then back to normal. */
-  flashId?: string | null;
+  /** The row to highlight briefly, and why. */
+  flash?: RowFlash | null;
 }
 
 function num(value: number | null, digits = 0): string {
@@ -63,7 +64,7 @@ function label(map: Record<string, string>, value: string | null): string {
   return map[value] ?? value;
 }
 
-export function PlotsTable({ rows, sort, onSort, onEdit, activeId, flashId }: PlotsTableProps) {
+export function PlotsTable({ rows, sort, onSort, onEdit, activeId, flash }: PlotsTableProps) {
   return (
     <Table>
       <TableHeader>
@@ -147,8 +148,9 @@ export function PlotsTable({ rows, sort, onSort, onEdit, activeId, flashId }: Pl
               'cursor-pointer hover:bg-muted/50',
               activeId === row.id && 'bg-primary/10 hover:bg-primary/15',
               // A running animation outranks the hover rule, so moving the
-              // mouse over the row mid-flash does not cut it short.
-              flashId === row.id && 'olive-row-flash'
+              // mouse over the row mid-highlight does not cut it short.
+              flash?.id === row.id &&
+                (flash.kind === 'saved' ? 'olive-row-flash' : 'olive-row-release')
             )}
           >
             <TableCell>

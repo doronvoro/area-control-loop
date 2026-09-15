@@ -69,7 +69,7 @@ export function OlivePlotsContent() {
   const { data, loading, error, refetch } = useApiData<DashboardPayload>('/api/olive/dashboard');
   const [filters, setFilters] = useState<PlotFilters>(EMPTY_PLOT_FILTERS);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const { flashId, arm, commit } = useRowFlash();
+  const { flash, arm, commit } = useRowFlash();
 
   const now = useMemo(() => new Date(), []);
 
@@ -102,9 +102,20 @@ export function OlivePlotsContent() {
   // that one open for the next reading, so this can fire several times before
   // anything closes.
   const handleSaved = useCallback(() => {
-    arm(selectedId);
+    arm(selectedId, 'saved');
     return refetch();
   }, [arm, refetch, selectedId]);
+
+  /**
+   * Closing arms too, so you always get the row back after the drawer covers
+   * the table — but as a release, not as a save. `arm` keeps a pending 'saved'
+   * over the 'released' that follows it, so a save-then-close still announces
+   * the save.
+   */
+  const handleClose = useCallback(() => {
+    arm(selectedId, 'released');
+    setSelectedId(null);
+  }, [arm, selectedId]);
 
   // Both conditions carry weight: without the first the flash plays behind the
   // closing drawer, without the second it plays under the refetch's dim.
@@ -178,7 +189,7 @@ export function OlivePlotsContent() {
               onSort={toggle}
               onEdit={(row: PlotRow) => setSelectedId(row.id)}
               activeId={selectedId}
-              flashId={flashId}
+              flash={flash}
             />
             <TablePagination
               page={pagination.page}
@@ -202,7 +213,7 @@ export function OlivePlotsContent() {
       */}
       <PlotDetailSheet
         row={selected}
-        onOpenChange={(open) => !open && setSelectedId(null)}
+        onOpenChange={(open) => !open && handleClose()}
         rules={data?.parameterRules ?? NO_RULES}
         plots={data?.plots ?? NO_PLOTS}
         estimates={data?.yieldEstimates ?? NO_ESTIMATES}
