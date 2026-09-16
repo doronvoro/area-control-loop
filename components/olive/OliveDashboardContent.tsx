@@ -2,12 +2,13 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Loader2, ChevronDown, Droplets, Wind, CloudRain, Settings2, Sprout } from 'lucide-react';
+import { Loader2, ChevronDown, Settings2, Sprout } from 'lucide-react';
 import { useApiData } from '@/hooks/useApiData';
 import { useUser } from '@/components/providers/UserProvider';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { OliveThresholdsDialog } from './OliveThresholdsDialog';
+import { WeatherStrip } from './WeatherStrip';
 import {
   computeUpcomingWeather,
   computePlotStatus,
@@ -22,8 +23,10 @@ import {
   toWeatherDayLike,
   toVarietyWindowLike,
   toCategoryThresholds,
+  toWeatherThresholds,
   type ApiPlot,
 } from '@/lib/olive/adapt';
+import { forecastFreshness } from '@/lib/olive/weather-view';
 import { PLOT_CATEGORY_CARDS } from '@/lib/olive/constants';
 import {
   PARAMETER_STATUS_CONFIG,
@@ -41,6 +44,7 @@ interface DashboardPayload {
   categoryThresholds: Record<string, unknown> | null;
   varietyWindows: Record<string, unknown>[];
   weatherDays: Record<string, unknown>[];
+  weatherThresholds: Record<string, unknown> | null;
   season: { id: string; name: string; year_type: string | null } | null;
 }
 
@@ -85,7 +89,13 @@ export function OliveDashboardContent() {
     const rules = data.parameterRules || [];
     const bands = toCategoryThresholds(data.categoryThresholds);
     const windows = (data.varietyWindows || []).map(toVarietyWindowLike);
-    const weather = computeUpcomingWeather((data.weatherDays || []).map(toWeatherDayLike), now);
+    const weatherBands = toWeatherThresholds(data.weatherThresholds);
+    const weather = computeUpcomingWeather(
+      (data.weatherDays || []).map(toWeatherDayLike),
+      now,
+      weatherBands
+    );
+    const weatherFreshness = forecastFreshness(data.weatherDays || [], now);
     const harvested = new Set(data.harvestedAreaIds || []);
 
     const rows = (data.plots || [])
@@ -111,7 +121,15 @@ export function OliveDashboardContent() {
       .sort((a, b) => LEVEL_ORDER[a.status.level] - LEVEL_ORDER[b.status.level])
       .slice(0, 5);
 
-    return { rows, counts, weather, attention, harvestedCount: harvested.size };
+    return {
+      rows,
+      counts,
+      weather,
+      weatherBands,
+      weatherFreshness,
+      attention,
+      harvestedCount: harvested.size,
+    };
   }, [data, now]);
 
   /** The settings preview's only input. Memoised so typing in it does not rebuild the list. */
@@ -156,8 +174,10 @@ export function OliveDashboardContent() {
           open={settingsOpen}
           onOpenChange={setSettingsOpen}
           categoryThresholds={data.categoryThresholds}
+          weatherThresholds={data.weatherThresholds}
           rules={data.parameterRules || []}
           nirs={previewNirs}
+          weatherDays={data.weatherDays || []}
           currentCounts={model?.counts ?? EMPTY_COUNTS}
           onSaved={refetch}
         />
@@ -228,24 +248,15 @@ export function OliveDashboardContent() {
             ))}
           </section>
 
-          {/* Weather flags that are currently affecting urgency */}
-          {model.weather.weatherLines.length > 0 && (
-            <section className="olive-card space-y-1 p-4">
-              <h2 className="mb-1 flex items-center gap-2 font-bold">
-                <CloudRain className="size-4" /> מזג אוויר משפיע
-              </h2>
-              {model.weather.weatherLines.map((line) => (
-                <p key={line} className="flex items-center gap-2 text-sm">
-                  {line.startsWith('רוח') ? (
-                    <Wind className="size-3.5 shrink-0" />
-                  ) : (
-                    <Droplets className="size-3.5 shrink-0" />
-                  )}
-                  {line}
-                </p>
-              ))}
-            </section>
-          )}
+          {/* The forecast, unconditionally — including when it is calm or absent.
+              Not filtered with the list below it: weather is context for the whole
+              grove, where "מבט על" is a view of the same rows the filter narrows. */}
+          <WeatherStrip
+            weather={model.weather}
+            thresholds={model.weatherBands}
+            freshness={model.weatherFreshness}
+            now={now}
+          />
 
           {/* מבט על — always visible, no clicking required */}
           {model.attention.length > 0 && !filter && (

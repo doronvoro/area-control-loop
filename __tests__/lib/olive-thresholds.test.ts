@@ -7,17 +7,22 @@ import {
   warnCategoryThresholds,
   readAlertBounds,
   applyAlertBounds,
+  parseWeatherThresholds,
   toCategoryColumns,
   toAlertUpdates,
+  toWeatherColumns,
   categoryToForm,
   alertToForm,
+  weatherToForm,
   CATEGORY_BAND_FIELDS,
   ALERT_BAND_FIELDS,
+  WEATHER_BAND_FIELDS,
+  WEATHER_MAX,
   DEFAULT_ALERT_BOUNDS,
   type ParseResult,
 } from '@/lib/olive/thresholds';
 import { DEFAULT_CATEGORY_THRESHOLDS } from '@/lib/olive/constants';
-import { evaluateParameter } from '@/lib/olive/logic';
+import { evaluateParameter, DEFAULT_WEATHER_THRESHOLDS } from '@/lib/olive/logic';
 import { ParameterStatus, type ParameterRule } from '@/types/database';
 
 /**
@@ -84,7 +89,14 @@ const SEED_CATEGORY = {
 const SEED_ALERT = { ...DEFAULT_ALERT_BOUNDS };
 
 /** The dialog's form values: both sets, flat, every value a string. */
-const SEED_FORM = { ...categoryToForm(DEFAULT_CATEGORY_THRESHOLDS), ...alertToForm(SEED_ALERT) };
+/** The seeded weather levels as they arrive over the wire, snake_case. */
+const SEED_WEATHER = { rain_alert_mm: 5, wind_alert_kmh: 25 };
+
+const SEED_FORM = {
+  ...categoryToForm(DEFAULT_CATEGORY_THRESHOLDS),
+  ...alertToForm(SEED_ALERT),
+  ...weatherToForm(DEFAULT_WEATHER_THRESHOLDS),
+};
 
 /** The fields a parse complained about, in order — what a caller routes to inputs. */
 function fieldsOf<T>(result: ParseResult<T>): string[] {
@@ -241,21 +253,100 @@ describe('parseAlertBounds', () => {
   });
 });
 
+// ─── parseWeatherThresholds ──────────────────────────────────────────────────
+
+describe('parseWeatherThresholds', () => {
+  it('accepts the seeded levels', () => {
+    const result = parseWeatherThresholds(SEED_WEATHER);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toEqual(DEFAULT_WEATHER_THRESHOLDS);
+  });
+
+  it('accepts numeric strings, including trailing-zero NUMERIC', () => {
+    const result = parseWeatherThresholds({ rain_alert_mm: '5.00', wind_alert_kmh: '25' });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toEqual({ rainAlertMm: 5, windAlertKmh: 25 });
+  });
+
+  it('rejects a missing, blank or null level, naming it', () => {
+    for (const bad of [undefined, '', null]) {
+      expect(fieldsOf(parseWeatherThresholds({ ...SEED_WEATHER, rain_alert_mm: bad }))).toEqual([
+        'rain_alert_mm',
+      ]);
+    }
+  });
+
+  it('rejects values that are not finite numbers', () => {
+    for (const bad of ['abc', Infinity, NaN, {}]) {
+      expect(fieldsOf(parseWeatherThresholds({ ...SEED_WEATHER, wind_alert_kmh: bad }))).toEqual([
+        'wind_alert_kmh',
+      ]);
+    }
+  });
+
+  it('rejects a negative level, which no CHECK would accept either', () => {
+    expect(fieldsOf(parseWeatherThresholds({ ...SEED_WEATHER, rain_alert_mm: -1 }))).toEqual([
+      'rain_alert_mm',
+    ]);
+  });
+
+  /**
+   * The reason these do NOT share the 0..100 gate every other field here uses.
+   * Millimetres and km/h are not percentages: a 120 km/h gust is a real value,
+   * and rejecting it with a message about percentages would be nonsense.
+   */
+  it('accepts a wind level above 100', () => {
+    const result = parseWeatherThresholds({ ...SEED_WEATHER, wind_alert_kmh: 120 });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.windAlertKmh).toBe(120);
+  });
+
+  it('still guards against a typo, at WEATHER_MAX', () => {
+    expect(fieldsOf(parseWeatherThresholds({ ...SEED_WEATHER, wind_alert_kmh: 2500 }))).toEqual([
+      'wind_alert_kmh',
+    ]);
+    expect(parseWeatherThresholds({ ...SEED_WEATHER, wind_alert_kmh: WEATHER_MAX }).ok).toBe(true);
+  });
+
+  it('collects every bad field rather than stopping at the first', () => {
+    const result = parseWeatherThresholds({ rain_alert_mm: '', wind_alert_kmh: 'x' });
+    expect(fieldsOf(result)).toEqual(['rain_alert_mm', 'wind_alert_kmh']);
+  });
+
+  // Rain and wind are independent flags, not a cascade — there is no ordering
+  // for one to violate, so no combination of the two is rejected.
+  it('accepts any pairing of the two, in either order', () => {
+    expect(parseWeatherThresholds({ rain_alert_mm: 90, wind_alert_kmh: 1 }).ok).toBe(true);
+  });
+
+  it('returns Hebrew messages', () => {
+    const result = parseWeatherThresholds({ ...SEED_WEATHER, rain_alert_mm: '' });
+    if (result.ok) throw new Error('expected a failure');
+    expect(result.errors[0].message).toContain('נדרש ערך');
+  });
+});
+
 // ─── parseThresholdForm ──────────────────────────────────────────────────────
 
 describe('parseThresholdForm', () => {
-  it('reads both sets out of one flat form object of strings', () => {
+  it('reads all three sets out of one flat form object of strings', () => {
     const result = parseThresholdForm(SEED_FORM);
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.bands).toEqual(DEFAULT_CATEGORY_THRESHOLDS);
       expect(result.value.bounds).toEqual(DEFAULT_ALERT_BOUNDS);
+      expect(result.value.weather).toEqual(DEFAULT_WEATHER_THRESHOLDS);
     }
   });
 
-  it('merges failures from both tabs', () => {
-    const result = parseThresholdForm({ ...SEED_FORM, normal_oil_max: '', dryHigh: '' });
-    expect(fieldsOf(result)).toEqual(['normal_oil_max', 'dryHigh']);
+  it('merges failures from every tab', () => {
+    const result = parseThresholdForm({
+      ...SEED_FORM,
+      normal_oil_max: '',
+      dryHigh: '',
+      wind_alert_kmh: '',
+    });
+    expect(fieldsOf(result)).toEqual(['normal_oil_max', 'dryHigh', 'wind_alert_kmh']);
   });
 });
 
@@ -413,13 +504,21 @@ describe('conversions', () => {
     ]);
   });
 
+  it('maps every weather level to its real column, with no extras', () => {
+    const columns = toWeatherColumns(DEFAULT_WEATHER_THRESHOLDS);
+    expect(columns).toEqual(SEED_WEATHER);
+    expect(Object.keys(columns)).toHaveLength(WEATHER_BAND_FIELDS.length);
+  });
+
   it('seeds the form with clean strings, not "17.00"', () => {
     expect(categoryToForm(DEFAULT_CATEGORY_THRESHOLDS).normal_oil_max).toBe('17');
     expect(alertToForm({ oilLow: 17.0 }).oilLow).toBe('17');
+    expect(weatherToForm({ rainAlertMm: 5.0 }).rain_alert_mm).toBe('5');
   });
 
   it('fills a missing bound from the defaults when seeding the form', () => {
     expect(alertToForm({}).waterOpt).toBe('54');
+    expect(weatherToForm({}).wind_alert_kmh).toBe('25');
   });
 
   it('round-trips the form back through the parser', () => {

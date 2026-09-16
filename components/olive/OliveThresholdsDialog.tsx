@@ -28,39 +28,53 @@ import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { showToast } from '@/lib/toast';
 
-import { classifyPlotCategory, type NirLike, type PlotCategory } from '@/lib/olive/logic';
-import { toCategoryThresholds } from '@/lib/olive/adapt';
+import {
+  classifyPlotCategory,
+  computeUpcomingWeather,
+  DEFAULT_WEATHER_THRESHOLDS,
+  type NirLike,
+  type PlotCategory,
+  type UpcomingWeather,
+} from '@/lib/olive/logic';
+import { toCategoryThresholds, toWeatherDayLike, toWeatherThresholds } from '@/lib/olive/adapt';
 import { PLOT_CATEGORY_CARDS, DEFAULT_CATEGORY_THRESHOLDS } from '@/lib/olive/constants';
 import {
   ALERT_BAND_FIELDS,
   ALERT_FIELD_NAMES,
   CATEGORY_FIELD_NAMES,
   DEFAULT_ALERT_BOUNDS,
+  WEATHER_BAND_FIELDS,
+  WEATHER_FIELD_NAMES,
+  WEATHER_MAX,
   alertToForm,
   applyAlertBounds,
   categoryToForm,
   parseThresholdForm,
   readAlertBounds,
   toCategoryColumns,
+  toWeatherColumns,
   validateThresholdForm,
   warnCategoryThresholds,
+  weatherToForm,
   type AlertParameterCode,
 } from '@/lib/olive/thresholds';
 import { PARAMETER_STATUS_CONFIG, type ParameterRule } from '@/types/database';
 
 /**
- * Editor for the two threshold sets that decide harvest status.
+ * Editor for the three threshold sets that decide harvest status.
  *
- * WHY THE TWO TABS ARE NOT ONE SCREEN
- * They answer different questions, and treating them as interchangeable is what
- * made תקינה unreachable — the cards read 43/0/7/0 where the prototype read
- * 37/6/7/0. So the tabs are labelled for the job each one does, and each panel
- * opens by saying which part of the app it moves.
+ * WHY THE TABS ARE NOT ONE SCREEN
+ * They answer different questions, and treating two of them as interchangeable
+ * is what made תקינה unreachable — the cards read 43/0/7/0 where the prototype
+ * read 37/6/7/0. So the tabs are labelled for the job each one does, and each
+ * panel opens by saying which part of the app it moves. The third reads a
+ * forecast rather than a measurement and moves neither the cards nor the
+ * urgency level, only which days are named as affecting it.
  *
  * The values themselves come from the dashboard payload the parent already
  * loaded, so opening this costs no request. Validation is lib/olive/thresholds,
- * the same module the two PUT routes validate with, so the form cannot accept a
- * tuning the server refuses.
+ * the same module the three PUT routes validate with, so the form cannot accept
+ * a tuning the server refuses.
  */
 
 // --- Form schema ---
@@ -70,16 +84,35 @@ import { PARAMETER_STATUS_CONFIG, type ParameterRule } from '@/types/database';
  * numeric convention (NirFormSheet, WeatherPageContent), which keeps a
  * half-typed "1" from becoming the number 1 mid-keystroke.
  */
-const bandField = z
+const numericField = z
   .string()
   .min(1, 'נדרש ערך')
-  .refine((v) => Number.isFinite(Number(v)), { message: 'נדרש מספר' })
-  .refine((v) => Number(v) >= 0 && Number(v) <= 100, { message: 'נדרש ערך בין 0 ל-100' });
+  .refine((v) => Number.isFinite(Number(v)), { message: 'נדרש מספר' });
 
-const ALL_FIELD_NAMES = [...CATEGORY_FIELD_NAMES, ...ALERT_FIELD_NAMES];
+const bandField = numericField.refine((v) => Number(v) >= 0 && Number(v) <= 100, {
+  message: 'נדרש ערך בין 0 ל-100',
+});
+
+/**
+ * The weather levels get their own range because they are the one set here that
+ * is not a percentage: 0..100 would reject a real 120 קמ״ש gust with a message
+ * about percentages. WEATHER_MAX is shared with the server-side validator.
+ */
+const weatherField = numericField.refine((v) => Number(v) >= 0 && Number(v) <= WEATHER_MAX, {
+  message: `נדרש ערך בין 0 ל-${WEATHER_MAX}`,
+});
+
+const ALL_FIELD_NAMES = [...CATEGORY_FIELD_NAMES, ...ALERT_FIELD_NAMES, ...WEATHER_FIELD_NAMES];
 
 const thresholdsSchema = z
-  .object(Object.fromEntries(ALL_FIELD_NAMES.map((name) => [name, bandField])))
+  .object(
+    Object.fromEntries(
+      ALL_FIELD_NAMES.map((name) => [
+        name,
+        (WEATHER_FIELD_NAMES as string[]).includes(name) ? weatherField : bandField,
+      ])
+    )
+  )
   // Per-field rules live above, where they land under the input for free. Every
   // cross-field rule comes from the shared module, so the form and the server
   // cannot disagree about which tunings are legal.
@@ -107,14 +140,31 @@ const EMPTY_COUNTS: Record<PlotCategory, number> = {
   ready: 0,
 };
 
+/** Which tab owns a field, for routing a server-side error back to where it is editable. */
+function tabOfField(field: string): string {
+  if (CATEGORY_FIELD_NAMES.includes(field)) return 'category';
+  if (WEATHER_FIELD_NAMES.includes(field)) return 'weather';
+  return 'alert';
+}
+
+/** "א", "א וב", "א, ב וג" — the vav attaches to the word, as Hebrew wants. */
+function joinHebrew(items: string[]): string {
+  if (items.length <= 1) return items[0] ?? '';
+  return `${items.slice(0, -1).join(', ')} ו${items[items.length - 1]}`;
+}
+
 export interface OliveThresholdsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** The plot_category_thresholds row as the dashboard payload carries it. Null when the row is missing. */
   categoryThresholds: Record<string, unknown> | null;
+  /** The weather_alert_thresholds row, same source and same null. */
+  weatherThresholds: Record<string, unknown> | null;
   rules: ParameterRule[];
-  /** Latest NIR per visible plot — the live preview's only input. */
+  /** Latest NIR per visible plot — the card preview's only input. */
   nirs: (NirLike | null)[];
+  /** Raw weather_days rows — the weather tab's preview input, as the strip gets them. */
+  weatherDays: Record<string, unknown>[];
   /** What the cards read right now, for the "before" side of the preview. */
   currentCounts: Record<PlotCategory, number>;
   onSaved: () => void;
@@ -124,8 +174,10 @@ export function OliveThresholdsDialog({
   open,
   onOpenChange,
   categoryThresholds,
+  weatherThresholds,
   rules,
   nirs,
+  weatherDays,
   currentCounts,
   onSaved,
 }: OliveThresholdsDialogProps) {
@@ -143,6 +195,7 @@ export function OliveThresholdsDialog({
     defaultValues: {
       ...categoryToForm(DEFAULT_CATEGORY_THRESHOLDS),
       ...alertToForm(DEFAULT_ALERT_BOUNDS),
+      ...weatherToForm(DEFAULT_WEATHER_THRESHOLDS),
     },
   });
 
@@ -157,10 +210,11 @@ export function OliveThresholdsDialog({
     form.reset({
       ...categoryToForm(toCategoryThresholds(categoryThresholds)),
       ...alertToForm(readAlertBounds(rules)),
+      ...weatherToForm(toWeatherThresholds(weatherThresholds)),
     });
     setError(null);
     setTab('category');
-  }, [open, categoryThresholds, rules, form]);
+  }, [open, categoryThresholds, weatherThresholds, rules, form]);
 
   // --- Live preview ---
 
@@ -195,6 +249,21 @@ export function OliveThresholdsDialog({
     return { counts, warnings: warnCategoryThresholds(parsed.value.bands) };
   }, [parsed, rules, nirs]);
 
+  /** Fixed per opening, so every preview day is judged against one instant. */
+  const now = useMemo(() => new Date(), [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /**
+   * Which forecast days the edited levels would flag.
+   *
+   * The real computeUpcomingWeather over the real forecast, which is what makes
+   * this answerable at all: "what does 4 מ״מ instead of 5 do" is a question
+   * about this week's data, not about the number.
+   */
+  const weatherPreview = useMemo(() => {
+    if (!parsed.ok) return null;
+    return computeUpcomingWeather(weatherDays.map(toWeatherDayLike), now, parsed.value.weather);
+  }, [parsed, weatherDays, now]);
+
   /**
    * What is currently wrong, read from the parse rather than from formState.
    *
@@ -210,11 +279,12 @@ export function OliveThresholdsDialog({
    */
   const issues = parsed.ok ? [] : parsed.errors;
 
-  // Errors can also belong to the tab you are not looking at.
+  // Errors can also belong to a tab you are not looking at.
   const categoryErrors = issues.filter((i) => CATEGORY_FIELD_NAMES.includes(i.field)).length;
   const alertErrors = issues.filter((i) =>
     (ALERT_FIELD_NAMES as string[]).includes(i.field)
   ).length;
+  const weatherErrors = issues.filter((i) => WEATHER_FIELD_NAMES.includes(i.field)).length;
 
   // --- Save ---
 
@@ -222,8 +292,9 @@ export function OliveThresholdsDialog({
     const dirty = form.formState.dirtyFields as Record<string, boolean | undefined>;
     const categoryDirty = CATEGORY_FIELD_NAMES.some((name) => dirty[name]);
     const alertDirty = (ALERT_FIELD_NAMES as string[]).some((name) => dirty[name]);
+    const weatherDirty = WEATHER_FIELD_NAMES.some((name) => dirty[name]);
 
-    if (!categoryDirty && !alertDirty) {
+    if (!categoryDirty && !alertDirty && !weatherDirty) {
       onOpenChange(false);
       return;
     }
@@ -237,15 +308,15 @@ export function OliveThresholdsDialog({
     setSaving(true);
     setError(null);
 
-    // Sequential, category first, so a failure is ordered: either nothing was
-    // written, or the card bands were and the alert bands were not. Never
-    // Promise.all, which would make a partial failure unordered as well.
-    let categorySaved = false;
+    // Sequential and in this order, so a partial failure is ordered rather than
+    // unknowable: whatever `saved` names was written and the rest was not. Never
+    // Promise.all, which would leave that question unanswerable.
+    const saved: string[] = [];
 
     try {
       if (categoryDirty) {
         await put('/api/olive/category-thresholds', toCategoryColumns(parsed.value.bands));
-        categorySaved = true;
+        saved.push('ספי כרטיסי הסטטוס');
       }
 
       if (alertDirty) {
@@ -255,6 +326,12 @@ export function OliveThresholdsDialog({
         // editor's own NIR page would show the old pills and read as a failed
         // save. `reload` bypasses the entry and replaces it.
         await fetch('/api/olive/parameters', { cache: 'reload' }).catch(() => undefined);
+        saved.push('ספי ההתראות');
+      }
+
+      if (weatherDirty) {
+        await put('/api/olive/weather-thresholds', toWeatherColumns(parsed.value.weather));
+        saved.push('ספי מזג האוויר');
       }
 
       showToast.success('הספים נשמרו');
@@ -266,18 +343,18 @@ export function OliveThresholdsDialog({
 
       if (field && ALL_FIELD_NAMES.includes(field)) {
         form.setError(field, { message });
-        setTab(CATEGORY_FIELD_NAMES.includes(field) ? 'category' : 'alert');
+        setTab(tabOfField(field));
       }
 
-      // Retrying re-sends both halves. Both writes are idempotent and the bounds
-      // updater diffs before writing, so a repeat costs one no-op request and
-      // saves an entire class of "what already landed" bookkeeping.
+      // Retrying re-sends every dirty set. All three writes are idempotent and
+      // the bounds updater diffs before writing, so a repeat costs a no-op
+      // request and saves an entire class of "what already landed" bookkeeping.
       setError(
-        categorySaved
-          ? `ספי כרטיסי הסטטוס נשמרו, אך ספי ההתראות לא — ${message}. אפשר לנסות שוב.`
+        saved.length > 0
+          ? `${joinHebrew(saved)} נשמרו, אך השאר לא — ${message}. אפשר לנסות שוב.`
           : message
       );
-      if (categorySaved) onSaved();
+      if (saved.length > 0) onSaved();
     } finally {
       setSaving(false);
     }
@@ -311,6 +388,10 @@ export function OliveThresholdsDialog({
                   ספי התראות
                   {alertErrors > 0 && <ErrorCount count={alertErrors} />}
                 </TabsTrigger>
+                <TabsTrigger value="weather" className="flex-1">
+                  מזג אוויר
+                  {weatherErrors > 0 && <ErrorCount count={weatherErrors} />}
+                </TabsTrigger>
               </TabsList>
 
               {/* Dialog has no max-height of its own and there is no scroll-area
@@ -323,12 +404,22 @@ export function OliveThresholdsDialog({
                 <TabsContent value="alert" className="mt-0">
                   <AlertTab form={form} rules={rules} onRestore={restore} />
                 </TabsContent>
+                <TabsContent value="weather" className="mt-0">
+                  <WeatherTab form={form} onRestore={restore} />
+                </TabsContent>
               </div>
             </Tabs>
 
             <Separator />
 
-            <PreviewStrip before={currentCounts} after={preview?.counts ?? null} />
+            {/* The card counts are not what the weather tab moves — weather never
+                reaches classifyPlotCategory — so showing them there would imply it
+                does. Same slot either way, so the dialog does not jump. */}
+            {tab === 'weather' ? (
+              <WeatherPreview weather={weatherPreview} />
+            ) : (
+              <PreviewStrip before={currentCounts} after={preview?.counts ?? null} />
+            )}
 
             {issues.map((issue) => (
               <p
@@ -509,6 +600,41 @@ function AlertTab({
 
 // --- Pieces ---
 
+function WeatherTab({
+  form,
+  onRestore,
+}: {
+  form: FormApi;
+  onRestore: (values: Record<string, string>) => void;
+}) {
+  return (
+    <div className="space-y-4">
+      <PanelHeader
+        note="הספים שמחליטים אילו ימים בתחזית משפיעים על דחיפות המסיק. אינם משפיעים על כרטיסי הסטטוס."
+        onRestore={() => onRestore(weatherToForm(DEFAULT_WEATHER_THRESHOLDS))}
+      />
+
+      <BandGroup
+        title="ימים משפיעים בתחזית"
+        note="יום מסומן כשהערך גבוה מהסף. בדיוק הסף עצמו אינו מסמן."
+      >
+        {WEATHER_BAND_FIELDS.map((field) => (
+          <BandInput
+            key={field.column}
+            form={form}
+            name={field.column}
+            label={`${field.label} (${field.unit})`}
+          />
+        ))}
+        <p className="olive-muted col-span-2 text-xs">
+          יום מסומן מחדד את הניסוח של חלקה שכבר מתוכננת למסיק — &quot;שקול הקדמת מסיק — גשם
+          צפוי&quot;. מזג אוויר לבדו אינו מעלה חלקה לדחיפות.
+        </p>
+      </BandGroup>
+    </div>
+  );
+}
+
 function PanelHeader({ note, onRestore }: { note: string; onRestore: () => void }) {
   return (
     <div className="flex items-start justify-between gap-3">
@@ -619,6 +745,42 @@ function PreviewStrip({
 
       <p className="olive-muted text-xs">התצוגה המקדימה מחושבת על החלקות המוצגות במסך זה בלבד.</p>
     </section>
+  );
+}
+
+/**
+ * Which forecast days the edited levels would flag.
+ *
+ * The weather tab's counterpart to the card strip: the same live recomputation
+ * through the same real function, answering the question this tab can actually
+ * move. Empty is its own sentence, not a zero — "0 מתוך 0" would read as a
+ * result rather than as an absence of data.
+ */
+function WeatherPreview({ weather }: { weather: UpcomingWeather | null }) {
+  const total = weather?.upcoming.length ?? 0;
+  const flagged = weather?.upcoming.filter((d) => d.rainFlagged || d.windFlagged).length ?? 0;
+
+  return (
+    <div className="space-y-1">
+      <h3 className="text-sm font-bold">תצוגה מקדימה</h3>
+
+      {!weather ? (
+        <p className="olive-muted text-xs">לא ניתן לחשב — ראו את השגיאות מטה.</p>
+      ) : total === 0 ? (
+        <p className="olive-muted text-xs">אין נתוני תחזית להצגת תצוגה מקדימה.</p>
+      ) : (
+        <>
+          <p className="text-sm">
+            <b>{flagged}</b> מתוך {total} ימים בתחזית יסומנו
+          </p>
+          {weather.weatherLines.map((line) => (
+            <p key={line} className="olive-muted text-xs">
+              {line}
+            </p>
+          ))}
+        </>
+      )}
+    </div>
   );
 }
 

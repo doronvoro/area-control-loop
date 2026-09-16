@@ -13,9 +13,23 @@ import { getWeatherDays } from '@/lib/services/olive-weather.service';
 import {
   getParameterRules,
   getCategoryThresholds,
+  getWeatherThresholds,
   getVarietyWindows,
   getActiveSeason,
 } from '@/lib/services/olive-config.service';
+
+/**
+ * Local YYYY-MM-DD. Weather only matters looking forward — the logic ignores
+ * past days anyway — and toISOString() would shift the day across timezones.
+ */
+function todayString(): string {
+  const now = new Date();
+  return [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, '0'),
+    String(now.getDate()).padStart(2, '0'),
+  ].join('-');
+}
 
 /**
  * Everything the olive dashboard needs, in one round-trip.
@@ -37,13 +51,22 @@ export async function GET(request: Request) {
 
     if (areaIds.length === 0) {
       // The threshold config still comes back. It belongs to no customer, and
-      // the settings dialog reads both sets straight out of this payload — blank
-      // them here and an admin with no customer selected opens the dialog to an
-      // empty alert tab. Two small global lookups, no area scan.
-      const [parameterRules, categoryThresholds] = await Promise.all([
-        getParameterRules(ctx.supabase),
-        getCategoryThresholds(ctx.supabase),
-      ]);
+      // the settings dialog reads all three sets straight out of this payload —
+      // blank them here and an admin with no customer selected opens the dialog
+      // to an empty alert tab. Four small global lookups, no area scan.
+      //
+      // weatherDays is in that list for the same reason and not by accident:
+      // the forecast is regional, weather_days carries no customer_id, and the
+      // weather tab previews the edited levels against it. Blanked, that tab
+      // would say "אין נתוני תחזית" to an admin who has a perfectly good
+      // forecast loaded — a claim about the data rather than about the scope.
+      const [parameterRules, categoryThresholds, weatherThresholds, weatherDays] =
+        await Promise.all([
+          getParameterRules(ctx.supabase),
+          getCategoryThresholds(ctx.supabase),
+          getWeatherThresholds(ctx.supabase),
+          getWeatherDays(ctx.supabase, todayString()),
+        ]);
 
       return NextResponse.json({
         plots: [],
@@ -53,18 +76,13 @@ export async function GET(request: Request) {
         parameterRules,
         categoryThresholds,
         varietyWindows: [],
-        weatherDays: [],
+        weatherDays,
+        weatherThresholds,
         season: null,
       });
     }
 
-    // Weather only matters looking forward — the logic ignores past days anyway.
-    const today = new Date();
-    const fromDate = [
-      today.getFullYear(),
-      String(today.getMonth() + 1).padStart(2, '0'),
-      String(today.getDate()).padStart(2, '0'),
-    ].join('-');
+    const fromDate = todayString();
 
     const [
       plots,
@@ -72,6 +90,7 @@ export async function GET(request: Request) {
       harvestedAreaIds,
       parameterRules,
       categoryThresholds,
+      weatherThresholds,
       varietyWindows,
       weatherDays,
       season,
@@ -81,6 +100,7 @@ export async function GET(request: Request) {
       getHarvestedAreaIds(ctx.supabase, areaIds),
       getParameterRules(ctx.supabase),
       getCategoryThresholds(ctx.supabase),
+      getWeatherThresholds(ctx.supabase),
       getVarietyWindows(ctx.supabase),
       getWeatherDays(ctx.supabase, fromDate),
       getActiveSeason(ctx.supabase),
@@ -99,6 +119,7 @@ export async function GET(request: Request) {
       categoryThresholds,
       varietyWindows,
       weatherDays,
+      weatherThresholds,
       season,
     });
   } catch (error) {

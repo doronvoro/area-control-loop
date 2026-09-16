@@ -6,6 +6,7 @@ import {
   upsertManualWeather,
   deleteManualWeather,
 } from '@/lib/services/olive-weather.service';
+import { getWeatherThresholds } from '@/lib/services/olive-config.service';
 
 function todayString(): string {
   const now = new Date();
@@ -25,8 +26,15 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const from = searchParams.get('from') || todayString();
 
-    const days = await getWeatherDays(ctx.supabase, from);
-    return NextResponse.json(days);
+    // The levels ride along because this screen prints them in its caption and
+    // bolds cells against them. Fetching them separately would let the page
+    // state one number while the flags fire on another.
+    const [days, thresholds] = await Promise.all([
+      getWeatherDays(ctx.supabase, from),
+      getWeatherThresholds(ctx.supabase),
+    ]);
+
+    return NextResponse.json({ days, thresholds });
   } catch (error) {
     return handleApiError(error);
   }

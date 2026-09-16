@@ -43,6 +43,10 @@ export interface WeatherDayLike {
   rain_mm: number | null;
   wind_kmh: number | null;
   is_manual: boolean;
+  // Display only — no branch below reads these. Optional because a caller that
+  // only cares about the flags should not have to invent them.
+  temp_min?: number | null;
+  temp_max?: number | null;
 }
 
 export interface VarietyWindowLike {
@@ -57,8 +61,27 @@ export interface RuleMatch {
   message: string;
 }
 
+/**
+ * One upcoming day, after the manual-over-forecast merge.
+ *
+ * `rainFlagged`/`windFlagged` are set by the same loop that sets `rainSoon` and
+ * pushes `weatherLines`, so a screen marking days from this list can never mark
+ * a different set than the lines name. Nothing here feeds a harvest decision —
+ * computePlotStatus reads the two booleans below, not this array.
+ */
+export interface UpcomingWeatherDay {
+  date: string;
+  rainMm: number | null;
+  windKmh: number | null;
+  tempMin: number | null;
+  tempMax: number | null;
+  isManual: boolean;
+  rainFlagged: boolean;
+  windFlagged: boolean;
+}
+
 export interface UpcomingWeather {
-  upcoming: { date: string; rainMm: number | null; windKmh: number | null }[];
+  upcoming: UpcomingWeatherDay[];
   rainSoon: boolean;
   windSoon: boolean;
   weatherLines: string[];
@@ -97,9 +120,32 @@ export interface CategoryThresholds {
 const YIELD_LOAD_HIGH = 1300;
 const YIELD_LOAD_MEDIUM = 900;
 
-// Weather flags. Spec §4.4.
-const RAIN_ALERT_MM = 5;
-const WIND_ALERT_KMH = 25;
+/**
+ * The levels at which a forecast day counts as rain or wind. Spec §4.4.
+ *
+ * Separate from every threshold above because these read a forecast, not a
+ * measurement — there is no band cascade, just "is tomorrow worse than this".
+ */
+export interface WeatherThresholds {
+  rainAlertMm: number;
+  windAlertKmh: number;
+}
+
+/**
+ * Fallback weather levels — the values these were hardcoded to before the
+ * client could tune them.
+ *
+ * The live values are a row in weather_alert_thresholds; this is what
+ * computeUpcomingWeather uses when no caller supplies one, which covers both
+ * the missing row and the window before the table exists in production.
+ *
+ * Kept in step with the seed in
+ * 20260915110000_create_olive_weather_thresholds.sql. Change both together.
+ */
+export const DEFAULT_WEATHER_THRESHOLDS: WeatherThresholds = {
+  rainAlertMm: 5,
+  windAlertKmh: 25,
+};
 
 // --- Public API ---
 
@@ -147,21 +193,39 @@ export function evaluateParameter(
  * Collapse the next few days of weather into two booleans.
  *
  * Manual rows overwrite fetched forecast rows for the same date — they are
- * applied second, exactly as the prototype does.
+ * applied second, exactly as the prototype does. The two loops are not one loop
+ * for that reason; merging them would drop the rule.
+ *
+ * `thresholds` defaults to the values these flags were hardcoded to, so a
+ * caller with no tuned row behaves exactly as before.
  */
-export function computeUpcomingWeather(days: WeatherDayLike[], now: Date): UpcomingWeather {
+export function computeUpcomingWeather(
+  days: WeatherDayLike[],
+  now: Date,
+  thresholds: WeatherThresholds = DEFAULT_WEATHER_THRESHOLDS
+): UpcomingWeather {
   const todayStr = toDateString(now);
-  const byDate = new Map<string, { rainMm: number | null; windKmh: number | null }>();
+  const byDate = new Map<string, Omit<UpcomingWeatherDay, 'date'>>();
+
+  const entry = (d: WeatherDayLike): Omit<UpcomingWeatherDay, 'date'> => ({
+    rainMm: d.rain_mm,
+    windKmh: d.wind_kmh,
+    tempMin: d.temp_min ?? null,
+    tempMax: d.temp_max ?? null,
+    isManual: d.is_manual,
+    rainFlagged: false,
+    windFlagged: false,
+  });
 
   for (const d of days.filter((d) => !d.is_manual)) {
     if (d.entry_date >= todayStr) {
-      byDate.set(d.entry_date, { rainMm: d.rain_mm, windKmh: d.wind_kmh });
+      byDate.set(d.entry_date, entry(d));
     }
   }
   // Manual entries win.
   for (const d of days.filter((d) => d.is_manual)) {
     if (d.entry_date >= todayStr) {
-      byDate.set(d.entry_date, { rainMm: d.rain_mm, windKmh: d.wind_kmh });
+      byDate.set(d.entry_date, entry(d));
     }
   }
 
@@ -172,12 +236,14 @@ export function computeUpcomingWeather(days: WeatherDayLike[], now: Date): Upcom
   const weatherLines: string[] = [];
 
   for (const w of upcoming) {
-    if (w.rainMm !== null && w.rainMm > RAIN_ALERT_MM) {
+    if (w.rainMm !== null && w.rainMm > thresholds.rainAlertMm) {
       rainSoon = true;
+      w.rainFlagged = true;
       weatherLines.push(`גשם צפוי ${w.date}: ${w.rainMm} מ"מ`);
     }
-    if (w.windKmh !== null && w.windKmh > WIND_ALERT_KMH) {
+    if (w.windKmh !== null && w.windKmh > thresholds.windAlertKmh) {
       windSoon = true;
+      w.windFlagged = true;
       weatherLines.push(`רוח חזקה צפויה ${w.date}: ${w.windKmh} קמ"ש`);
     }
   }
