@@ -9,12 +9,13 @@ import {
   parseDM,
   isDateInWindow,
   daysSinceLabel,
+  DEFAULT_WEATHER_THRESHOLDS,
   type PlotLike,
   type NirLike,
   type WeatherDayLike,
   type CategoryThresholds,
 } from '@/lib/olive/logic';
-import { toCategoryThresholds } from '@/lib/olive/adapt';
+import { toCategoryThresholds, toWeatherDayLike, toWeatherThresholds } from '@/lib/olive/adapt';
 import { readAlertBounds, DEFAULT_ALERT_BOUNDS } from '@/lib/olive/thresholds';
 import { DEFAULT_CATEGORY_THRESHOLDS } from '@/lib/olive/constants';
 import { ParameterStatus, type ParameterRule } from '@/types/database';
@@ -109,6 +110,9 @@ function nir(partial: Partial<NirLike>): NirLike {
 const NOW = new Date(2026, 9, 15); // 15 Oct 2026, local time
 const CALM = computeUpcomingWeather([], NOW);
 
+/** The seeded weather levels, as 20260915110000 writes them. */
+const WEATHER = { rainAlertMm: 5, windAlertKmh: 25 };
+
 function weather(days: Partial<WeatherDayLike>[]) {
   return computeUpcomingWeather(
     days.map((d) => ({
@@ -195,13 +199,88 @@ describe('computeUpcomingWeather', () => {
   it('lets a manual entry override the forecast for the same date', () => {
     const result = computeUpcomingWeather(
       [
-        { entry_date: '2026-10-16', rain_mm: 40, wind_kmh: null, is_manual: false },
-        { entry_date: '2026-10-16', rain_mm: 0, wind_kmh: null, is_manual: true },
+        { entry_date: '2026-10-16', rain_mm: 40, wind_kmh: null, is_manual: false, temp_max: 30 },
+        { entry_date: '2026-10-16', rain_mm: 0, wind_kmh: null, is_manual: true, temp_max: 21 },
       ],
       NOW
     );
     expect(result.rainSoon).toBe(false);
     expect(result.upcoming).toHaveLength(1);
+
+    // The whole merged day comes from the manual row, not just the rain that
+    // won the comparison — the strip badges that day "ידני" and shows its
+    // temperature, and both must describe the numbers actually in force.
+    expect(result.upcoming[0].isManual).toBe(true);
+    expect(result.upcoming[0].tempMax).toBe(21);
+  });
+
+  it('carries temperature and source through to the per-day list', () => {
+    const result = weather([{ rain_mm: 2, wind_kmh: 9, temp_min: 8, temp_max: 21 }]);
+
+    expect(result.upcoming[0]).toEqual({
+      date: '2026-10-16',
+      rainMm: 2,
+      windKmh: 9,
+      tempMin: 8,
+      tempMax: 21,
+      isManual: false,
+      rainFlagged: false,
+      windFlagged: false,
+    });
+  });
+
+  /**
+   * The invariant the dashboard strip depends on. It marks days from `upcoming`
+   * and lists the reasons from `weatherLines`; if those two could disagree, the
+   * strip would highlight a day the text below it does not mention.
+   */
+  it('flags exactly the days weatherLines names', () => {
+    const result = weather([
+      { entry_date: '2026-10-16', rain_mm: 12 },
+      { entry_date: '2026-10-17', wind_kmh: 31 },
+      { entry_date: '2026-10-18', rain_mm: 1, wind_kmh: 4 },
+    ]);
+
+    expect(result.upcoming.map((d) => d.rainFlagged || d.windFlagged)).toEqual([true, true, false]);
+    expect(result.weatherLines).toHaveLength(2);
+  });
+
+  it('does not flag a day sitting exactly on either threshold', () => {
+    const result = weather([{ rain_mm: 5, wind_kmh: 25 }]);
+
+    expect(result.upcoming[0].rainFlagged).toBe(false);
+    expect(result.upcoming[0].windFlagged).toBe(false);
+  });
+
+  /**
+   * The levels are a row in weather_alert_thresholds now. Same 4mm day, two
+   * different answers — which is the entire point of making them editable.
+   */
+  it('flags against the thresholds it is given', () => {
+    const day = [{ rain_mm: 4 }];
+
+    expect(weather(day).rainSoon).toBe(false);
+    expect(
+      computeUpcomingWeather(
+        [{ entry_date: '2026-10-16', rain_mm: 4, wind_kmh: null, is_manual: false }],
+        NOW,
+        { rainAlertMm: 3, windAlertKmh: 25 }
+      ).rainSoon
+    ).toBe(true);
+  });
+
+  it('orders the day list ascending regardless of input order', () => {
+    const result = weather([
+      { entry_date: '2026-10-18' },
+      { entry_date: '2026-10-16' },
+      { entry_date: '2026-10-17' },
+    ]);
+
+    expect(result.upcoming.map((d) => d.date)).toEqual([
+      '2026-10-16',
+      '2026-10-17',
+      '2026-10-18',
+    ]);
   });
 });
 
@@ -471,6 +550,7 @@ describe('threshold defaults', () => {
   it('match the seeded fixtures, so restoring defaults restores the seed', () => {
     expect(BANDS).toEqual(DEFAULT_CATEGORY_THRESHOLDS);
     expect(readAlertBounds(RULES)).toEqual(DEFAULT_ALERT_BOUNDS);
+    expect(WEATHER).toEqual(DEFAULT_WEATHER_THRESHOLDS);
   });
 });
 
@@ -497,6 +577,54 @@ describe('toCategoryThresholds', () => {
 
   it('falls back to the prototype defaults when the row is missing', () => {
     expect(toCategoryThresholds(null)).toEqual(BANDS);
+  });
+
+  it('coerces the weather row the same way, and falls back the same way', () => {
+    expect(toWeatherThresholds({ rain_alert_mm: '5.00', wind_alert_kmh: '25.00' })).toEqual(WEATHER);
+    expect(toWeatherThresholds(null)).toEqual(WEATHER);
+  });
+});
+
+// ─── toWeatherDayLike ────────────────────────────────────────────────────────
+
+describe('toWeatherDayLike', () => {
+  it('coerces the NUMERIC strings a PostgREST weather row actually carries', () => {
+    const day = toWeatherDayLike({
+      entry_date: '2026-10-16',
+      rain_mm: '12.50',
+      wind_kmh: '31.00',
+      temp_min: '8.40',
+      temp_max: '21.10',
+      is_manual: false,
+    });
+
+    expect(day).toEqual({
+      entry_date: '2026-10-16',
+      rain_mm: 12.5,
+      wind_kmh: 31,
+      temp_min: 8.4,
+      temp_max: 21.1,
+      is_manual: false,
+    });
+
+    // Left as strings the flags would compare lexically, where "9" > "12.50".
+    expect(computeUpcomingWeather([day], NOW).rainSoon).toBe(true);
+  });
+
+  /**
+   * A chip reading `0 מ"מ` asserts that no rain is expected. `—` admits there is
+   * no data. That distinction is the reason the strip can be trusted, so the
+   * adapter must not turn an absent column into a zero.
+   */
+  it('treats a missing column as null rather than zero', () => {
+    expect(toWeatherDayLike({ entry_date: '2026-10-16' })).toEqual({
+      entry_date: '2026-10-16',
+      rain_mm: null,
+      wind_kmh: null,
+      temp_min: null,
+      temp_max: null,
+      is_manual: false,
+    });
   });
 });
 

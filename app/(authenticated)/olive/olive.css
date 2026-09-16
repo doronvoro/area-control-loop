@@ -259,6 +259,94 @@
   color: oklch(0.30 0.02 80);
 }
 
+/* --- Forecast strip (always visible on /olive) ---
+   A flagged day is GOLD, the plan hue, not terracotta. computePlotStatus is
+   explicit that weather is an input to urgency and never urgency on its own —
+   wind alone never escalates a plot — so terracotta here would claim more than
+   the logic does. The only terracotta in this block is the stale pill, which is
+   a data-integrity warning: a forecast nobody refreshed is worse than one
+   predicting rain. Values below are reused from .olive-kpi, .olive-pill-plan
+   and .olive-alert-plan rather than picked fresh, so the strip reads as part of
+   the same system. */
+
+.olive-weather-day {
+  background: oklch(0.98 0.012 90);
+  border: 1px solid oklch(0.91 0.02 88);
+  /* Logical, like .olive-alert — the accent sits on the RTL leading edge. */
+  border-inline-start: 3px solid transparent;
+  border-radius: 0.6rem;
+  padding: 0.45rem 0.4rem;
+  text-align: center;
+  line-height: 1.35;
+}
+
+.olive-weather-day-today {
+  background: oklch(1 0 0);
+  border-color: oklch(0.86 0.04 88);
+}
+
+.olive-weather-day-flagged {
+  background: oklch(0.95 0.05 90);
+  border-color: oklch(0.86 0.08 88);
+  border-inline-start-color: oklch(0.70 0.12 85);
+}
+
+.olive-weather-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: oklch(0.30 0.02 80);
+}
+
+.olive-weather-date {
+  font-size: 0.62rem;
+  color: oklch(0.55 0.02 85);
+}
+
+.olive-weather-value {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: oklch(0.38 0.02 82);
+}
+
+.olive-weather-value-flagged {
+  font-weight: 800;
+  color: oklch(0.50 0.11 80);
+}
+
+.olive-weather-temp {
+  font-size: 0.6rem;
+  color: oklch(0.58 0.02 85);
+}
+
+.olive-weather-manual {
+  display: inline-block;
+  margin-block-start: 0.15rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  font-size: 0.58rem;
+  font-weight: 700;
+  background: oklch(0.93 0.03 90);
+  color: oklch(0.50 0.11 80);
+}
+
+/* An LTR island inside the RTL page, for a value the bidi algorithm reorders.
+   "20.3°–35.7°" is not one number to bidi: the ° and – are neutrals, so it is
+   two number runs, and in an RTL paragraph they paint in RTL order — the page
+   shows 35.7°–20.3°, i.e. the max first, which reads as a different reading.
+   A dir="ltr" attribute does NOT fix this on its own: globals.css carries
+   `[dir="rtl"] * { direction: rtl }`, which out-ranks the attribute on every
+   descendant in the app. Hence a rule that out-specifies that one. */
+[dir='rtl'] .olive-ltr-num {
+  direction: ltr;
+}
+
+/* Dashed, borrowing the .olive-readout idiom: this is an absence, not a card. */
+.olive-weather-empty {
+  border: 1px dashed oklch(0.86 0.04 88);
+  background: oklch(0.98 0.012 90);
+  border-radius: 0.75rem;
+}
+
 /* ========================================
    NIR entry form
    Mirrors the structure of monitoring.css —

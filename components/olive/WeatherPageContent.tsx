@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/form';
 import { showToast } from '@/lib/toast';
 import { computeUpcomingWeather } from '@/lib/olive/logic';
-import { toWeatherDayLike } from '@/lib/olive/adapt';
+import { toWeatherDayLike, toWeatherThresholds } from '@/lib/olive/adapt';
 
 /**
  * Regional forecast for the harvest decision.
@@ -26,9 +26,6 @@ import { toWeatherDayLike } from '@/lib/olive/adapt';
  * and the manual one wins, which is why both are shown side by side rather than
  * the override silently replacing the forecast.
  */
-
-const RAIN_ALERT_MM = 5;
-const WIND_ALERT_KMH = 25;
 
 const numericField = z
   .string()
@@ -61,6 +58,7 @@ function optionalNumber(value?: string) {
 
 export function WeatherPageContent() {
   const [days, setDays] = useState<any[]>([]);
+  const [thresholdRow, setThresholdRow] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -75,7 +73,9 @@ export function WeatherPageContent() {
       setError(null);
       const res = await fetch('/api/olive/weather');
       if (!res.ok) throw new Error('שגיאה בטעינת מזג האוויר');
-      setDays(await res.json());
+      const payload = await res.json();
+      setDays(payload.days || []);
+      setThresholdRow(payload.thresholds ?? null);
     } catch (err: any) {
       setError(err.message || 'שגיאה בטעינת הנתונים');
     } finally {
@@ -152,7 +152,8 @@ export function WeatherPageContent() {
     );
   }
 
-  const effective = computeUpcomingWeather(days.map(toWeatherDayLike), new Date());
+  const thresholds = toWeatherThresholds(thresholdRow);
+  const effective = computeUpcomingWeather(days.map(toWeatherDayLike), new Date(), thresholds);
   const manualDates = new Set(days.filter((d) => d.is_manual).map((d) => d.entry_date));
 
   return (
@@ -167,7 +168,8 @@ export function WeatherPageContent() {
         <div>
           <h2 className="font-bold">תחזית 7 ימים — דרום רמת הגולן</h2>
           <p className="olive-muted text-xs">
-            מקור: Open-Meteo · התראה על גשם מעל {RAIN_ALERT_MM} מ״מ או רוח מעל {WIND_ALERT_KMH} קמ״ש
+            מקור: Open-Meteo · התראה על גשם מעל {thresholds.rainAlertMm} מ״מ או רוח מעל{' '}
+            {thresholds.windAlertKmh} קמ״ש
           </p>
         </div>
         <Button type="button" onClick={handleRefresh} disabled={refreshing}>
@@ -236,13 +238,17 @@ export function WeatherPageContent() {
                         </span>
                         {overridden && <span className="olive-muted mr-2 text-xs">גובר עליו ידני</span>}
                       </td>
-                      <td className="p-2 whitespace-nowrap">
+                      {/* olive-ltr-num — inside the RTL document the bidi
+                          algorithm otherwise paints this max-first, as
+                          35.7°–20.3°. A dir="ltr" attribute does not fix it;
+                          the rule in olive.css says why. */}
+                      <td className="olive-ltr-num p-2 whitespace-nowrap">
                         {day.temp_min ?? '—'}°–{day.temp_max ?? '—'}°
                       </td>
-                      <td className={`p-2 ${rain > RAIN_ALERT_MM ? 'font-bold' : ''}`}>
+                      <td className={`p-2 ${rain > thresholds.rainAlertMm ? 'font-bold' : ''}`}>
                         {day.rain_mm ?? '—'}
                       </td>
-                      <td className={`p-2 ${wind > WIND_ALERT_KMH ? 'font-bold' : ''}`}>
+                      <td className={`p-2 ${wind > thresholds.windAlertKmh ? 'font-bold' : ''}`}>
                         {day.wind_kmh ?? '—'}
                       </td>
                       <td className="p-2">

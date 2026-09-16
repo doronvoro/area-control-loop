@@ -23,7 +23,8 @@
 
 import type { ParameterRule } from '@/types/database';
 import { DEFAULT_CATEGORY_THRESHOLDS } from './constants';
-import type { CategoryThresholds } from './logic';
+import { DEFAULT_WEATHER_THRESHOLDS } from './logic';
+import type { CategoryThresholds, WeatherThresholds } from './logic';
 
 // --- Types ---
 
@@ -45,6 +46,14 @@ export interface CategoryBandField {
   column: string;
   key: keyof CategoryThresholds;
   label: string;
+}
+
+/** One editable forecast level. `unit` is the suffix its input shows. */
+export interface WeatherBandField {
+  column: string;
+  key: keyof WeatherThresholds;
+  label: string;
+  unit: string;
 }
 
 /**
@@ -130,9 +139,31 @@ export const DEFAULT_ALERT_BOUNDS: AlertBounds = {
   dryHigh: 45,
 };
 
+/**
+ * The two forecast alert levels.
+ *
+ * `column` is both the wire name and the form field name, as with the category
+ * bands — the weather tab posts flat snake_case, so no translation is needed
+ * between the form and the request body.
+ */
+export const WEATHER_BAND_FIELDS: WeatherBandField[] = [
+  { column: 'rain_alert_mm', key: 'rainAlertMm', label: 'סף הגשם', unit: 'מ״מ' },
+  { column: 'wind_alert_kmh', key: 'windAlertKmh', label: 'סף הרוח', unit: 'קמ״ש' },
+];
+
+/**
+ * Upper bound for the weather levels.
+ *
+ * Not 100, which is the cap every other field here carries because it is a
+ * percentage. These are millimetres and km/h: 100 would reject a real gust.
+ * 200 is still a guard against a typo like 2500.
+ */
+export const WEATHER_MAX = 200;
+
 /** Every form field name, split by tab — the dialog uses these to route errors and dirty checks. */
 export const CATEGORY_FIELD_NAMES = CATEGORY_BAND_FIELDS.map((f) => f.column);
 export const ALERT_FIELD_NAMES = ALERT_BAND_FIELDS.map((f) => f.key);
+export const WEATHER_FIELD_NAMES = WEATHER_BAND_FIELDS.map((f) => f.column);
 
 // --- Parsing and validation ---
 
@@ -176,23 +207,53 @@ export function parseAlertBounds(input: Record<string, unknown>): ParseResult<Al
 }
 
 /**
- * Both sets from one flat object — the dialog's form values, and the live
+ * Validate and convert the two forecast levels. Same input tolerance as above.
+ *
+ * No cross-field rule exists: rain and wind are independent flags, not a
+ * cascade, so there is no ordering for one to violate.
+ */
+export function parseWeatherThresholds(
+  input: Record<string, unknown>
+): ParseResult<WeatherThresholds> {
+  const read = readNumbers(
+    input,
+    WEATHER_BAND_FIELDS.map((f) => ({ name: f.column, label: f.label })),
+    WEATHER_MAX
+  );
+  if (read.errors.length > 0) return { ok: false, errors: read.errors };
+
+  const levels = {} as WeatherThresholds;
+  for (const field of WEATHER_BAND_FIELDS) levels[field.key] = read.values[field.column];
+
+  return { ok: true, value: levels };
+}
+
+/**
+ * All three sets from one flat object — the dialog's form values, and the live
  * preview's only gate. A preview is drawn if and only if this returns ok.
  */
 export function parseThresholdForm(
   input: Record<string, unknown>
-): ParseResult<{ bands: CategoryThresholds; bounds: AlertBounds }> {
+): ParseResult<{ bands: CategoryThresholds; bounds: AlertBounds; weather: WeatherThresholds }> {
   const category = parseCategoryThresholds(input);
   const alert = parseAlertBounds(input);
+  const weather = parseWeatherThresholds(input);
 
-  if (!category.ok || !alert.ok) {
+  if (!category.ok || !alert.ok || !weather.ok) {
     return {
       ok: false,
-      errors: [...(category.ok ? [] : category.errors), ...(alert.ok ? [] : alert.errors)],
+      errors: [
+        ...(category.ok ? [] : category.errors),
+        ...(alert.ok ? [] : alert.errors),
+        ...(weather.ok ? [] : weather.errors),
+      ],
     };
   }
 
-  return { ok: true, value: { bands: category.value, bounds: alert.value } };
+  return {
+    ok: true,
+    value: { bands: category.value, bounds: alert.value, weather: weather.value },
+  };
 }
 
 /**
@@ -301,6 +362,13 @@ export function toCategoryColumns(bands: CategoryThresholds): Record<string, num
   return columns;
 }
 
+/** camelCase levels -> the weather_alert_thresholds columns. */
+export function toWeatherColumns(levels: WeatherThresholds): Record<string, number> {
+  const columns: Record<string, number> = {};
+  for (const field of WEATHER_BAND_FIELDS) columns[field.column] = levels[field.key];
+  return columns;
+}
+
 /** Bounds -> the rows updateParameterRuleBounds() should touch. */
 export function toAlertUpdates(bounds: AlertBounds): AlertBoundUpdate[] {
   return ALERT_BAND_FIELDS.map((field) => ({
@@ -330,6 +398,14 @@ export function alertToForm(bounds: Partial<AlertBounds>): Record<string, string
   return values;
 }
 
+export function weatherToForm(levels: Partial<WeatherThresholds>): Record<string, string> {
+  const values: Record<string, string> = {};
+  for (const field of WEATHER_BAND_FIELDS) {
+    values[field.column] = String(levels[field.key] ?? DEFAULT_WEATHER_THRESHOLDS[field.key]);
+  }
+  return values;
+}
+
 /** Defaults as form strings, for the "restore defaults" buttons. */
 export function defaultCategoryForm(): Record<string, string> {
   return categoryToForm(DEFAULT_CATEGORY_THRESHOLDS);
@@ -342,16 +418,21 @@ export function defaultAlertForm(): Record<string, string> {
 // --- Private helpers ---
 
 /**
- * Read every named field as a number in 0..100, collecting one issue per field
+ * Read every named field as a number in 0..`max`, collecting one issue per field
  * rather than throwing on the first.
  *
- * The range is not a database constraint — it is the fact that all five of
- * these measurements are percentages. A bound of 600 would not fail any CHECK;
- * it would just mean a band no sample can ever leave.
+ * The range is not a database constraint — for the bands it is the fact that all
+ * five of those measurements are percentages. A bound of 600 would not fail any
+ * CHECK; it would just mean a band no sample can ever leave.
+ *
+ * `max` is a parameter because the weather levels are the one set that is NOT a
+ * percentage: capping wind at 100 would reject a real 120 km/h gust with a
+ * message about percentages.
  */
 function readNumbers(
   input: Record<string, unknown>,
-  fields: { name: string; label: string }[]
+  fields: { name: string; label: string }[],
+  max = 100
 ): { values: Record<string, number>; errors: FieldIssue[] } {
   const values: Record<string, number> = {};
   const errors: FieldIssue[] = [];
@@ -370,8 +451,8 @@ function readNumbers(
       continue;
     }
 
-    if (value < 0 || value > 100) {
-      errors.push({ field: field.name, message: `${field.label} חייב להיות בין 0 ל-100` });
+    if (value < 0 || value > max) {
+      errors.push({ field: field.name, message: `${field.label} חייב להיות בין 0 ל-${max}` });
       continue;
     }
 

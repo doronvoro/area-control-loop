@@ -1189,6 +1189,32 @@ export interface Database {
           updated_at?: string;
         };
       };
+      weather_alert_thresholds: {
+        // Single row, id always 'default'. The levels a FORECAST day is measured
+        // against, unlike the two tables above which read measurements. NUMERIC
+        // arrives as a string over PostgREST; toWeatherThresholds() coerces.
+        Row: {
+          id: string;
+          rain_alert_mm: number;
+          wind_alert_kmh: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          rain_alert_mm: number;
+          wind_alert_kmh: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          rain_alert_mm?: number;
+          wind_alert_kmh?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
       olive_plot_details: {
         Row: {
           area_id: string; // PK, 1:1 with areas
@@ -1456,5 +1482,7 @@ export type Season = Database['public']['Tables']['seasons']['Row'];
 export type YieldEstimate = Database['public']['Tables']['yield_estimates']['Row'];
 export type VarietyWindow = Database['public']['Tables']['variety_windows']['Row'];
 export type WeatherDay = Database['public']['Tables']['weather_days']['Row'];
+export type WeatherAlertThresholdsRow =
+  Database['public']['Tables']['weather_alert_thresholds']['Row'];
 export type NirReport = Database['public']['Tables']['nir_report']['Row'];
 export type HarvestReport = Database['public']['Tables']['harvest_report']['Row'];

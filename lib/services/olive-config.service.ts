@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { toCategoryColumns, type AlertBoundUpdate } from '@/lib/olive/thresholds';
-import type { CategoryThresholds } from '@/lib/olive/logic';
+import { toCategoryColumns, toWeatherColumns, type AlertBoundUpdate } from '@/lib/olive/thresholds';
+import type { CategoryThresholds, WeatherThresholds } from '@/lib/olive/logic';
 
 /**
  * Olive configuration lookups: measurement parameters, their threshold rules,
@@ -96,6 +96,56 @@ export async function upsertCategoryThresholds(
   const { data, error } = await (adminClient.from('plot_category_thresholds') as any)
     .upsert(
       { id: 'default', ...toCategoryColumns(bands), updated_at: new Date().toISOString() },
+      { onConflict: 'id' }
+    )
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * The forecast alert levels, or null when the seed row is missing.
+ *
+ * Same singleton construction and the same 42P01 tolerance as
+ * getCategoryThresholds above — and the same reason for it: this table is newer
+ * than the deploy that reads it, and toWeatherThresholds() turns a null into the
+ * values the flags shipped with, so the strip and every urgency headline stay
+ * correct while the rollout SQL is still waiting to be pasted.
+ */
+export async function getWeatherThresholds(supabase: SupabaseClient) {
+  const { data, error } = await supabase
+    .from('weather_alert_thresholds')
+    .select('*')
+    .eq('id', 'default')
+    .maybeSingle();
+
+  if (error && (error as { code?: string }).code === '42P01') return null;
+  if (error) throw error;
+  return data || null;
+}
+
+/**
+ * Write the forecast alert levels.
+ *
+ * Upsert for the same reason as upsertCategoryThresholds: id is CHECKed to
+ * 'default', so ON CONFLICT (id) cannot be ambiguous and a lost row is
+ * recreated rather than silently not written.
+ *
+ * GLOBAL: no customer_id. Weather is regional — weather_days has no customer_id
+ * either — so there is nothing per-tenant for these levels to vary against.
+ *
+ * Callers MUST validate with parseWeatherThresholds() first; both columns carry
+ * a CHECK.
+ */
+export async function upsertWeatherThresholds(
+  adminClient: SupabaseClient,
+  levels: WeatherThresholds
+): Promise<any> {
+  const { data, error } = await (adminClient.from('weather_alert_thresholds') as any)
+    .upsert(
+      { id: 'default', ...toWeatherColumns(levels), updated_at: new Date().toISOString() },
       { onConflict: 'id' }
     )
     .select()

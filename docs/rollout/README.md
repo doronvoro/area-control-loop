@@ -78,12 +78,19 @@ Ledger repair is deliberately absent: the ledger is already decorative here.
 | # | File | Writes? | Notes |
 | --- | --- | --- | --- |
 | 10 | `09-category-thresholds.sql` | **yes** | Status-card bands. Run any time — the code falls back to the same defaults until it does. |
+| 11 | `10-weather-thresholds.sql` | **yes** | Rain/wind alert levels. Run any time — same fallback. Until it runs, the מזג אוויר settings tab shows the defaults and saving returns a 503 naming the file. |
 
 `09` fixes the four cards on `/olive`, which were classifying against the alert
 bands in `parameter_rules`: תקינה was unreachable, so the גשור 2026 data read
 43 / 0 / 7 / 0 where the prototype reads 37 / 6 / 7 / 0. The file's header has
 the detail. Unlike the steps above it is not ordering-sensitive — the deploy is
 correct with or without it.
+
+`10` moves the last two hardcoded thresholds — rain above 5 mm, wind above
+25 km/h — out of the client bundle so the client can tune them from הגדרת ספי
+מסיק. It seeds the values they were already compiled to, so running it changes
+no behaviour; not running it changes none either, which is why it is also not
+ordering-sensitive.
 
 `01a-fix-report-number.sql` is **not needed on the current production database**.
 Its header explains when it would be.

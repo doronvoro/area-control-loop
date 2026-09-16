@@ -12,7 +12,9 @@ import type {
   PlotLike,
   VarietyWindowLike,
   WeatherDayLike,
+  WeatherThresholds,
 } from './logic';
+import { DEFAULT_WEATHER_THRESHOLDS } from './logic';
 import { DEFAULT_CATEGORY_THRESHOLDS } from './constants';
 
 /** An `areas` row joined with its olive_plot_details, as /api/olive returns it. */
@@ -84,12 +86,40 @@ export function toNirLike(report: ApiNirReport | null | undefined): NirLike | nu
   };
 }
 
+/**
+ * Flatten a weather_days row.
+ *
+ * Temperature is carried for display only — nothing in logic.ts branches on it.
+ * It is coerced like every other NUMERIC because PostgREST sends "18.50", which
+ * a chip would print as `18.50°` rather than `19°`.
+ *
+ * A column that is absent stays null rather than becoming 0: a chip reading
+ * `0 מ"מ` claims no rain is expected, where `—` admits there is no data.
+ */
 export function toWeatherDayLike(row: Record<string, unknown>): WeatherDayLike {
   return {
     entry_date: String(row.entry_date),
     rain_mm: numeric(row.rain_mm),
     wind_kmh: numeric(row.wind_kmh),
     is_manual: Boolean(row.is_manual),
+    temp_min: numeric(row.temp_min),
+    temp_max: numeric(row.temp_max),
+  };
+}
+
+/**
+ * Flatten the weather_alert_thresholds row into the levels the flags read.
+ *
+ * Same NUMERIC-string trap and the same fallback rule as toCategoryThresholds:
+ * a missing row degrades to the values these flags shipped with, so the
+ * dashboard keeps flagging rain at 5 mm rather than at 0.
+ */
+export function toWeatherThresholds(
+  row: Record<string, unknown> | null | undefined
+): WeatherThresholds {
+  return {
+    rainAlertMm: numeric(row?.rain_alert_mm) ?? DEFAULT_WEATHER_THRESHOLDS.rainAlertMm,
+    windAlertKmh: numeric(row?.wind_alert_kmh) ?? DEFAULT_WEATHER_THRESHOLDS.windAlertKmh,
   };
 }
 
