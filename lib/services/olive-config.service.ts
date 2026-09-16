@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { toCategoryColumns, toWeatherColumns, type AlertBoundUpdate } from '@/lib/olive/thresholds';
+import { isMissingTableError } from '@/lib/supabase/errors';
 import type { CategoryThresholds, WeatherThresholds } from '@/lib/olive/logic';
 
 /**
@@ -63,12 +64,13 @@ export async function getCategoryThresholds(supabase: SupabaseClient) {
     .eq('id', 'default')
     .maybeSingle();
 
-  // 42P01 is undefined_table. Merging deploys this code through Vercel while
-  // production schema is applied by hand afterwards (docs/rollout/README.md),
-  // so there is a window where the table is not there yet. toCategoryThresholds
-  // turns a null into the same defaults the table is seeded with, which keeps
-  // the dashboard up; throwing would 500 the entire payload over a config row.
-  if (error && (error as { code?: string }).code === '42P01') return null;
+  // Merging deploys this code through Vercel while production schema is applied
+  // by hand afterwards (docs/rollout/README.md), so there is a window where the
+  // table is not there yet. toCategoryThresholds turns a null into the same
+  // defaults the table is seeded with, which keeps the dashboard up; throwing
+  // would 500 the entire payload over a config row. isMissingTableError knows
+  // which code that window actually produces — PGRST205, not 42P01.
+  if (isMissingTableError(error)) return null;
   if (error) throw error;
   return data || null;
 }
@@ -108,7 +110,7 @@ export async function upsertCategoryThresholds(
 /**
  * The forecast alert levels, or null when the seed row is missing.
  *
- * Same singleton construction and the same 42P01 tolerance as
+ * Same singleton construction and the same missing-table tolerance as
  * getCategoryThresholds above — and the same reason for it: this table is newer
  * than the deploy that reads it, and toWeatherThresholds() turns a null into the
  * values the flags shipped with, so the strip and every urgency headline stay
@@ -121,7 +123,7 @@ export async function getWeatherThresholds(supabase: SupabaseClient) {
     .eq('id', 'default')
     .maybeSingle();
 
-  if (error && (error as { code?: string }).code === '42P01') return null;
+  if (isMissingTableError(error)) return null;
   if (error) throw error;
   return data || null;
 }

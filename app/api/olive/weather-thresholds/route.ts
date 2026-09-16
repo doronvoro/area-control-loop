@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getApiContext, requireAdminOrCustomerOwner } from '@/lib/api/auth-context';
 import { handleApiError } from '@/lib/api-utils';
+import { isMissingTableError } from '@/lib/supabase/errors';
 import { upsertWeatherThresholds } from '@/lib/services/olive-config.service';
 import { parseWeatherThresholds } from '@/lib/olive/thresholds';
 
@@ -43,11 +44,13 @@ export async function PUT(request: Request) {
 
     return NextResponse.json(saved, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
-    // 42P01 is undefined_table: the code is deployed but the schema is not.
+    // The code is deployed but the schema is not — PGRST205, since PostgREST
+    // answers an unknown table out of its schema cache and never reaches
+    // Postgres to raise 42P01.
     // getWeatherThresholds() already swallows it on the read path so the
     // dashboard keeps flagging at the shipped levels; here it is actionable, so
     // say what to run rather than returning a 500 nobody can act on.
-    if ((error as { code?: string }).code === '42P01') {
+    if (isMissingTableError(error)) {
       return NextResponse.json(
         {
           error:

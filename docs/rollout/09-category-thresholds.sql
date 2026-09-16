@@ -14,8 +14,8 @@
 --
 -- ORDERING — this one is safe either way
 -- Merging deploys the code through Vercel before this runs, which is how the
--- module's first rollout went out of order. getCategoryThresholds() treats
--- 42P01 (undefined_table) as "no row" and falls back to the same numbers
+-- module's first rollout went out of order. getCategoryThresholds() treats a
+-- missing table as "no row" and falls back to the same numbers
 -- seeded below, so the dashboard keeps working in the window between the two.
 -- The cards read correctly from the deploy; this file only makes the values
 -- editable in the database rather than fixed in the client bundle.

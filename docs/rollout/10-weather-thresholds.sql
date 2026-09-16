@@ -15,7 +15,7 @@
 --
 -- ORDERING — this one is safe either way
 -- Merging deploys the code through Vercel before this runs.
--- getWeatherThresholds() treats 42P01 (undefined_table) as "no row" and
+-- getWeatherThresholds() treats a missing table as "no row" and
 -- toWeatherThresholds() falls back to the same 5 / 25 seeded below, so the
 -- dashboard, the forecast strip and every urgency headline keep working
 -- unchanged in the window between the two. Until this runs, the מזג אוויר tab
