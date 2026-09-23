@@ -53,7 +53,17 @@ export interface ApiNirReport {
     maturity: number | null;
     irrig_amount: number | null;
     direction: string | null;
+    /** An ISO instant, not a calendar day. NULL = not sent. */
+    sent_to_client_at: string | null;
+    /** auth.users.id — resolve it through `sent_by_name`, not by embedding. */
+    sent_to_client_by: string | null;
   } | null;
+  /**
+   * Resolved from detail.sent_to_client_by by the API, since PostgREST cannot
+   * embed auth.users. Sits beside `detail` rather than inside it because that
+   * object mirrors the nir_report row and this is not one of its columns.
+   */
+  sent_by_name?: string | null;
   [key: string]: unknown;
 }
 

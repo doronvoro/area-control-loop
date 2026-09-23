@@ -46,6 +46,8 @@ interface DashboardPayload {
   weatherDays: Record<string, unknown>[];
   weatherThresholds: Record<string, unknown> | null;
   season: { id: string; name: string; year_type: string | null } | null;
+  /** Readings in the season, and how many have not reached the client. */
+  nirCounts?: { total: number; unsent: number };
 }
 
 const GROWER_GROUPS: { type: PlotType; label: string }[] = [
@@ -229,6 +231,37 @@ export function OliveDashboardContent() {
                   }}
                 />
               </div>
+
+              {/* Deliberately here and not a fifth status card: those four are
+                  toggle-filters that narrow the list in place, so a card that
+                  navigated away would look identical and behave differently on
+                  click. They also count plots, where this counts readings. This
+                  card already carries the season's other headline number. */}
+              {data?.nirCounts && (
+                <p className="olive-muted mt-3 flex flex-wrap items-center gap-2 text-sm">
+                  <span>סה״כ {data.nirCounts.total} בדיקות NIR בעונה</span>
+                  {data.nirCounts.unsent > 0 ? (
+                    <>
+                      <span aria-hidden>·</span>
+                      <Link
+                        href="/olive/nir?sent=unsent"
+                        className="olive-pill olive-pill-plan hover:opacity-80"
+                      >
+                        {data.nirCounts.unsent} טרם נשלחו ללקוח
+                      </Link>
+                    </>
+                  ) : (
+                    data.nirCounts.total > 0 && (
+                      <>
+                        <span aria-hidden>·</span>
+                        {/* Zero reads as done, not as a call to action, so it is
+                            not a link to an empty list. */}
+                        <span>הכול נשלח ללקוח</span>
+                      </>
+                    )
+                  )}
+                </p>
+              )}
             </section>
           )}
 

@@ -7,7 +7,7 @@ import {
 import { handleApiError } from '@/lib/api-utils';
 import { getAccessibleAreaIds } from '@/lib/services/customer-area.service';
 import { getOlivePlots, getHarvestedAreaIds } from '@/lib/services/olive-plot.service';
-import { getLatestNirByArea } from '@/lib/services/olive-nir.service';
+import { getLatestNirByArea, getNirSeasonCounts } from '@/lib/services/olive-nir.service';
 import { getYieldEstimatesBySeason } from '@/lib/services/olive-yield.service';
 import { getWeatherDays } from '@/lib/services/olive-weather.service';
 import {
@@ -79,6 +79,9 @@ export async function GET(request: Request) {
         weatherDays,
         weatherThresholds,
         season: null,
+        // Zeros rather than an absent key: an admin with no customer selected
+        // should read "nothing to send", not crash the season card on undefined.
+        nirCounts: { total: 0, unsent: 0 },
       });
     }
 
@@ -106,9 +109,14 @@ export async function GET(request: Request) {
       getActiveSeason(ctx.supabase),
     ]);
 
-    const yieldEstimates = season
-      ? await getYieldEstimatesBySeason(ctx.supabase, (season as any).id, areaIds)
-      : {};
+    // Both need the resolved season, so they cannot join the batch above.
+    const [yieldEstimates, nirCounts] = await Promise.all([
+      season ? getYieldEstimatesBySeason(ctx.supabase, (season as any).id, areaIds) : {},
+      // Counts, not rows: the card needs two numbers and the archive only grows.
+      // Not derived from latestNir above — that holds one reading per plot, so a
+      // plot sitting on four unsent readings would be counted once.
+      getNirSeasonCounts(ctx.supabase, areaIds, season),
+    ]);
 
     return NextResponse.json({
       plots,
@@ -121,6 +129,7 @@ export async function GET(request: Request) {
       weatherDays,
       weatherThresholds,
       season,
+      nirCounts,
     });
   } catch (error) {
     return handleApiError(error);

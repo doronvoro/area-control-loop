@@ -59,6 +59,9 @@ export function NirLogToolbar({
 
   return (
     <OliveFilterPanel
+      // Five fields now; the default grid suits four. Same override PlotsToolbar
+      // uses for its five.
+      gridClassName="grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5"
       activeCount={countActiveNirFilters(filters)}
       shown={shown}
       total={total}
@@ -146,6 +149,19 @@ export function NirLogToolbar({
                 {dir}
               </SelectItem>
             ))}
+          </SelectContent>
+        </Select>
+      </FilterField>
+
+      <FilterField label="שליחה ללקוח" htmlFor="nir-filter-sent">
+        <Select value={filters.sent} onValueChange={(value) => set('sent', value)}>
+          <SelectTrigger id="nir-filter-sent" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent position="popper" sideOffset={4}>
+            <SelectItem value="all">כל הבדיקות</SelectItem>
+            <SelectItem value="sent">נשלח ללקוח</SelectItem>
+            <SelectItem value="unsent">טרם נשלח</SelectItem>
           </SelectContent>
         </Select>
       </FilterField>

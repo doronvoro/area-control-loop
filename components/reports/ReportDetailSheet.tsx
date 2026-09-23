@@ -903,6 +903,15 @@ function OliveReportDetail({
           { label: 'אינדקס הבשלה', value: detail.maturity },
           { label: 'השקיה', value: detail.irrig_amount, suffix: ' קוב/דונם' },
           { label: 'כיוון דגימה', value: detail.direction },
+          {
+            label: 'נשלח ללקוח',
+            // sent_to_client_at is an instant; show the viewer's local day.
+            // Not the sender's name: that is an auth.users id which PostgREST
+            // cannot embed, and a raw UUID here would say less than a blank.
+            value: detail.sent_to_client_at
+              ? new Date(String(detail.sent_to_client_at)).toLocaleDateString('he-IL')
+              : null,
+          },
         ]
       : [
           { label: 'מעבר מספר', value: detail.pass_number },

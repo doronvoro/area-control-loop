@@ -17,6 +17,7 @@ import {
   NIR_ROW_CAP,
 } from '@/lib/services/olive-nir.service';
 import { getActiveSeason } from '@/lib/services/olive-config.service';
+import { resolveActorNames } from '@/lib/api/actor-names';
 
 /** Area ids the caller may act on. */
 /** Accessible AND olive. A pest-management area is not a valid target here. */
@@ -90,8 +91,21 @@ export async function GET(request: Request) {
       to: season?.ends_on ?? null,
     });
 
+    // sent_to_client_by is an auth.users id, which PostgREST cannot embed, so
+    // the names are attached here — two queries for the whole page rather than
+    // two per row. They hang off the report, not off `detail`, because that
+    // object mirrors the table and this does not.
+    const senderNames = await resolveActorNames(
+      ctx.adminClient,
+      reports.map((report) => report.detail?.sent_to_client_by)
+    );
+    const withSenders = reports.map((report) => ({
+      ...report,
+      sent_by_name: senderNames.get(report.detail?.sent_to_client_by) ?? null,
+    }));
+
     return NextResponse.json({
-      reports,
+      reports: withSenders,
       season,
       scope: season ? 'season' : 'all',
       // Surfaced, not swallowed: a silently clipped list is how a count starts
@@ -151,11 +165,13 @@ export async function PUT(request: Request) {
     const denied = await denyIfInaccessible(ctx, report_area_id);
     if (denied) return denied;
 
-    const updated = await updateNirReport(ctx.adminClient, report_area_id, {
-      ...values,
-      reportDate: report_date,
-      notes,
-    });
+    const updated = await updateNirReport(
+      ctx.adminClient,
+      report_area_id,
+      { ...values, reportDate: report_date, notes },
+      // auth.users.id, from the session — never anything the body supplied.
+      ctx.user.id
+    );
 
     return NextResponse.json(updated);
   } catch (error) {

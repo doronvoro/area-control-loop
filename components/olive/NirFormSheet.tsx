@@ -4,8 +4,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { AlertTriangle, Check, Compass, FlaskConical, Loader2, MapPin, X } from 'lucide-react';
+import { AlertTriangle, Check, Compass, FlaskConical, Loader2, MapPin, Send, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -75,6 +76,10 @@ const nirSchema = z.object({
   maturity: numericField,
   irrig_amount: numericField,
   notes: z.string().optional(),
+  // Two fields rather than one nullable string: "ticked, date not picked yet" is
+  // a state the form has to be able to hold while the user is in it.
+  sent_to_client: z.boolean().optional(),
+  sent_to_client_at: z.string().optional(),
 });
 
 type NirFormData = z.infer<typeof nirSchema>;
@@ -122,6 +127,8 @@ const EMPTY_FORM = {
   maturity: '',
   irrig_amount: '',
   notes: '',
+  sent_to_client: false,
+  sent_to_client_at: '',
 };
 
 function defaultsFor(editor: NirEditorState): NirFormData {
@@ -144,6 +151,8 @@ function defaultsFor(editor: NirEditorState): NirFormData {
     maturity: str(row.maturity),
     irrig_amount: str(row.irrigAmount),
     notes: row.notes,
+    sent_to_client: row.sentToClientAt !== null,
+    sent_to_client_at: row.sentToClientAt ?? '',
   };
 }
 
@@ -303,6 +312,17 @@ function NirFormBody({
   }, [oil, water, rules]);
 
   const onSubmit = async (values: NirFormData) => {
+    // Compared against the stored value rather than read from
+    // form.formState.dirtyFields: that object is a Proxy which only tracks
+    // fields subscribed during RENDER, so reading it here — inside a callback —
+    // comes back empty and the send mark silently never posts. Both sides are a
+    // local YYYY-MM-DD, so they compare directly.
+    const storedSentDay = editor.mode === 'edit' ? editor.row.sentToClientAt : null;
+    const nextSentDay = values.sent_to_client
+      ? values.sent_to_client_at || todayString()
+      : null;
+    const sentChanged = nextSentDay !== storedSentDay;
+
     try {
       setSaving(true);
       setError(null);
@@ -323,6 +343,18 @@ function NirFormBody({
           maturity: optionalNumber(values.maturity),
           irrig_amount: optionalNumber(values.irrig_amount),
           notes: values.notes || null,
+          // Only when it actually changed. nirRow() strips undefined, so an
+          // untouched checkbox leaves the stored instant exactly as it was —
+          // otherwise opening a sent reading to fix a typo in oil would
+          // overwrite a real send time (18:20) with local midnight. An explicit
+          // null genuinely clears it, and the column with it.
+          ...(sentChanged
+            ? {
+                sent_to_client_at: nextSentDay
+                  ? new Date(`${nextSentDay}T00:00:00`).toISOString()
+                  : null,
+              }
+            : {}),
         }),
       });
 
@@ -657,6 +689,74 @@ function NirFormBody({
                       <Textarea rows={2} {...field} value={field.value ?? ''} />
                     </FormControl>
                     <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Sending to the client. A mark, not an action — nothing in the
+                  app sends anything yet, and the caption has to say so or the
+                  checkbox reads as "send it now". */}
+              <FormField
+                control={form.control}
+                name="sent_to_client"
+                render={({ field }) => (
+                  <FormItem className="mt-4 rounded-lg border border-dashed p-3">
+                    <div className="flex items-start gap-2 space-y-0">
+                      <FormControl>
+                        <Checkbox
+                          className="mt-0.5"
+                          checked={!!field.value}
+                          onCheckedChange={(checked) => {
+                            field.onChange(checked === true);
+                            // Default the date on the way in rather than
+                            // validating on the way out: an empty string reaching
+                            // PostgREST as a timestamptz is a 400.
+                            if (checked === true && !form.getValues('sent_to_client_at')) {
+                              form.setValue('sent_to_client_at', todayString(), {
+                                shouldDirty: true,
+                              });
+                            }
+                          }}
+                        />
+                      </FormControl>
+                      <div className="flex-1">
+                        <FormLabel className="!mt-0 flex items-center gap-1.5 font-semibold">
+                          <Send className="size-3.5" />
+                          נשלח ללקוח
+                        </FormLabel>
+                        <p className="olive-muted mt-0.5 text-xs">
+                          סימון ידני — המערכת אינה שולחת את הדוח בעצמה.
+                        </p>
+                      </div>
+                    </div>
+
+                    {field.value && (
+                      <div className="mt-3 grid gap-4 md:grid-cols-2">
+                        <FormField
+                          control={form.control}
+                          name="sent_to_client_at"
+                          render={({ field: dateField }) => (
+                            <FormItem>
+                              <FormLabel className="text-sm font-semibold">תאריך השליחה</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="date"
+                                  className="h-9"
+                                  {...dateField}
+                                  value={dateField.value ?? ''}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        {editor.mode === 'edit' && editor.row.sentToClientBy && (
+                          <p className="olive-muted self-end pb-2 text-xs">
+                            נשלח ע״י {editor.row.sentToClientBy}
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </FormItem>
                 )}
               />

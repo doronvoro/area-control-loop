@@ -10,6 +10,7 @@ import {
   FileText,
   FlaskConical,
   Loader2,
+  MailCheck,
   MapPin,
   Plus,
   Tractor,
@@ -499,6 +500,19 @@ function PlotDetailBody({
                         <span className="olive-muted text-xs">
                           {daysSinceLabel(r.reportDate, now) ?? ''}
                         </span>
+                        {/* This list has its own markup, so it does not inherit
+                            the log's נשלח column. Without the glyph, marking a
+                            reading sent in the log and then opening the plot
+                            would look like it had not taken. */}
+                        {r.sentToClientAt && (
+                          <span
+                            className="inline-flex"
+                            title={`נשלח ללקוח ב-${r.sentToClientAt}`}
+                            aria-label="נשלח ללקוח"
+                          >
+                            <MailCheck className="text-primary size-3.5" />
+                          </span>
+                        )}
                         <span className="mr-auto flex items-center gap-3 tabular-nums">
                           <span>
                             <span className="olive-muted text-xs">שמן </span>

@@ -145,18 +145,20 @@ INSERT INTO public.report_areas (id, area_id, area_type_id, name, description, s
   ('b1ff0000-0000-4000-8000-000000000006', 'a8ff0000-0000-4000-8000-000000000006', 'nir', 'בדיקת NIR - פלוגות 2016', 'בדיקת NIR', 'completed', 100, CURRENT_DATE - 6);
 
 -- dry is GENERATED and must not be supplied.
-INSERT INTO public.nir_report (report_area_id, sub_area_id, oil, water, green, acid, maturity, irrig_amount, direction) VALUES
+-- Two of the five carry a send mark, so the נשלח column, the טרם נשלח filter and
+-- the season counter on /olive all have something to show on a fresh install.
+INSERT INTO public.nir_report (report_area_id, sub_area_id, oil, water, green, acid, maturity, irrig_amount, direction, sent_to_client_at) VALUES
   -- oil 21 ⇒ urgent. With rain tomorrow the headline becomes "מסיק דחוף".
-  ('b1ff0000-0000-4000-8000-000000000001', 'a9ff0000-0000-4000-8000-000000000003', 21.0, 52.0, 28, 0.30, 3.4, 0.00, 'מערב'),
+  ('b1ff0000-0000-4000-8000-000000000001', 'a9ff0000-0000-4000-8000-000000000003', 21.0, 52.0, 28, 0.30, 3.4, 0.00, 'מערב', NOW() - INTERVAL '1 day'),
   -- THE DIVERGENCE: oil 19.4 ⇒ plan, but dry computes to 45.33 ⇒ urgent.
   -- Reads "מתוכנן למסיק בקרוב" in the alerts list and "חריגה" on the status card.
-  ('b1ff0000-0000-4000-8000-000000000002', NULL, 19.4, 57.2, 35, 0.32, 3.1, 0.25, 'צפון'),
+  ('b1ff0000-0000-4000-8000-000000000002', NULL, 19.4, 57.2, 35, 0.32, 3.1, 0.25, 'צפון', NULL),
   -- oil 18 / water 52 ⇒ plan + optimum ⇒ תקין
-  ('b1ff0000-0000-4000-8000-000000000003', NULL, 18.0, 52.0, 40, 0.28, 2.9, 0.50, 'דרום'),
+  ('b1ff0000-0000-4000-8000-000000000003', NULL, 18.0, 52.0, 40, 0.28, 2.9, 0.50, 'דרום', NOW() - INTERVAL '2 days'),
   -- water 45 ⇒ water stress ⇒ חריגה, while oil is still low
-  ('b1ff0000-0000-4000-8000-000000000004', NULL, 12.0, 45.0, 62, 0.21, 1.8, 1.00, 'מזרח'),
+  ('b1ff0000-0000-4000-8000-000000000004', NULL, 12.0, 45.0, 62, 0.21, 1.8, 1.00, 'מזרח', NULL),
   -- oil 22 ⇒ urgent, on the plot that is then harvested below
-  ('b1ff0000-0000-4000-8000-000000000006', NULL, 22.1, 50.5, 22, 0.35, 3.8, 0.00, 'מרכז');
+  ('b1ff0000-0000-4000-8000-000000000006', NULL, 22.1, 50.5, 22, 0.35, 3.8, 0.00, 'מרכז', NULL);
 
 -- Plot 5 (שקמים) gets NO measurement, so it lands in "בבדיקות".
 

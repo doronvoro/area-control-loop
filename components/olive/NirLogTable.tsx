@@ -1,6 +1,6 @@
 'use client';
 
-import { Pencil, Trash2 } from 'lucide-react';
+import { MailCheck, Pencil, Send, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Table,
@@ -36,6 +36,10 @@ interface NirLogTableProps {
   onSort: (field: NirSortField) => void;
   onEdit: (row: NirRow) => void;
   onDelete: (row: NirRow) => void;
+  /** Marks the reading sent, or clears the mark. Stamped server-side. */
+  onToggleSent: (row: NirRow) => void;
+  /** The row whose send mark is mid-flight, so its button can be disabled. */
+  togglingSentId?: string | null;
   activeId?: string | null;
   now: Date;
 }
@@ -52,6 +56,8 @@ export function NirLogTable({
   onSort,
   onEdit,
   onDelete,
+  onToggleSent,
+  togglingSentId,
   activeId,
   now,
 }: NirLogTableProps) {
@@ -123,6 +129,12 @@ export function NirLogTable({
           <SortableTableHead field="status" sort={sort} onSort={onSort}>
             סטטוס
           </SortableTableHead>
+          {/* Not breakpoint-hidden like דוגם and הערות below it: on a phone this
+              is the answer to "what do I still owe the grower?", which is the
+              reason the column exists. */}
+          <SortableTableHead field="sent" sort={sort} onSort={onSort}>
+            נשלח
+          </SortableTableHead>
           <TableHead className="hidden lg:table-cell">דוגם</TableHead>
           <TableHead className="hidden xl:table-cell">הערות</TableHead>
           <TableHead className="w-px" />
@@ -185,6 +197,21 @@ export function NirLogTable({
                   <span className="olive-muted">—</span>
                 )}
               </TableCell>
+              <TableCell>
+                {row.sentToClientAt ? (
+                  <span
+                    className="olive-pill olive-pill-ok"
+                    // The sender goes in the tooltip rather than a second line:
+                    // the date column already carries one, and two relative
+                    // sub-lines per row is noise.
+                    title={row.sentToClientBy ? `נשלח ע״י ${row.sentToClientBy}` : undefined}
+                  >
+                    {row.sentToClientAt}
+                  </span>
+                ) : (
+                  <span className="olive-muted">—</span>
+                )}
+              </TableCell>
               <TableCell className="olive-muted hidden text-xs lg:table-cell">
                 {row.workerName || '—'}
               </TableCell>
@@ -196,6 +223,31 @@ export function NirLogTable({
               </TableCell>
               <TableCell className="p-1">
                 <div className="flex items-center">
+                  {/* First child, so in RTL it sits on the leading (right) edge
+                      nearest the row — the most reachable slot for the action
+                      used most — and the destructive one stays last. */}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={togglingSentId === row.id}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToggleSent(row);
+                    }}
+                    title={row.sentToClientAt ? 'בטל סימון שליחה' : 'סמן כנשלח ללקוח'}
+                    aria-label={
+                      row.sentToClientAt
+                        ? `בטל סימון שליחה ללקוח לבדיקה בחלקה ${row.areaName}`
+                        : `סמן בדיקה בחלקה ${row.areaName} כנשלחה ללקוח`
+                    }
+                  >
+                    {row.sentToClientAt ? (
+                      <MailCheck className="size-4 text-primary" />
+                    ) : (
+                      <Send className="size-4" />
+                    )}
+                  </Button>
                   <Button
                     type="button"
                     variant="ghost"

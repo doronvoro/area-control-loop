@@ -16,7 +16,7 @@ import {
   type ParameterRule,
   type ParameterStatus,
 } from '@/types/database';
-import { evaluateParameter } from './logic';
+import { evaluateParameter, toDateString } from './logic';
 import type { ApiNirReport } from './adapt';
 import type { SortState } from '@/components/ui/sortable-table-head';
 
@@ -42,6 +42,16 @@ export interface NirRow {
   acid: number | null;
   maturity: number | null;
   irrigAmount: number | null;
+  /**
+   * The LOCAL calendar day the reading was sent to the client, or null.
+   *
+   * sent_to_client_at is stored as an instant, so this is not a slice: a 01:30
+   * local send is …T22:30:00Z the day before, and slicing would display
+   * yesterday. The instant itself stays reachable through `raw`.
+   */
+  sentToClientAt: string | null;
+  /** Resolved display name of whoever sent it. Null when unsent or unresolvable. */
+  sentToClientBy: string | null;
   notes: string;
   /** The row the drawer resets the form from. */
   raw: ApiNirReport;
@@ -58,6 +68,7 @@ export type NirSortField =
   | 'acid'
   | 'maturity'
   | 'irrigAmount'
+  | 'sent'
   | 'status';
 
 export interface NirFilters {
@@ -67,6 +78,8 @@ export interface NirFilters {
   /** 'all' | ParameterStatus | 'none' (no oil reading to score). */
   status: string;
   direction: string;
+  /** 'all' | 'sent' | 'unsent'. */
+  sent: string;
 }
 
 export const EMPTY_NIR_FILTERS: NirFilters = {
@@ -74,6 +87,7 @@ export const EMPTY_NIR_FILTERS: NirFilters = {
   areaId: '',
   status: 'all',
   direction: 'all',
+  sent: 'all',
 };
 
 /**
@@ -87,6 +101,7 @@ export function countActiveNirFilters(f: NirFilters): number {
   if (f.areaId !== '' && f.areaId !== 'all') n += 1;
   if (f.status !== 'all') n += 1;
   if (f.direction !== 'all') n += 1;
+  if (f.sent !== 'all') n += 1;
   return n;
 }
 
@@ -120,6 +135,10 @@ export function toNirRow(report: ApiNirReport, taktNameById: Map<string, string>
     acid: numeric(detail.acid),
     maturity: numeric(detail.maturity),
     irrigAmount: numeric(detail.irrig_amount),
+    sentToClientAt: detail.sent_to_client_at
+      ? toDateString(new Date(String(detail.sent_to_client_at)))
+      : null,
+    sentToClientBy: (report.sent_by_name as string | null) ?? null,
     notes: (report.description as string | null) ?? '',
     raw: report,
   };
@@ -146,6 +165,9 @@ export function filterNirRows(
   return rows.filter((row) => {
     if (areaId && row.areaId !== areaId) return false;
     if (filters.direction !== 'all' && row.direction !== filters.direction) return false;
+
+    if (filters.sent !== 'all' && (row.sentToClientAt !== null) !== (filters.sent === 'sent'))
+      return false;
 
     if (filters.status !== 'all') {
       const status = rowStatus(row, rules);
@@ -205,6 +227,10 @@ function compare(a: NirRow, b: NirRow, field: NirSortField, rules: ParameterRule
 
   if (field === 'reportDate') {
     return nullsLast(a.reportDate, b.reportDate, (x, y) => x.localeCompare(y));
+  }
+
+  if (field === 'sent') {
+    return nullsLast(a.sentToClientAt, b.sentToClientAt, (x, y) => x.localeCompare(y));
   }
 
   if (field === 'status') {

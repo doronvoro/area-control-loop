@@ -79,6 +79,8 @@ Ledger repair is deliberately absent: the ledger is already decorative here.
 | --- | --- | --- | --- |
 | 10 | `09-category-thresholds.sql` | **yes** | Status-card bands. Run any time — the code falls back to the same defaults until it does. |
 | 11 | `10-weather-thresholds.sql` | **yes** | Rain/wind alert levels. Run any time — same fallback. Until it runs, the מזג אוויר settings tab shows the defaults and saving returns a 503 naming the file. |
+| 12 | `11-grower-aliases.sql` | **yes** | Remembers grower-name merges (`קיבוץ גשור` + its two strays) so they survive the next import. Needs `growers` from 20260922100000 first; the file guards for it. Safe either way. |
+| 13 | `12-nir-sent-to-client.sql` | **yes** | Two columns on `nir_report`: whether a reading went to the client, and when. **Unlike 09 and 10, run this BEFORE the deploy** — reads degrade to "not sent" but marking a reading sent returns PGRST204 until it has. |
 
 `09` fixes the four cards on `/olive`, which were classifying against the alert
 bands in `parameter_rules`: תקינה was unreachable, so the גשור 2026 data read

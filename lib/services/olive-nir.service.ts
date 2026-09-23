@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { findOrCreateReportArea } from '@/lib/api/utils';
-import { AreaTypeId } from '@/types/database';
+import { AreaTypeId, type Season } from '@/types/database';
 
 /**
  * NIR ripeness measurements.
@@ -21,6 +21,14 @@ export interface NirValuesInput {
   maturity?: number | null;
   irrig_amount?: number | null;
   direction?: string | null;
+  /**
+   * When the reading went to the client, as an ISO instant. `null` clears it.
+   *
+   * `sent_to_client_by` is deliberately NOT on this type: it is derived from the
+   * acting user inside updateNirReport, so a client cannot claim someone else
+   * sent it.
+   */
+  sent_to_client_at?: string | null;
 }
 
 export interface CreateNirParams extends NirValuesInput {
@@ -51,6 +59,7 @@ function nirRow(values: NirValuesInput): Record<string, unknown> {
     'maturity',
     'irrig_amount',
     'direction',
+    'sent_to_client_at',
   ];
   for (const key of keys) {
     if (values[key] !== undefined) row[key] = values[key];
@@ -114,15 +123,29 @@ export async function createNirReport(
   return { report_area_id: reportAreaId, detail: data };
 }
 
+/**
+ * `actingUserId` is auth.users.id — ctx.user.id, never a workers.id, and never a
+ * value the client supplied. See the 20260923140000 migration header for why the
+ * audit column points at auth.users.
+ */
 export async function updateNirReport(
   adminClient: SupabaseClient,
   reportAreaId: string,
-  values: NirValuesInput & { reportDate?: string; notes?: string | null }
+  values: NirValuesInput & { reportDate?: string; notes?: string | null },
+  actingUserId?: string | null
 ): Promise<any> {
   const { reportDate, notes, ...measurement } = values;
+  const row = nirRow(measurement);
+
+  // Derived here rather than accepted from the caller. `in` rather than a
+  // truthiness test: an explicit null means "un-send", which must clear the
+  // attribution too, while an absent key must leave both columns untouched.
+  if ('sent_to_client_at' in row) {
+    row.sent_to_client_by = row.sent_to_client_at ? (actingUserId ?? null) : null;
+  }
 
   const { data, error } = await (adminClient.from('nir_report') as any)
-    .update({ ...nirRow(measurement), updated_at: new Date().toISOString() })
+    .update({ ...row, updated_at: new Date().toISOString() })
     .eq('report_area_id', reportAreaId)
     .select()
     .single();
@@ -206,6 +229,57 @@ export async function getNirReports(
 
   if (error) throw error;
   return (data || []).map(flattenDetail);
+}
+
+/**
+ * How many readings the season holds, and how many have not gone to the client.
+ *
+ * Two head-only counts rather than a fetch-and-filter: the dashboard needs the
+ * numbers, not the rows, and this stays the same cost however large the archive
+ * gets. Deliberately NOT derived from getLatestNirByArea, which the dashboard
+ * already calls — that returns one reading per plot, so a plot sitting on four
+ * unsent readings would report one.
+ *
+ * Queries nir_report and joins upward, the shape getNextPassNumber already uses
+ * in olive-harvest.service.ts: the sent flag lives on the detail row while the
+ * area and the date live on the header.
+ */
+export async function getNirSeasonCounts(
+  supabase: SupabaseClient,
+  areaIds: string[],
+  season: Season | null
+): Promise<{ total: number; unsent: number }> {
+  if (areaIds.length === 0) return { total: 0, unsent: 0 };
+
+  const scoped = () => {
+    let query = (supabase.from('nir_report') as any)
+      .select('report_area_id, report_area:report_areas!inner(area_id, report_date)', {
+        count: 'exact',
+        head: true,
+      })
+      .in('report_area.area_id', areaIds);
+
+    if (season?.starts_on) {
+      query = query.gte('report_area.report_date', `${season.starts_on}T00:00:00+00:00`);
+    }
+    if (season?.ends_on) {
+      // Half-open, for the reason getNirReports spells out: report_date is a
+      // timestamptz holding a bare day at midnight, so .lte would drop every
+      // reading taken ON the season's last day.
+      query = query.lt('report_area.report_date', `${dayAfter(season.ends_on)}T00:00:00+00:00`);
+    }
+    return query;
+  };
+
+  const [totalResult, unsentResult] = await Promise.all([
+    scoped(),
+    scoped().is('sent_to_client_at', null),
+  ]);
+
+  if (totalResult.error) throw totalResult.error;
+  if (unsentResult.error) throw unsentResult.error;
+
+  return { total: totalResult.count ?? 0, unsent: unsentResult.count ?? 0 };
 }
 
 /** The calendar day after `day` (YYYY-MM-DD), for a half-open upper bound. */

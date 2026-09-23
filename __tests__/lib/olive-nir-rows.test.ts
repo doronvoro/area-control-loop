@@ -4,11 +4,13 @@ import {
   filterNirRows,
   sortNirRows,
   hasActiveNirFilters,
+  countActiveNirFilters,
   EMPTY_NIR_FILTERS,
   type NirRow,
   type NirSortField,
 } from '@/lib/olive/nir-rows';
 import type { ApiNirReport } from '@/lib/olive/adapt';
+import { toDateString } from '@/lib/olive/logic';
 import { ParameterStatus, type ParameterRule } from '@/types/database';
 
 /**
@@ -79,7 +81,10 @@ function apiReport(overrides: Partial<Record<string, unknown>> = {}): ApiNirRepo
       acid: '0.35',
       maturity: '3.2',
       irrig_amount: '1.50',
+      sent_to_client_at: '2026-09-13T09:15:00+00:00',
+      sent_to_client_by: 'user-1',
     },
+    sent_by_name: 'דני',
     ...overrides,
   } as unknown as ApiNirReport;
 }
@@ -105,6 +110,8 @@ function row(overrides: Partial<NirRow> = {}): NirRow {
     acid: null,
     maturity: null,
     irrigAmount: null,
+    sentToClientAt: null,
+    sentToClientBy: null,
     notes: '',
     raw: {} as ApiNirReport,
     ...overrides,
@@ -155,12 +162,40 @@ describe('toNirRow', () => {
     expect(r.areaName).toBe('');
     expect(r.workerName).toBe('');
     expect(r.notes).toBe('');
+    expect(r.sentToClientAt).toBeNull();
   });
 
   it('treats an empty-string measurement as missing, not as zero', () => {
     const r = toNirRow(apiReport({ detail: { oil: '', water: null } }), TAKTS);
     expect(r.oil).toBeNull();
     expect(r.water).toBeNull();
+  });
+
+  it('converts the send instant to the LOCAL day, not the UTC one', () => {
+    // 22:30 UTC is already the next day in Israel (UTC+2/+3). Slicing the ISO
+    // string would print the 14th to a viewer for whom it happened on the 15th.
+    // Asserted against toDateString rather than a literal so this agrees with
+    // itself in CI (UTC) and on a laptop in Israel.
+    const iso = '2026-09-14T22:30:00Z';
+    const r = toNirRow(apiReport({ detail: { sent_to_client_at: iso } }), TAKTS);
+    expect(r.sentToClientAt).toBe(toDateString(new Date(iso)));
+  });
+
+  it('maps a reading that was never sent to null', () => {
+    const r = toNirRow(apiReport({ detail: { sent_to_client_at: null } }), TAKTS);
+    expect(r.sentToClientAt).toBeNull();
+  });
+
+  it('treats an empty-string send stamp as never sent', () => {
+    // A `!= null` guard here would leak '' through as a truthy-looking value and
+    // render an empty pill claiming the reading had been sent.
+    const r = toNirRow(apiReport({ detail: { sent_to_client_at: '' } }), TAKTS);
+    expect(r.sentToClientAt).toBeNull();
+  });
+
+  it('reads the sender name the API attached, not one from detail', () => {
+    expect(toNirRow(apiReport(), TAKTS).sentToClientBy).toBe('דני');
+    expect(toNirRow(apiReport({ sent_by_name: null }), TAKTS).sentToClientBy).toBeNull();
   });
 
   it('exposes report_areas.id as the row key, not the detail row', () => {
@@ -230,6 +265,18 @@ describe('sortNirRows', () => {
     expect(sortBy(rows, 'reportDate', 'asc').map((r) => r.id)).toEqual(['newer', 'older']);
   });
 
+  it('sorts send dates chronologically and keeps unsent rows last', () => {
+    const rows = [
+      row({ id: 'none' }),
+      row({ id: 'late', sentToClientAt: '2026-09-20' }),
+      row({ id: 'early', sentToClientAt: '2026-09-02' }),
+    ];
+    expect(sortBy(rows, 'sent').map((r) => r.id)).toEqual(['early', 'late', 'none']);
+    // Unsent is "no data", not a small value, so it stays at the bottom when the
+    // direction flips rather than jumping to the top.
+    expect(sortBy(rows, 'sent', 'desc').map((r) => r.id)).toEqual(['late', 'early', 'none']);
+  });
+
   it('does not mutate the input array', () => {
     const rows = [row({ id: 'b', oil: 20 }), row({ id: 'a', oil: 10 })];
     sortBy(rows, 'oil');
@@ -250,6 +297,7 @@ describe('filterNirRows', () => {
       direction: 'צפון',
       workerName: 'דני',
       reportNumber: 101,
+      sentToClientAt: '2026-09-13',
     }),
     row({
       id: 'b',
@@ -305,6 +353,14 @@ describe('filterNirRows', () => {
     expect(filter({ search: '  מיצר  ' })).toEqual(['a']);
   });
 
+  it('filters to readings already sent to the client', () => {
+    expect(filter({ sent: 'sent' })).toEqual(['a']);
+  });
+
+  it('filters to readings not yet sent', () => {
+    expect(filter({ sent: 'unsent' })).toEqual(['b', 'c']);
+  });
+
   it('combines filters with AND', () => {
     expect(filter({ areaId: 'area-2', direction: 'דרום' })).toEqual(['b']);
     expect(filter({ areaId: 'area-1', direction: 'דרום' })).toEqual([]);
@@ -329,5 +385,13 @@ describe('hasActiveNirFilters', () => {
     expect(hasActiveNirFilters({ ...EMPTY_NIR_FILTERS, status: ParameterStatus.PLAN })).toBe(true);
     expect(hasActiveNirFilters({ ...EMPTY_NIR_FILTERS, direction: 'צפון' })).toBe(true);
     expect(hasActiveNirFilters({ ...EMPTY_NIR_FILTERS, search: 'מיצר' })).toBe(true);
+    expect(hasActiveNirFilters({ ...EMPTY_NIR_FILTERS, sent: 'unsent' })).toBe(true);
+    expect(hasActiveNirFilters({ ...EMPTY_NIR_FILTERS, sent: 'sent' })).toBe(true);
+  });
+
+  it('counts the send filter, so the badge and the clear button agree', () => {
+    expect(countActiveNirFilters(EMPTY_NIR_FILTERS)).toBe(0);
+    expect(countActiveNirFilters({ ...EMPTY_NIR_FILTERS, sent: 'unsent' })).toBe(1);
+    expect(countActiveNirFilters({ ...EMPTY_NIR_FILTERS, sent: 'unsent', search: 'מיצר' })).toBe(2);
   });
 });
