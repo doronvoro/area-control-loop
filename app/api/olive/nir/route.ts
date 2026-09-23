@@ -135,13 +135,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'אין הרשאה לחלקה זו' }, { status: 403 });
     }
 
-    const created = await createNirReport(ctx.supabase, ctx.adminClient, {
-      areaId: area_id,
-      workerId: worker_id || ctx.worker?.id,
-      reportDate: report_date,
-      notes,
-      ...values,
-    });
+    const created = await createNirReport(
+      ctx.supabase,
+      ctx.adminClient,
+      {
+        areaId: area_id,
+        workerId: worker_id || ctx.worker?.id,
+        reportDate: report_date,
+        notes,
+        ...values,
+      },
+      // auth.users.id, from the session — never anything the body supplied.
+      ctx.user.id
+    );
 
     return NextResponse.json(created, { status: 201 });
   } catch (error) {
