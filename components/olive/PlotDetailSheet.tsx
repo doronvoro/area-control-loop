@@ -403,14 +403,31 @@ function PlotDetailBody({
             {[row.variety, row.growerName, row.region].filter(Boolean).join(' · ') || ' '}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="סגור"
-          className="absolute top-4 left-4 z-10 rounded-lg p-1.5 text-white/80 transition-colors hover:bg-white/15 hover:text-white"
-        >
-          <X className="size-5" />
-        </button>
+        <div className="absolute top-4 left-4 z-10 flex items-center gap-2">
+          {/* Up here rather than in the footer: the report is about the plot as
+              a whole, not about the attributes form the footer saves, and the
+              footer put it next to שמור פרטים where it read as part of saving.
+              Still disabled while the form is dirty — the report renders the
+              saved row, so unsaved edits would silently not appear on it. */}
+          <button
+            type="button"
+            disabled={form.formState.isDirty}
+            title={form.formState.isDirty ? 'שמור תחילה כדי לכלול את השינויים' : undefined}
+            onClick={() => window.open(`/olive/report/plot/${row.id}`, '_blank', 'noopener')}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-white/25 bg-white/10 px-2.5 py-1.5 text-xs font-semibold text-white/90 transition-colors hover:bg-white/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/10"
+          >
+            <FileText className="size-3.5" />
+            הפק דוח
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="סגור"
+            className="rounded-lg p-1.5 text-white/80 transition-colors hover:bg-white/15 hover:text-white"
+          >
+            <X className="size-5" />
+          </button>
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4 md:p-6">
@@ -621,7 +638,11 @@ function PlotDetailBody({
                         <FormLabel className="text-sm font-semibold">{s.label}</FormLabel>
                         <Select onValueChange={field.onChange} value={field.value || NONE}>
                           <FormControl>
-                            <SelectTrigger className="h-9">
+                            {/* w-full: the trigger sizes to its content by
+                                default, so an unset select collapsed to the
+                                width of "—" and sat in a grid column beside
+                                full-width text inputs. */}
+                            <SelectTrigger className="h-9 w-full">
                               <SelectValue placeholder="—" />
                             </SelectTrigger>
                           </FormControl>
@@ -737,21 +758,6 @@ function PlotDetailBody({
           <Button type="button" variant="ghost" onClick={onClose}>
             <X className="ml-1 size-4" />
             סגור
-          </Button>
-          {/* The report reads the saved row, so unsaved edits would not appear
-              on it. Disabled rather than silently stale — a printed report that
-              contradicts the form on screen is worse than one you cannot open
-              yet. Opens in a new tab: this is a document to keep, and the
-              drawer behind it holds work in progress. */}
-          <Button
-            type="button"
-            variant="outline"
-            disabled={form.formState.isDirty}
-            title={form.formState.isDirty ? 'שמור תחילה כדי לכלול את השינויים' : undefined}
-            onClick={() => window.open(`/olive/report/plot/${row.id}`, '_blank', 'noopener')}
-          >
-            <FileText className="ml-1 size-4" />
-            הפק דוח
           </Button>
           {/* Outside the <form>, so the submit is wired by id — the form lives
               in the scroll area and the footer does not. */}
