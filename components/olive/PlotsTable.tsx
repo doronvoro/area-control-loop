@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useRef, useState, type ReactElement } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpDown, FlaskConical, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,15 +14,18 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { SortableTableHead, type SortState } from '@/components/ui/sortable-table-head';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { PARAMETER_STATUS_CONFIG, PLOT_TYPE_LABELS } from '@/types/database';
 import type { RowFlash } from '@/hooks/useRowFlash';
 import {
   categoryLabel,
+  categoryReadingText,
+  categoryRuleText,
   type PlotRow,
   type PlotSortField,
   type PlotSummary,
 } from '@/lib/olive/plot-rows';
-import { parseYieldDraft, type PlotCategory } from '@/lib/olive/logic';
+import { parseYieldDraft, type CategoryThresholds, type PlotCategory } from '@/lib/olive/logic';
 import { showToast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
 
@@ -64,6 +67,12 @@ interface PlotsTableProps {
   /** Opens the plot's latest NIR reading for editing. */
   onOpenNir: (row: PlotRow) => void;
   onAddNir: (row: PlotRow) => void;
+  /**
+   * The client's live category bands. Only the pill's tooltip reads them — the
+   * category itself is classified before the row reaches this table — but that
+   * tooltip quotes the numbers, so it has to quote the tuned ones.
+   */
+  bands: CategoryThresholds;
   /** The active season. Null means the yield cell cannot be written to. */
   seasonId: string | null;
   /** Saves one plot's yield estimate. Resolves false when the write failed. */
@@ -123,6 +132,7 @@ export function PlotsTable({
   onCycleOilWater,
   onOpenNir,
   onAddNir,
+  bands,
   seasonId,
   onYieldSave,
   activeId,
@@ -208,9 +218,15 @@ export function PlotsTable({
             </TableCell>
             <TableCell className="hidden tabular-nums md:table-cell">{num(row.size, 1)}</TableCell>
             <TableCell>
-              <span className={`olive-pill ${CATEGORY_PILL[row.category]}`}>
-                {categoryLabel(row.category)}
-              </span>
+              <PillTooltip
+                title={categoryLabel(row.category)}
+                body={categoryRuleText(row.category, bands)}
+                foot={categoryReadingText(row)}
+              >
+                <span className={`olive-pill ${CATEGORY_PILL[row.category]}`}>
+                  {categoryLabel(row.category)}
+                </span>
+              </PillTooltip>
             </TableCell>
             <TableCell>
               {row.lastMeasuredLabel ? (
@@ -277,11 +293,16 @@ export function PlotsTable({
             />
             <TableCell className="hidden md:table-cell">
               {row.yieldLoad ? (
-                <span
-                  className={`olive-pill ${PARAMETER_STATUS_CONFIG[row.yieldLoad.status].pillClass}`}
-                >
-                  {row.yieldLoad.label}
-                </span>
+                // `short`, not `label`: the column is headed עומס יבול, and the
+                // full label repeated it in every cell under it. The prefix is
+                // still what the tooltip's own title needs.
+                <PillTooltip title={row.yieldLoad.label} body={`${row.yieldLoad.range}.`}>
+                  <span
+                    className={`olive-pill ${PARAMETER_STATUS_CONFIG[row.yieldLoad.status].pillClass}`}
+                  >
+                    {row.yieldLoad.short}
+                  </span>
+                </PillTooltip>
               ) : (
                 <span className="olive-muted">—</span>
               )}
@@ -396,6 +417,52 @@ export function PlotsTable({
         </TableFooter>
       )}
     </Table>
+  );
+}
+
+/**
+ * The explanation behind a status pill.
+ *
+ * Both pills on this row are one word standing for a band the client tuned in
+ * the settings dialog — "חריגות" does not say which reading was out, and
+ * "גבוה" does not say above what. The word is still what the column shows;
+ * this is what it means, on hover.
+ *
+ * The same sentences are also rendered sr-only beside the trigger, rather than
+ * left to the tooltip alone. A hover tooltip does not exist for a screen
+ * reader, and making the pill focusable to reach it would add two tab stops to
+ * every row for something that is not an action. Same reasoning as the
+ * שמן / מים cell above, which carries its state in words as well as in colour.
+ */
+function PillTooltip({
+  title,
+  body,
+  foot,
+  children,
+}: {
+  title: string;
+  body: string;
+  /** The plot's own reading, when the pill is derived from one. */
+  foot?: string;
+  children: ReactElement;
+}) {
+  return (
+    <>
+      <Tooltip>
+        <TooltipTrigger asChild>{children}</TooltipTrigger>
+        {/* Narrow on purpose: these are two or three lines of Hebrew, and a
+            tooltip as wide as the viewport is a paragraph, not a hint. */}
+        <TooltipContent className="max-w-[17rem] text-xs leading-relaxed">
+          <p className="font-semibold">{title}</p>
+          <p className="mt-0.5">{body}</p>
+          {foot && <p className="mt-1 opacity-75">{foot}</p>}
+        </TooltipContent>
+      </Tooltip>
+      <span className="sr-only">
+        {body}
+        {foot ? ` ${foot}` : ''}
+      </span>
+    </>
   );
 }
 

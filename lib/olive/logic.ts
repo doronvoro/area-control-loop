@@ -390,20 +390,56 @@ export function classifyPlotCategory(
   return 'testing';
 }
 
+/**
+ * The yield load band, in the three wordings the screens need.
+ *
+ * `label` and `short` are the same fact at two altitudes. A pill under a field
+ * headed "יבול צפוי (ק״ג/דונם)" has to say what it is a band OF, so it takes
+ * `label`; a column already headed עומס יבול would then read "עומס יבול: גבוה"
+ * under "עומס יבול", so it takes `short`. The yield screen used to reach that
+ * second form by `label.replace('עומס יבול: ', '')`, which is a string edit
+ * standing in for a field.
+ */
+export interface YieldLoad {
+  /** "עומס יבול: גבוה" — for a place whose own label does not say עומס. */
+  label: string;
+  /** "גבוה" — for a column already headed עומס יבול. */
+  short: string;
+  /** The band in words, for the tooltip that explains the pill. */
+  range: string;
+  status: ParameterStatus;
+}
+
 /** Yield load band from the per-dunam estimate. Spec §4.3. */
-export function yieldLoadInfo(
-  kgPerDunam: number | string | null | undefined
-): { label: string; status: ParameterStatus } | null {
+export function yieldLoadInfo(kgPerDunam: number | string | null | undefined): YieldLoad | null {
   const estimate = toNumber(kgPerDunam);
   if (estimate === null) return null;
 
   if (estimate > YIELD_LOAD_HIGH) {
-    return { label: 'עומס יבול: גבוה', status: ParameterStatus.PLAN };
+    return {
+      label: 'עומס יבול: גבוה',
+      short: 'גבוה',
+      range: `מעל ${YIELD_LOAD_HIGH} ק״ג/דונם`,
+      status: ParameterStatus.PLAN,
+    };
   }
   if (estimate >= YIELD_LOAD_MEDIUM) {
-    return { label: 'עומס יבול: בינוני', status: ParameterStatus.OK };
+    return {
+      label: 'עומס יבול: בינוני',
+      short: 'בינוני',
+      // "בין X ל-Y" rather than "X–Y": a dash between two digit runs is a
+      // bidi-neutral character, so in this RTL page the range would paint
+      // reversed. The Hebrew connector is a strong character and cannot.
+      range: `בין ${YIELD_LOAD_MEDIUM} ל-${YIELD_LOAD_HIGH} ק״ג/דונם`,
+      status: ParameterStatus.OK,
+    };
   }
-  return { label: 'עומס יבול: נמוך', status: ParameterStatus.IDLE };
+  return {
+    label: 'עומס יבול: נמוך',
+    short: 'נמוך',
+    range: `מתחת ל-${YIELD_LOAD_MEDIUM} ק״ג/דונם`,
+    status: ParameterStatus.IDLE,
+  };
 }
 
 /**

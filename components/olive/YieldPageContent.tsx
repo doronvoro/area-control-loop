@@ -141,7 +141,9 @@ export function YieldPageContent() {
       <section className="olive-card grid grid-cols-1 gap-2 p-4 sm:grid-cols-3">
         <div className="olive-kpi">
           <span className="olive-kpi-label">צפי פרי לעונה (ק״ג)</span>
-          <span className="olive-kpi-value">{Math.round(totals.expectedFruit).toLocaleString()}</span>
+          <span className="olive-kpi-value">
+            {Math.round(totals.expectedFruit).toLocaleString()}
+          </span>
         </div>
         <div className="olive-kpi">
           <span className="olive-kpi-label">פרי שנמסק בפועל (ק״ג)</span>
@@ -202,7 +204,8 @@ export function YieldPageContent() {
                         <span
                           className={`olive-pill ${PARAMETER_STATUS_CONFIG[load.status].pillClass}`}
                         >
-                          {load.label.replace('עומס יבול: ', '')}
+                          {/* The column is headed עומס, so the pill drops the prefix. */}
+                          {load.short}
                         </span>
                       )}
                     </td>
