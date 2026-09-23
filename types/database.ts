@@ -115,6 +115,33 @@ export const PLOT_TYPE_OPTIONS = [
   { value: PlotType.OCCASIONAL, label: PLOT_TYPE_LABELS[PlotType.OCCASIONAL] },
 ];
 
+// Tenant classification (סוג לקוח)
+//
+// The codes deliberately match PlotType's: 'owner' already displays as
+// 'ארץ גשור' and 'partner' as 'שותף' above, so reusing them keeps one vocabulary
+// for one Hebrew word.
+//
+// These are NOT the same enum and must not be merged — PlotType classifies who
+// grows a PLOT (third value 'occasional' / מזדמן), CustomerType classifies a
+// TENANT (third value 'internal' / פנימי).
+export enum CustomerType {
+  OWNER = 'owner',
+  PARTNER = 'partner',
+  INTERNAL = 'internal',
+}
+
+export const CUSTOMER_TYPE_LABELS: Record<CustomerType, string> = {
+  [CustomerType.OWNER]: 'ארץ גשור',
+  [CustomerType.PARTNER]: 'שותף',
+  [CustomerType.INTERNAL]: 'פנימי',
+};
+
+export const CUSTOMER_TYPE_OPTIONS = [
+  { value: CustomerType.OWNER, label: CUSTOMER_TYPE_LABELS[CustomerType.OWNER] },
+  { value: CustomerType.PARTNER, label: CUSTOMER_TYPE_LABELS[CustomerType.PARTNER] },
+  { value: CustomerType.INTERNAL, label: CUSTOMER_TYPE_LABELS[CustomerType.INTERNAL] },
+];
+
 // Harvesting equipment (סוג מוסקת)
 export enum HarvesterType {
   X1190 = '1190x',
@@ -247,6 +274,19 @@ export interface Database {
           user_id: string;
           name: string;
           description: string | null;
+          /** CustomerType code. Null on rows predating 20260922000000. */
+          customer_type: string | null;
+          contact_person: string | null;
+          contact_phone: string | null;
+          contact_mobile: string | null;
+          /** Correspondence only. The login email lives in auth.users. */
+          contact_email: string | null;
+          address: string | null;
+          city: string | null;
+          /** ח.פ / ע.מ. Not unique — see the migration header. */
+          business_id: string | null;
+          notes: string | null;
+          is_active: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -255,6 +295,16 @@ export interface Database {
           user_id: string;
           name: string;
           description?: string | null;
+          customer_type?: string | null;
+          contact_person?: string | null;
+          contact_phone?: string | null;
+          contact_mobile?: string | null;
+          contact_email?: string | null;
+          address?: string | null;
+          city?: string | null;
+          business_id?: string | null;
+          notes?: string | null;
+          is_active?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -263,6 +313,16 @@ export interface Database {
           user_id?: string;
           name?: string;
           description?: string | null;
+          customer_type?: string | null;
+          contact_person?: string | null;
+          contact_phone?: string | null;
+          contact_mobile?: string | null;
+          contact_email?: string | null;
+          address?: string | null;
+          city?: string | null;
+          business_id?: string | null;
+          notes?: string | null;
+          is_active?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -1215,10 +1275,92 @@ export interface Database {
           updated_at?: string;
         };
       };
+      growers: {
+        Row: {
+          id: string;
+          /** The tenant this grower belongs to. Growers are NOT tenants. */
+          customer_id: string;
+          name: string;
+          /** Same codes as olive_plot_details.plot_type — see PLOT_TYPE_LABELS. */
+          grower_type: PlotType | null;
+          contact_person: string | null;
+          contact_phone: string | null;
+          contact_mobile: string | null;
+          contact_email: string | null;
+          address: string | null;
+          city: string | null;
+          business_id: string | null;
+          notes: string | null;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          customer_id: string;
+          name: string;
+          grower_type?: PlotType | null;
+          contact_person?: string | null;
+          contact_phone?: string | null;
+          contact_mobile?: string | null;
+          contact_email?: string | null;
+          address?: string | null;
+          city?: string | null;
+          business_id?: string | null;
+          notes?: string | null;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          customer_id?: string;
+          name?: string;
+          grower_type?: PlotType | null;
+          contact_person?: string | null;
+          contact_phone?: string | null;
+          contact_mobile?: string | null;
+          contact_email?: string | null;
+          address?: string | null;
+          city?: string | null;
+          business_id?: string | null;
+          notes?: string | null;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      grower_aliases: {
+        Row: {
+          id: string;
+          grower_id: string;
+          /** Derived from the grower on write — never sent by a caller. */
+          customer_id: string;
+          /** Another spelling this grower appears under in an import file. */
+          alias: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          grower_id: string;
+          customer_id?: string;
+          alias: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          grower_id?: string;
+          customer_id?: string;
+          alias?: string;
+          created_at?: string;
+        };
+      };
       olive_plot_details: {
         Row: {
           area_id: string; // PK, 1:1 with areas
           grower_name: string | null;
+          /** The grower record. grower_name is kept alongside as the display value. */
+          grower_id: string | null;
           region: string | null;
           plot_type: PlotType | null;
           harvester: HarvesterType | null;
@@ -1231,6 +1373,7 @@ export interface Database {
         Insert: {
           area_id: string;
           grower_name?: string | null;
+          grower_id?: string | null;
           region?: string | null;
           plot_type?: PlotType | null;
           harvester?: HarvesterType | null;
@@ -1243,6 +1386,7 @@ export interface Database {
         Update: {
           area_id?: string;
           grower_name?: string | null;
+          grower_id?: string | null;
           region?: string | null;
           plot_type?: PlotType | null;
           harvester?: HarvesterType | null;
@@ -1478,6 +1622,7 @@ export type ParameterRule = Database['public']['Tables']['parameter_rules']['Row
 export type PlotCategoryThresholdsRow =
   Database['public']['Tables']['plot_category_thresholds']['Row'];
 export type OlivePlotDetails = Database['public']['Tables']['olive_plot_details']['Row'];
+export type Grower = Database['public']['Tables']['growers']['Row'];
 export type Season = Database['public']['Tables']['seasons']['Row'];
 export type YieldEstimate = Database['public']['Tables']['yield_estimates']['Row'];
 export type VarietyWindow = Database['public']['Tables']['variety_windows']['Row'];

@@ -2,6 +2,12 @@ import { NextResponse } from 'next/server';
 import { getApiContext, checkPermission } from '@/lib/api/auth-context';
 import { handleApiError } from '@/lib/api-utils';
 import { createUserWithRole } from '@/lib/api/utils';
+import {
+  buildCustomerInsert,
+  buildCustomerUpdate,
+  getLoginEmails,
+  isCustomerType,
+} from '@/lib/services/customer.service';
 
 export async function GET() {
   try {
@@ -13,7 +19,19 @@ export async function GET() {
         .select('*')
         .order('name');
       if (error) throw error;
-      return NextResponse.json(data);
+
+      // login_email is auth.users' address, not a customers column — the admin
+      // grid shows it beside contact_email so the two are never confused. Only
+      // for admins: a customer_owner knows their own login address.
+      const rows = (data as { user_id: string }[]) || [];
+      const emails = await getLoginEmails(
+        ctx.adminClient,
+        rows.map((row) => row.user_id).filter(Boolean)
+      );
+
+      return NextResponse.json(
+        rows.map((row) => ({ ...row, login_email: emails[row.user_id] ?? null }))
+      );
     }
 
     if (ctx.customer) {
@@ -35,10 +53,16 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { name, description, email, password } = body;
+    const { name, email, password } = body;
 
     if (!name) return NextResponse.json({ error: 'שם הלקוח נדרש' }, { status: 400 });
     if (!email || !password) return NextResponse.json({ error: 'אימייל וסיסמה נדרשים' }, { status: 400 });
+
+    // Checked here rather than left to the CHECK constraint, which would surface
+    // as an English 500 through handleApiError.
+    if (!isCustomerType(body.customer_type)) {
+      return NextResponse.json({ error: 'נדרש לבחור סוג לקוח' }, { status: 400 });
+    }
 
     const { record } = await createUserWithRole(ctx.adminClient, {
       email,
@@ -48,7 +72,7 @@ export async function POST(request: Request) {
       userMetadataRole: 'customer_owner',
       insertRecord: async (userId: string) => {
         return await (ctx.adminClient.from('customers') as any)
-          .insert({ user_id: userId, name, description: description || null })
+          .insert(buildCustomerInsert(body, userId))
           .select()
           .single();
       },
@@ -69,12 +93,31 @@ export async function PUT(request: Request) {
     }
 
     const body = await request.json();
-    const { id, name, description } = body;
+    const { id, name } = body;
 
     if (!id || !name) return NextResponse.json({ error: 'id ו-name נדרשים' }, { status: 400 });
 
-    const { data, error } = await (ctx.supabase.from('customers') as any)
-      .update({ name, description: description || null, updated_at: new Date().toISOString() })
+    if ('customer_type' in body && !isCustomerType(body.customer_type)) {
+      return NextResponse.json({ error: 'נדרש לבחור סוג לקוח' }, { status: 400 });
+    }
+
+    // customer_owner ALSO holds update_customer (006_roles_and_permissions.sql),
+    // so the permission check above does not say WHICH customer. RLS used to
+    // answer that by matching zero rows — which is exactly why an admin editing
+    // another tenant got .single()'s "no rows" error instead of an update, since
+    // `customers` has no admin-UPDATE policy.
+    //
+    // The write below runs on adminClient, which takes RLS out of the decision
+    // entirely. This check is the only boundary left. Do not remove it.
+    if (!ctx.isAdmin && ctx.customer?.id !== id) {
+      return NextResponse.json({ error: 'אין הרשאה לעדכן לקוח זה' }, { status: 403 });
+    }
+
+    const { data, error } = await (ctx.adminClient.from('customers') as any)
+      .update({
+        ...buildCustomerUpdate(body, { isAdmin: ctx.isAdmin }),
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', id)
       .select()
       .single();
