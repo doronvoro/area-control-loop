@@ -32,6 +32,7 @@ import {
   nextOilWaterSort,
   plotTypeCounts,
   sortPlotRows,
+  summarisePlotRows,
   toPlotRow,
   type PlotFilters,
   type PlotRow,
@@ -296,6 +297,10 @@ export function OlivePlotsContent({ initialSearch = null }: { initialSearch?: st
     [rows, filters, sort]
   );
 
+  // Over every row the filters let through, not over the page the table draws:
+  // a total that moves when you turn the page is not a total.
+  const summary = useMemo(() => summarisePlotRows(visibleRows), [visibleRows]);
+
   // What each grower-type chip shows. One extra filter pass over ~45 rows per
   // keystroke, which is free, and it keeps the chips honest about the other
   // filters rather than quoting the unfiltered list.
@@ -370,6 +375,7 @@ export function OlivePlotsContent({ initialSearch = null }: { initialSearch?: st
           >
             <PlotsTable
               rows={pagination.pageItems}
+              summary={summary}
               sort={sort}
               onSort={toggle}
               onEdit={(row: PlotRow) => setSelectedId(row.id)}
