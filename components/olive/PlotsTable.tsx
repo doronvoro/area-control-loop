@@ -50,6 +50,8 @@ interface PlotsTableProps {
   /** Steps the merged שמן/מים header through its four sort states. */
   onCycleOilWater: () => void;
   /** Opens the NIR form for this plot, over the table. */
+  /** Opens the plot's latest NIR reading for editing. */
+  onOpenNir: (row: PlotRow) => void;
   onAddNir: (row: PlotRow) => void;
   /** The active season. Null means the yield cell cannot be written to. */
   seasonId: string | null;
@@ -70,6 +72,7 @@ export function PlotsTable({
   onSort,
   onEdit,
   onCycleOilWater,
+  onOpenNir,
   onAddNir,
   seasonId,
   onYieldSave,
@@ -185,13 +188,36 @@ export function PlotsTable({
                 // digits but not the header, leaving שמן over the water; as
                 // flex children in an RTL row the parts cannot reorder at all,
                 // and the first one lands rightmost, under שמן.
-                <span className="inline-flex items-center gap-1">
+                // Green once the reading has reached the client, red until it
+                // has — the one cell on this screen that speaks for the reading
+                // itself. Colour alone would be invisible to a colour-blind
+                // reader, so the title and aria-label carry the same fact in
+                // words. A button, not a link: it opens the reading over this
+                // table rather than navigating, for the reason the NIR action
+                // below documents.
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenNir(row);
+                  }}
+                  title={
+                    row.nirSentToClientAt
+                      ? `נשלח ללקוח ב-${row.nirSentToClientAt} — פתח את הבדיקה`
+                      : 'טרם נשלח ללקוח — פתח את הבדיקה'
+                  }
+                  aria-label={`בדיקת NIR בחלקה ${row.name} — ${
+                    row.nirSentToClientAt ? 'נשלחה ללקוח' : 'טרם נשלחה ללקוח'
+                  }`}
+                  className={cn(
+                    'inline-flex items-center gap-1 rounded underline decoration-dotted underline-offset-4 hover:opacity-75 focus-visible:ring-2 focus-visible:outline-none',
+                    row.nirSentToClientAt ? 'olive-sent-yes' : 'olive-sent-no'
+                  )}
+                >
                   <span>{num(row.oil, 1)}</span>
-                  <span className="olive-muted" aria-hidden>
-                    /
-                  </span>
+                  <span aria-hidden>/</span>
                   <span>{num(row.water, 1)}</span>
-                </span>
+                </button>
               )}
             </TableCell>
             <YieldCell

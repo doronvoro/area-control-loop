@@ -4,7 +4,16 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { AlertTriangle, Check, Compass, FlaskConical, Loader2, MapPin, Send, X } from 'lucide-react';
+import {
+  AlertTriangle,
+  Check,
+  Compass,
+  FlaskConical,
+  Loader2,
+  MapPin,
+  Send,
+  X,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -127,8 +136,14 @@ const EMPTY_FORM = {
   maturity: '',
   irrig_amount: '',
   notes: '',
-  sent_to_client: false,
-  sent_to_client_at: '',
+  // Ticked by default. A reading is taken in order to be passed on, and every
+  // reading in the גשור archive was sent the day it was taken — so the
+  // unticked default made the sampler re-tick the box forty times and left
+  // the ones they forgot reading as "טרם נשלח ללקוח" on the plots screen.
+  // Only for a NEW reading: defaultsFor() still mirrors the stored value when
+  // editing, so opening a genuinely unsent reading does not mark it sent.
+  sent_to_client: true,
+  sent_to_client_at: todayString(),
 };
 
 function defaultsFor(editor: NirEditorState): NirFormData {
@@ -318,9 +333,7 @@ function NirFormBody({
     // comes back empty and the send mark silently never posts. Both sides are a
     // local YYYY-MM-DD, so they compare directly.
     const storedSentDay = editor.mode === 'edit' ? editor.row.sentToClientAt : null;
-    const nextSentDay = values.sent_to_client
-      ? values.sent_to_client_at || todayString()
-      : null;
+    const nextSentDay = values.sent_to_client ? values.sent_to_client_at || todayString() : null;
     const sentChanged = nextSentDay !== storedSentDay;
 
     try {
@@ -465,6 +478,74 @@ function NirFormBody({
                 <p className="text-sm font-bold">{success}</p>
               </div>
             )}
+
+            {/* Sending to the client. A mark, not an action — nothing in the
+                app sends anything yet, and the caption has to say so or the
+                checkbox reads as "send it now". */}
+            <FormField
+              control={form.control}
+              name="sent_to_client"
+              render={({ field }) => (
+                <FormItem className="mt-4 rounded-lg border border-dashed p-3">
+                  <div className="flex items-start gap-2 space-y-0">
+                    <FormControl>
+                      <Checkbox
+                        className="mt-0.5"
+                        checked={!!field.value}
+                        onCheckedChange={(checked) => {
+                          field.onChange(checked === true);
+                          // Default the date on the way in rather than
+                          // validating on the way out: an empty string reaching
+                          // PostgREST as a timestamptz is a 400.
+                          if (checked === true && !form.getValues('sent_to_client_at')) {
+                            form.setValue('sent_to_client_at', todayString(), {
+                              shouldDirty: true,
+                            });
+                          }
+                        }}
+                      />
+                    </FormControl>
+                    <div className="flex-1">
+                      <FormLabel className="!mt-0 flex items-center gap-1.5 font-semibold">
+                        <Send className="size-3.5" />
+                        נשלח ללקוח
+                      </FormLabel>
+                      <p className="olive-muted mt-0.5 text-xs">
+                        סימון ידני — המערכת אינה שולחת את הדוח בעצמה.
+                      </p>
+                    </div>
+                  </div>
+
+                  {field.value && (
+                    <div className="mt-3 grid gap-4 md:grid-cols-2">
+                      <FormField
+                        control={form.control}
+                        name="sent_to_client_at"
+                        render={({ field: dateField }) => (
+                          <FormItem>
+                            <FormLabel className="text-sm font-semibold">תאריך השליחה</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="date"
+                                className="h-9"
+                                {...dateField}
+                                value={dateField.value ?? ''}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      {editor.mode === 'edit' && editor.row.sentToClientBy && (
+                        <p className="olive-muted self-end pb-2 text-xs">
+                          נשלח ע״י {editor.row.sentToClientBy}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </FormItem>
+              )}
+            />
 
             {/* 1 — plot and date */}
             <section
@@ -689,74 +770,6 @@ function NirFormBody({
                       <Textarea rows={2} {...field} value={field.value ?? ''} />
                     </FormControl>
                     <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              {/* Sending to the client. A mark, not an action — nothing in the
-                  app sends anything yet, and the caption has to say so or the
-                  checkbox reads as "send it now". */}
-              <FormField
-                control={form.control}
-                name="sent_to_client"
-                render={({ field }) => (
-                  <FormItem className="mt-4 rounded-lg border border-dashed p-3">
-                    <div className="flex items-start gap-2 space-y-0">
-                      <FormControl>
-                        <Checkbox
-                          className="mt-0.5"
-                          checked={!!field.value}
-                          onCheckedChange={(checked) => {
-                            field.onChange(checked === true);
-                            // Default the date on the way in rather than
-                            // validating on the way out: an empty string reaching
-                            // PostgREST as a timestamptz is a 400.
-                            if (checked === true && !form.getValues('sent_to_client_at')) {
-                              form.setValue('sent_to_client_at', todayString(), {
-                                shouldDirty: true,
-                              });
-                            }
-                          }}
-                        />
-                      </FormControl>
-                      <div className="flex-1">
-                        <FormLabel className="!mt-0 flex items-center gap-1.5 font-semibold">
-                          <Send className="size-3.5" />
-                          נשלח ללקוח
-                        </FormLabel>
-                        <p className="olive-muted mt-0.5 text-xs">
-                          סימון ידני — המערכת אינה שולחת את הדוח בעצמה.
-                        </p>
-                      </div>
-                    </div>
-
-                    {field.value && (
-                      <div className="mt-3 grid gap-4 md:grid-cols-2">
-                        <FormField
-                          control={form.control}
-                          name="sent_to_client_at"
-                          render={({ field: dateField }) => (
-                            <FormItem>
-                              <FormLabel className="text-sm font-semibold">תאריך השליחה</FormLabel>
-                              <FormControl>
-                                <Input
-                                  type="date"
-                                  className="h-9"
-                                  {...dateField}
-                                  value={dateField.value ?? ''}
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        {editor.mode === 'edit' && editor.row.sentToClientBy && (
-                          <p className="olive-muted self-end pb-2 text-xs">
-                            נשלח ע״י {editor.row.sentToClientBy}
-                          </p>
-                        )}
-                      </div>
-                    )}
                   </FormItem>
                 )}
               />

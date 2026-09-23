@@ -73,6 +73,7 @@ function row(overrides: Partial<PlotRow> = {}): PlotRow {
     harvested: false,
     daysSinceNir: null,
     lastMeasuredLabel: null,
+    nirSentToClientAt: null,
     oil: null,
     water: null,
     dry: null,

@@ -17,7 +17,13 @@ import { usePagination } from '@/hooks/usePagination';
 import { useRowFlash } from '@/hooks/useRowFlash';
 import { useTableSort } from '@/hooks/useTableSort';
 import { classifyPlotCategory } from '@/lib/olive/logic';
-import { toNirLike, toCategoryThresholds, type ApiPlot } from '@/lib/olive/adapt';
+import {
+  toNirLike,
+  toCategoryThresholds,
+  type ApiNirReport,
+  type ApiPlot,
+} from '@/lib/olive/adapt';
+import { toNirRow } from '@/lib/olive/nir-rows';
 import { showToast } from '@/lib/toast';
 import {
   EMPTY_PLOT_FILTERS,
@@ -137,16 +143,44 @@ export function OlivePlotsContent({ initialSearch = null }: { initialSearch?: st
 
   const now = useMemo(() => new Date(), []);
 
+  // Same map NirPageContent builds, for the same reason: toNirRow resolves a
+  // reading's sub_area_id to a takt name through it.
+  const taktNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const plot of data?.plots ?? []) {
+      for (const takt of plot.takts ?? []) map.set(takt.id, takt.name);
+    }
+    return map;
+  }, [data]);
+
+  /**
+   * Open the plot's latest reading, from the שמן / מים cell.
+   *
+   * The row carries the measurements but not the reading, so the raw report is
+   * looked up here rather than parked on PlotRow — one object per plot that only
+   * this handler would ever read.
+   */
+  const openLatestNir = useCallback(
+    (row: PlotRow) => {
+      const latest = data?.latestNir?.[row.id];
+      if (!latest) return;
+      setNirEditor({ mode: 'edit', row: toNirRow(latest as never, taktNameById) });
+    },
+    [data, taktNameById]
+  );
+
   const rows = useMemo(() => {
     if (!data) return [];
     const harvested = new Set(data.harvestedAreaIds || []);
     const bands = toCategoryThresholds(data.categoryThresholds);
 
     return (data.plots || []).map((plot) => {
-      const nir = toNirLike(data.latestNir?.[plot.id] as never);
+      const latest = data.latestNir?.[plot.id] as ApiNirReport | undefined;
+      const nir = toNirLike(latest);
       return toPlotRow({
         plot,
         nir,
+        nirSentToClientAt: latest?.detail?.sent_to_client_at ?? null,
         category: classifyPlotCategory(nir, data.parameterRules || [], bands),
         harvested: harvested.has(plot.id),
         yieldEstimate: data.yieldEstimates?.[plot.id] ?? null,
@@ -338,6 +372,7 @@ export function OlivePlotsContent({ initialSearch = null }: { initialSearch?: st
               onSort={toggle}
               onEdit={(row: PlotRow) => setSelectedId(row.id)}
               onCycleOilWater={cycleOilWater}
+              onOpenNir={openLatestNir}
               onAddNir={(row: PlotRow) => setNirEditor({ mode: 'create', areaId: row.id })}
               seasonId={seasonId}
               onYieldSave={handleYieldSave}

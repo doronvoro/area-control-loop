@@ -11,7 +11,13 @@
  */
 
 import { PLOT_CATEGORY_CARDS } from './constants';
-import { daysSinceLabel, plotMatchesSearch, yieldLoadInfo, type PlotCategory } from './logic';
+import {
+  daysSinceLabel,
+  plotMatchesSearch,
+  toDateString,
+  yieldLoadInfo,
+  type PlotCategory,
+} from './logic';
 import { NONE } from '@/lib/forms/none-sentinel';
 import type { ApiPlot } from './adapt';
 import type { SortState } from '@/components/ui/sortable-table-head';
@@ -39,6 +45,12 @@ export interface PlotRow {
   daysSinceNir: number | null;
   /** "היום" / "לפני N ימים", or null when never measured. */
   lastMeasuredLabel: string | null;
+  /**
+   * Local day the latest reading was sent to the client, or null if it has not
+   * been. Colours the שמן / מים cell, which is the only place on this screen
+   * that says anything about the reading itself.
+   */
+  nirSentToClientAt: string | null;
   oil: number | null;
   water: number | null;
   dry: number | null;
@@ -126,6 +138,14 @@ interface ToPlotRowInput {
     water: number | null;
     dry: number | null;
   } | null;
+  /**
+   * The latest reading's send stamp, as a raw instant.
+   *
+   * Passed separately rather than folded into `nir` above: that object is
+   * NirLike, which exists for the harvest rules, and when a reading reached the
+   * client has no bearing on whether the fruit is ripe.
+   */
+  nirSentToClientAt?: string | null;
   category: PlotCategory;
   harvested: boolean;
   /** The yield estimate row for this plot, if the season has one. */
@@ -136,6 +156,7 @@ interface ToPlotRowInput {
 export function toPlotRow({
   plot,
   nir,
+  nirSentToClientAt,
   category,
   harvested,
   yieldEstimate,
@@ -161,6 +182,9 @@ export function toPlotRow({
     harvested,
     daysSinceNir: daysSince(nir?.report_date ?? null, now),
     lastMeasuredLabel: daysSinceLabel(nir?.report_date ?? null, now),
+    // Local day, not a slice: the stamp is an instant, and a late-evening send
+    // is the previous day in UTC. See lib/olive/logic.ts toDateString.
+    nirSentToClientAt: nirSentToClientAt ? toDateString(new Date(String(nirSentToClientAt))) : null,
     oil: numeric(nir?.oil),
     water: numeric(nir?.water),
     dry: numeric(nir?.dry),

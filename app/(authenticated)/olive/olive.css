@@ -755,3 +755,18 @@
     transform: none;
   }
 }
+
+/* --- Sent to the client ---------------------------------------------------
+   Colours the plots table's שמן / מים, which is the one cell on that screen
+   that speaks for the latest NIR reading. The two values are the TEXT colours
+   of .olive-pill-ok and .olive-pill-urgent rather than new ones, so a plot's
+   send state reads in the same green and red as its harvest status above it.
+   Only the text is tinted: a filled pill on a number column would fight the
+   קטגוריה pills for attention, and this is the secondary fact of the two. */
+.olive-sent-yes {
+  color: oklch(0.4 0.06 125);
+}
+
+.olive-sent-no {
+  color: oklch(0.5 0.13 38);
+}
