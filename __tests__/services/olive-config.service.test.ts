@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { getCategoryThresholds, getWeatherThresholds } from '@/lib/services/olive-config.service';
+import {
+  getActiveSeason,
+  getCategoryThresholds,
+  getWeatherThresholds,
+} from '@/lib/services/olive-config.service';
 import { isMissingTableError } from '@/lib/supabase/errors';
 
 /**
@@ -81,5 +85,70 @@ describe('getCategoryThresholds', () => {
 
   it('still throws on any other error', async () => {
     await expect(getCategoryThresholds(failingWith({ code: '42501' }))).rejects.toBeTruthy();
+  });
+});
+
+/**
+ * A stand-in for the `seasons` table that reproduces PostgREST's single-object
+ * semantics: `maybeSingle()` tolerates zero rows but returns PGRST116 for two,
+ * and `limit(n)` is applied before that check.
+ *
+ * Recorded verbatim from PostgREST (Supabase local) by selecting is_active=true
+ * with two active rows and Accept: application/vnd.pgrst.object+json → HTTP 406
+ * {"code":"PGRST116","details":"The result contains 2 rows",...}.
+ */
+function seasonsTable(rows: { id: string; starts_on: string }[]): SupabaseClient {
+  let working = [...rows];
+  const builder: Record<string, unknown> = {};
+  Object.assign(builder, {
+    select: () => builder,
+    eq: () => builder,
+    order: (_column: string, opts?: { ascending?: boolean }) => {
+      working = [...working].sort((a, b) =>
+        opts?.ascending === false
+          ? b.starts_on.localeCompare(a.starts_on)
+          : a.starts_on.localeCompare(b.starts_on)
+      );
+      return builder;
+    },
+    limit: (n: number) => {
+      working = working.slice(0, n);
+      return builder;
+    },
+    maybeSingle: async () =>
+      working.length > 1
+        ? {
+            data: null,
+            error: { code: 'PGRST116', details: `The result contains ${working.length} rows` },
+          }
+        : { data: working[0] ?? null, error: null },
+  });
+  return { from: () => builder } as unknown as SupabaseClient;
+}
+
+/**
+ * is_active is a single-winner flag by convention only — no partial unique
+ * index enforces it — and /admin/olive-import used to leave a second season
+ * active. A bare maybeSingle() over that returns PGRST116, which this function
+ * swallows into null, and "no season" blanks every yield estimate in the app.
+ */
+describe('getActiveSeason', () => {
+  it('returns the active season', async () => {
+    const season = await getActiveSeason(seasonsTable([{ id: 'a', starts_on: '2026-09-01' }]));
+    expect((season as { id: string } | null)?.id).toBe('a');
+  });
+
+  it('returns null when no season is active', async () => {
+    expect(await getActiveSeason(seasonsTable([]))).toBeNull();
+  });
+
+  it('picks the newest rather than collapsing to null when two are active', async () => {
+    const season = await getActiveSeason(
+      seasonsTable([
+        { id: 'old', starts_on: '2025-09-01' },
+        { id: 'new', starts_on: '2026-09-01' },
+      ])
+    );
+    expect((season as { id: string } | null)?.id).toBe('new');
   });
 });

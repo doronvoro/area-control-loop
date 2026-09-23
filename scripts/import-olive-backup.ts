@@ -99,10 +99,13 @@ async function main() {
 
   // --- season ---
   const { name: seasonName, yearType, outcome } = result.season;
-  if (outcome === 'existed') {
+  if (outcome === 'adopted') {
+    // The backup named no season, so the estimates go on the one the app reads.
+    console.log(`📅 season "${seasonName}" adopted (the active season)`);
+  } else if (outcome === 'existed') {
     console.log(`⏭️  season "${seasonName}" already exists`);
   } else if (outcome === 'created') {
-    console.log(`✅ season "${seasonName}" created`);
+    console.log(`✅ season "${seasonName}" created and made active`);
   } else {
     console.log(`   would create season "${seasonName}" (${yearType || 'no year type'})`);
   }

@@ -236,9 +236,24 @@ export async function getSeasons(supabase: SupabaseClient) {
   return data || [];
 }
 
-/** The season currently marked active, or null when none is. */
+/**
+ * The season currently marked active, or null when none is.
+ *
+ * limit(1) is not cosmetic. is_active is a single-winner flag by convention
+ * only — no partial unique index enforces it — and a bare maybeSingle() over
+ * two active rows is a PGRST116 error, which this swallows into null. That null
+ * reads as "no season", and every yield estimate, NIR season count and season
+ * card in the app blanks at once. Newest-first so the pick is at least stable
+ * and sensible while the data is being repaired.
+ */
 export async function getActiveSeason(supabase: SupabaseClient) {
-  const { data } = await supabase.from('seasons').select('*').eq('is_active', true).maybeSingle();
+  const { data } = await supabase
+    .from('seasons')
+    .select('*')
+    .eq('is_active', true)
+    .order('starts_on', { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
   return data || null;
 }

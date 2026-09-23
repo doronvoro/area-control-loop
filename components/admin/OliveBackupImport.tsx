@@ -354,6 +354,18 @@ function ImportSummaryCard({ title, data }: { title: string; data: ImportRespons
             ? ` · יוצא ב-${new Date(data.exportedAt).toLocaleDateString('he-IL')}`
             : ''}
         </p>
+        {/* Which season the estimates landed on. Without this the operator
+            cannot tell a successful import from one that wrote 44 estimates
+            onto a season no screen reads — which is exactly what an import of
+            a file with no harvestYear used to do. */}
+        <p className="text-sm text-muted-foreground">
+          אומדני היבול נרשמו לעונה <strong>{result.season.name}</strong>
+          {result.season.outcome === 'adopted'
+            ? ' — העונה הפעילה, כיוון שהקובץ אינו נוקב עונה.'
+            : result.season.outcome === 'existed'
+              ? ' — עונה קיימת שסומנה כפעילה.'
+              : ' — עונה חדשה שנוצרה וסומנה כפעילה.'}
+        </p>
         {result.categoryThresholds && (
           <p className="text-sm text-muted-foreground">
             ספי הקטגוריות של כרטיסי הסטטוס (מוכן למסיק / תקין / חריגה) נלקחו מהקובץ. אלה ספים
