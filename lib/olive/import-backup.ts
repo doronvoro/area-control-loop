@@ -28,10 +28,11 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { OLIVE_CROP_NAME } from '@/lib/olive/constants';
+import { MAX_TAKT_COUNT, OLIVE_CROP_NAME, taktName } from '@/lib/olive/constants';
 import { ALERT_BAND_FIELDS, CATEGORY_BAND_FIELDS } from '@/lib/olive/thresholds';
 import { resolveYieldRows, type YieldPlotLike } from '@/lib/olive/import-yield';
 import type { ImportIssue, IssueCategory } from '@/lib/olive/import-issues';
+import { isMissingTableError } from '@/lib/supabase/errors';
 
 // --- Types (the prototype's own shapes, not ours) ---
 
@@ -246,27 +247,9 @@ function isDryRunAreaId(areaId: string): boolean {
   return areaId.startsWith(DRY_RUN_AREA_PREFIX);
 }
 
-/**
- * Takt names follow supabase/seed/olive_demo_seed.sql, which is also what the
- * NIR and harvest pickers display: טאקט 1, טאקט 2, …
- */
-function taktName(index: number): string {
-  return `טאקט ${index}`;
-}
-
 function dryRunTaktId(plotId: string, index: number): string {
   return `${DRY_RUN_AREA_PREFIX}takt:${plotId}:${index}`;
 }
-
-/**
- * Upper bound on takt_count, matching the database.
- *
- * olive_plot_details_takt_count_check is
- * `takt_count IS NULL OR (takt_count >= 1 AND takt_count <= 10)`. A looser
- * limit here is not a guard, only a delay: the details upsert would reject the
- * row while the takt loop happily created the sub_areas.
- */
-const MAX_TAKT_COUNT = 10;
 
 /** For the planting-date flags, which name the month the file turned out to hold. */
 const HEBREW_MONTHS = [
@@ -533,6 +516,33 @@ export async function importBackup(
   }
   const cropId = (crop as any).id;
 
+  // --- grower aliases ---
+  // The names a previous merge absorbed, for this tenant.
+  //
+  // The map does NOT drive the write: trg_olive_plot_details_resolve_grower
+  // (20260923120000) applies an alias on write and rewrites grower_name to the
+  // surviving grower's, so the plot drawer, the seed and this importer cannot
+  // disagree about it. What the map is for is the REPORT — every other value
+  // this import does not take at face value is flagged, and a grower name
+  // silently becoming a different one is exactly the kind of quiet change that
+  // list exists for.
+  //
+  // A missing table degrades to no aliases rather than failing the run: this
+  // repo deploys code to Vercel on merge and applies production schema by hand
+  // afterwards (docs/rollout/README.md), so there is a live window where this
+  // table is read and is not there.
+  const growerAliases = new Map<string, string>();
+  {
+    const { data: aliasRows, error: aliasError } = await supabase
+      .from('grower_aliases')
+      .select('alias, growers(name)')
+      .eq('customer_id', customerId);
+    if (aliasError && !isMissingTableError(aliasError)) throw aliasError;
+    for (const row of (aliasRows || []) as any[]) {
+      if (row.growers?.name) growerAliases.set(String(row.alias).trim(), row.growers.name);
+    }
+  }
+
   // --- season ---
   const seasonName = backup.harvestYear ? `מסיק ${backup.harvestYear}` : 'מסיק (מיובא)';
   const yearType = backup.harvestYearType || null;
@@ -662,6 +672,17 @@ export async function importBackup(
     const fileTaktCount = parseTaktCount(plot.taktCount, where);
     const effectiveTaktCount = fileTaktCount ?? defaultTaktCount;
     if (fileTaktCount === null && effectiveTaktCount !== null) taktsFromDefault += 1;
+
+    // Reported, not applied — the trigger is the one that maps it, and writing
+    // the canonical name here as well would put the same rule in two places.
+    const growerName = (plot.grower || '').trim();
+    const mergedInto = growerName ? growerAliases.get(growerName) : undefined;
+    if (mergedInto) {
+      flag(
+        'growerAlias',
+        `${where}: שם המגדל "${growerName}" אוחד במערכת למגדל "${mergedInto}" — החלקה שויכה אליו`
+      );
+    }
 
     // details (validated in both modes so a dry run reports everything)
     const details = {

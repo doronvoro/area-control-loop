@@ -5,6 +5,7 @@ import {
   computePlotStatus,
   classifyPlotCategory,
   yieldLoadInfo,
+  parseYieldDraft,
   plotMatchesSearch,
   parseDM,
   isDateInWindow,
@@ -823,5 +824,35 @@ describe('daysSinceLabel with timestamptz input', () => {
 
   it('is still null for genuinely unparseable input', () => {
     expect(daysSinceLabel('not-a-date', NOW)).toBeNull();
+  });
+});
+
+describe('parseYieldDraft', () => {
+  it('reads a plain figure', () => {
+    expect(parseYieldDraft('1400')).toEqual({ ok: true, value: 1400 });
+    expect(parseYieldDraft('0')).toEqual({ ok: true, value: 0 });
+    expect(parseYieldDraft(' 1234.5 ')).toEqual({ ok: true, value: 1234.5 });
+  });
+
+  it('treats an emptied field as a deliberate clear', () => {
+    expect(parseYieldDraft('')).toEqual({ ok: true, value: null });
+    expect(parseYieldDraft('   ')).toEqual({ ok: true, value: null });
+  });
+
+  it('refuses what would otherwise be saved as a silent clear', () => {
+    // The route coerces with a bare Number() and JSON.stringify(NaN) is null,
+    // so a typo reaching it does not fail — it wipes the estimate.
+    expect(parseYieldDraft('12a').ok).toBe(false);
+    expect(parseYieldDraft('abc').ok).toBe(false);
+  });
+
+  it('refuses a negative, which the column has no CHECK against', () => {
+    expect(parseYieldDraft('-1').ok).toBe(false);
+  });
+
+  it('refuses more than NUMERIC(10,2) can hold', () => {
+    expect(parseYieldDraft('99999999.99').ok).toBe(true);
+    expect(parseYieldDraft('100000000').ok).toBe(false);
+    expect(parseYieldDraft('1e999').ok).toBe(false);
   });
 });

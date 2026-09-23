@@ -5,7 +5,16 @@ import Link from 'next/link';
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { AlertTriangle, FlaskConical, Loader2, MapPin, Plus, Tractor, X } from 'lucide-react';
+import {
+  AlertTriangle,
+  FileText,
+  FlaskConical,
+  Loader2,
+  MapPin,
+  Plus,
+  Tractor,
+  X,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -25,6 +34,14 @@ import {
 } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { showToast } from '@/lib/toast';
+import { NONE, fromFormValue, toFormValue } from '@/lib/forms/none-sentinel';
+import {
+  GrowerPicker,
+  growerPayload,
+  initialGrowerSelection,
+  type GrowerOption,
+  type GrowerSelection,
+} from './GrowerPicker';
 import {
   HARVESTER_OPTIONS,
   PARAMETER_STATUS_CONFIG,
@@ -54,10 +71,7 @@ import { HarvestFormSheet, type HarvestEditorState } from './HarvestFormSheet';
  * page still costs one request for 45 plots.
  */
 
-const NONE = '__none__'; // Radix Select rejects '' as an item value
-
 const detailsSchema = z.object({
-  grower_name: z.string().optional(),
   region: z.string().optional(),
   plant_year_label: z.string().optional(),
   plot_type: z.string().optional(),
@@ -94,14 +108,6 @@ const SELECTS: {
 /** How many readings and passes to list before pointing at the full log. */
 const HISTORY_LIMIT = 5;
 
-function toFormValue(value: string | null | undefined): string {
-  return value ?? NONE;
-}
-
-function fromFormValue(value: string | undefined): string | null {
-  return !value || value === NONE ? null : value;
-}
-
 function num(value: number | null, digits = 0): string {
   return value === null ? '—' : value.toFixed(digits);
 }
@@ -116,6 +122,8 @@ interface PlotDetailSheetProps {
   estimates: Record<string, { kg_per_dunam?: unknown }>;
   /** The active season. Null when none is active — the yield field needs one. */
   seasonId: string | null;
+  /** The tenant's growers, for the picker. */
+  growers: GrowerOption[];
   onSaved: () => void;
 }
 
@@ -126,6 +134,7 @@ export function PlotDetailSheet({
   plots,
   estimates,
   seasonId,
+  growers,
   onSaved,
 }: PlotDetailSheetProps) {
   const [nirEditor, setNirEditor] = useState<NirEditorState | null>(null);
@@ -169,6 +178,7 @@ export function PlotDetailSheet({
               row={row}
               rules={rules}
               seasonId={seasonId}
+              growers={growers}
               historyNonce={historyNonce}
               onSaved={onSaved}
               onClose={close}
@@ -213,6 +223,7 @@ function PlotDetailBody({
   row,
   rules,
   seasonId,
+  growers,
   historyNonce,
   onSaved,
   onClose,
@@ -224,6 +235,7 @@ function PlotDetailBody({
   row: PlotRow;
   rules: ParameterRule[];
   seasonId: string | null;
+  growers: GrowerOption[];
   historyNonce: number;
   onSaved: () => void;
   onClose: () => void;
@@ -234,6 +246,12 @@ function PlotDetailBody({
 }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Outside the zod form, as in PlotCreateSheet: two coupled values with a
+  // sentinel. Seeded once per mount, like defaultValues — the body is keyed on
+  // row.id, so a refetch must not reset a half-typed new grower name.
+  const [grower, setGrower] = useState<GrowerSelection>(() =>
+    initialGrowerSelection(row.plot.details?.grower_id, row.growerName, growers)
+  );
 
   const [nirRows, setNirRows] = useState<NirRow[] | null>(null);
   const [harvestRows, setHarvestRows] = useState<HarvestRow[] | null>(null);
@@ -297,7 +315,6 @@ function PlotDetailBody({
   const form = useForm<DetailsFormData>({
     resolver: zodResolver(detailsSchema),
     defaultValues: {
-      grower_name: row.growerName ?? '',
       region: row.region ?? '',
       plant_year_label: row.plot.details?.plant_year_label ?? '',
       plot_type: toFormValue(row.plotType),
@@ -325,7 +342,7 @@ function PlotDetailBody({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           area_id: row.id,
-          grower_name: values.grower_name || null,
+          ...growerPayload(grower),
           region: values.region || null,
           plant_year_label: values.plant_year_label || null,
           plot_type: fromFormValue(values.plot_type),
@@ -386,14 +403,31 @@ function PlotDetailBody({
             {[row.variety, row.growerName, row.region].filter(Boolean).join(' · ') || ' '}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="סגור"
-          className="absolute top-4 left-4 z-10 rounded-lg p-1.5 text-white/80 transition-colors hover:bg-white/15 hover:text-white"
-        >
-          <X className="size-5" />
-        </button>
+        <div className="absolute top-4 left-4 z-10 flex items-center gap-2">
+          {/* Up here rather than in the footer: the report is about the plot as
+              a whole, not about the attributes form the footer saves, and the
+              footer put it next to שמור פרטים where it read as part of saving.
+              Still disabled while the form is dirty — the report renders the
+              saved row, so unsaved edits would silently not appear on it. */}
+          <button
+            type="button"
+            disabled={form.formState.isDirty}
+            title={form.formState.isDirty ? 'שמור תחילה כדי לכלול את השינויים' : undefined}
+            onClick={() => window.open(`/olive/report/plot/${row.id}`, '_blank', 'noopener')}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-white/25 bg-white/10 px-2.5 py-1.5 text-xs font-semibold text-white/90 transition-colors hover:bg-white/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/10"
+          >
+            <FileText className="size-3.5" />
+            הפק דוח
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="סגור"
+            className="rounded-lg p-1.5 text-white/80 transition-colors hover:bg-white/15 hover:text-white"
+          >
+            <X className="size-5" />
+          </button>
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4 md:p-6">
@@ -571,19 +605,14 @@ function PlotDetailBody({
               )}
 
               <div className="grid gap-3 sm:grid-cols-2">
-                <FormField
-                  control={form.control}
-                  name="grower_name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-semibold">שם מגדל</FormLabel>
-                      <FormControl>
-                        <Input className="h-9" {...field} value={field.value ?? ''} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <div>
+                  <label className="text-sm font-semibold" id="plot-detail-grower">
+                    מגדל
+                  </label>
+                  <div className="mt-2" aria-labelledby="plot-detail-grower">
+                    <GrowerPicker growers={growers} value={grower} onChange={setGrower} />
+                  </div>
+                </div>
 
                 <FormField
                   control={form.control}
@@ -609,7 +638,11 @@ function PlotDetailBody({
                         <FormLabel className="text-sm font-semibold">{s.label}</FormLabel>
                         <Select onValueChange={field.onChange} value={field.value || NONE}>
                           <FormControl>
-                            <SelectTrigger className="h-9">
+                            {/* w-full: the trigger sizes to its content by
+                                default, so an unset select collapsed to the
+                                width of "—" and sat in a grid column beside
+                                full-width text inputs. */}
+                            <SelectTrigger className="h-9 w-full">
                               <SelectValue placeholder="—" />
                             </SelectTrigger>
                           </FormControl>

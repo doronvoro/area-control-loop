@@ -18,6 +18,15 @@ const OPEN_METEO_URL =
   '&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max' +
   '&timezone=Asia/Jerusalem&forecast_days=7';
 
+/**
+ * Open-Meteo is a free service with no SLA to this app, and refreshForecast now
+ * runs unattended from the nightly cron, which Vercel never retries. Ten seconds
+ * is far above the observed response time and far below any platform limit, so a
+ * hang becomes a logged error rather than an invocation killed mid-flight — and
+ * the "רענן תחזית" button stops being able to spin forever.
+ */
+const FORECAST_FETCH_TIMEOUT_MS = 10_000;
+
 // --- Types ---
 
 export interface ManualWeatherInput {
@@ -51,9 +60,28 @@ export async function getWeatherDays(supabase: SupabaseClient, fromDate: string)
  *
  * Manual rows are untouched — the upsert targets (entry_date, is_manual) with
  * is_manual false, so an override entered in the field survives a refresh.
+ *
+ * Idempotent by construction, which is what makes it safe on a schedule: Vercel
+ * cron delivery is best effort and can repeat a run, and a repeat just rewrites
+ * the same seven rows.
  */
 export async function refreshForecast(adminClient: SupabaseClient): Promise<any[]> {
-  const response = await fetch(OPEN_METEO_URL, { cache: 'no-store' });
+  let response: Response;
+
+  try {
+    response = await fetch(OPEN_METEO_URL, {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(FORECAST_FETCH_TIMEOUT_MS),
+    });
+  } catch (error) {
+    // Both callers put error.message in front of a person — handleApiError feeds
+    // the button's toast — so the English DOMException text must not escape.
+    // `cause` keeps the original for the cron's console.error.
+    const timedOut = error instanceof Error && error.name === 'TimeoutError';
+    throw new Error(timedOut ? 'שירות התחזית לא הגיב בזמן' : 'שגיאה בקבלת תחזית מזג האוויר', {
+      cause: error,
+    });
+  }
 
   if (!response.ok) {
     throw new Error(`שגיאה בקבלת תחזית מזג האוויר (${response.status})`);

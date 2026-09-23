@@ -47,6 +47,17 @@ npm run create-test-users # Create test users
 - Middleware in `middleware.ts` protects all routes except `/login`, `/register`, `/invitations/accept`, `/api/auth`
 - Use `createClient()` from `lib/supabase/server.ts` in server components/API routes
 
+**Scheduled Jobs**:
+- Declared in `vercel.json` under `crons`, pointing at routes in `app/api/cron/*`
+- Authenticated by `CRON_SECRET` via `lib/api/cron-auth.ts` — **never** by a session.
+  `getApiContext()` throws on a cron request; do not add it to these routes
+- Schedules are always UTC. `0 2 * * *` lands at 05:00 Israel time in summer
+  (UTC+3) and 04:00 in winter (UTC+2) — early enough either way, and far enough
+  from local midnight that the dashboard's day-based staleness reading does not
+  jitter when the offset flips
+- Vercel never retries a failed run and delivery is best-effort, so jobs must be
+  idempotent. Today: `/api/cron/weather` refreshes the olive forecast nightly
+
 **Database Types**:
 - Manually defined in `types/database.ts` (not auto-generated)
 - Tables: `customers`, `workers`, `worker_types`, `areas`, `sub_areas`, `report_areas`, `monitoring_area_report`, `actions_area_report`, `findings`, `action_types`, `unit_types`, `invitations`, `customer_areas`
@@ -92,12 +103,25 @@ Required in `.env.local`:
 ```
 NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<from supabase status>
+SUPABASE_SERVICE_ROLE_KEY=<from supabase status>
 ```
 
-For scripts requiring admin access:
+`SUPABASE_SERVICE_ROLE_KEY` is **not scripts-only**: `getApiContext()` calls
+`createAdminClient()`, which throws without it, so every API route needs it at
+runtime in every environment including production.
+
+For scripts, it can also be passed inline:
 ```bash
 SUPABASE_SERVICE_ROLE_KEY=<key> npm run <script>
 ```
+
+Optional locally, required in Vercel production:
+```
+CRON_SECRET=<random string, 16+ chars>
+```
+Vercel sends this as the `Authorization: Bearer` header on cron invocations. Set
+any value locally to exercise `/api/cron/*` with curl. Unset means those routes
+401 — they fail closed.
 
 ## Project Roadmap
 

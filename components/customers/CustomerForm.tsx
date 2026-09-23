@@ -23,7 +23,15 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { CUSTOMER_TYPE_OPTIONS } from '@/types/database';
 
 /**
  * Validation depends on the mode, so the schema is built per mode rather than
@@ -43,6 +51,15 @@ const makeCustomerSchema = (isEditMode: boolean) =>
     .object({
       name: z.string().min(1, 'שם הלקוח נדרש'),
       description: z.string().optional(),
+      // Create-only, like the credentials below.
+      //
+      // This dialog's `customer` prop carries only id/name/description, so in
+      // edit mode it does not know the current type — offering a select would
+      // mean overwriting a classification with whatever happened to be
+      // preselected. Editing a type belongs on /admin/customers, whose drawer
+      // has the whole row. PUT /api/customers omits keys absent from the body,
+      // so not sending it here leaves the stored value alone.
+      customer_type: z.string().optional(),
       // Optional at the field level because editing does not resubmit
       // credentials; superRefine below makes them required on create.
       email: z.string().optional().or(z.literal('')),
@@ -50,6 +67,14 @@ const makeCustomerSchema = (isEditMode: boolean) =>
     })
     .superRefine((data, ctx) => {
       if (isEditMode) return;
+
+      if (!data.customer_type) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['customer_type'],
+          message: 'נדרש לבחור סוג לקוח',
+        });
+      }
 
       if (!data.email) {
         ctx.addIssue({
@@ -94,6 +119,7 @@ export function CustomerForm({ customer, open, onOpenChange, onSuccess }: Custom
     defaultValues: {
       name: customer?.name || '',
       description: customer?.description || '',
+      customer_type: '',
       email: '',
       password: '',
     },
@@ -105,6 +131,7 @@ export function CustomerForm({ customer, open, onOpenChange, onSuccess }: Custom
       form.reset({
         name: customer?.name || '',
         description: customer?.description || '',
+        customer_type: '',
         email: '',
         password: '',
       });
@@ -128,6 +155,7 @@ export function CustomerForm({ customer, open, onOpenChange, onSuccess }: Custom
       if (isEditMode) {
         body.id = customer.id;
       } else {
+        body.customer_type = data.customer_type;
         body.email = data.email?.trim();
         body.password = data.password;
       }
@@ -204,6 +232,31 @@ export function CustomerForm({ customer, open, onOpenChange, onSuccess }: Custom
 
             {!isEditMode && (
               <>
+                <FormField
+                  control={form.control}
+                  name="customer_type"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>סוג לקוח</FormLabel>
+                      <Select value={field.value || undefined} onValueChange={field.onChange}>
+                        <FormControl>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="בחר סוג לקוח" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {CUSTOMER_TYPE_OPTIONS.map((o) => (
+                            <SelectItem key={o.value} value={o.value}>
+                              {o.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
                 <FormField
                   control={form.control}
                   name="email"

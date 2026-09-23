@@ -11,6 +11,8 @@ export interface SearchableSelectOption {
 }
 
 interface SearchableSelectProps {
+  /** Lands on the trigger, so a <Label htmlFor> can point at this control. */
+  id?: string;
   options: SearchableSelectOption[];
   value?: string;
   onValueChange: (value: string) => void;
@@ -22,6 +24,7 @@ interface SearchableSelectProps {
 }
 
 export function SearchableSelect({
+  id,
   options,
   value,
   onValueChange,
@@ -68,6 +71,7 @@ export function SearchableSelect({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild disabled={disabled}>
         <button
+          id={id}
           type="button"
           className={cn(
             'flex h-10 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none',

@@ -11,6 +11,28 @@ import type { PlotCategory } from './logic';
 export const OLIVE_CROP_NAME = 'זית';
 
 /**
+ * Takt names follow supabase/seed/olive_demo_seed.sql, which is also what the
+ * NIR and harvest pickers display: טאקט 1, טאקט 2, …
+ *
+ * Shared rather than local to the importer because two paths now create takts —
+ * the backup import and the plot-create drawer — and a plot whose takts are
+ * named differently from every other plot's is a picker full of near-duplicates.
+ */
+export function taktName(index: number): string {
+  return `טאקט ${index}`;
+}
+
+/**
+ * Upper bound on takt_count, matching the database.
+ *
+ * olive_plot_details_takt_count_check is
+ * `takt_count IS NULL OR (takt_count >= 1 AND takt_count <= 10)`. A looser
+ * limit is not a guard, only a delay: the details upsert would reject the row
+ * while the takt loop happily created the sub_areas.
+ */
+export const MAX_TAKT_COUNT = 10;
+
+/**
  * Fallback bands for the four status cards.
  *
  * These are the prototype's own defaults, as its backup export writes them

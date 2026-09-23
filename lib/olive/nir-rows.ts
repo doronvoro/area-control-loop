@@ -76,13 +76,22 @@ export const EMPTY_NIR_FILTERS: NirFilters = {
   direction: 'all',
 };
 
+/**
+ * How many filters are set, for the panel's "מסונן (n)" badge.
+ * hasActiveNirFilters is derived from it so the badge and the clear button's
+ * disabled state cannot disagree.
+ */
+export function countActiveNirFilters(f: NirFilters): number {
+  let n = 0;
+  if (f.search.trim() !== '') n += 1;
+  if (f.areaId !== '' && f.areaId !== 'all') n += 1;
+  if (f.status !== 'all') n += 1;
+  if (f.direction !== 'all') n += 1;
+  return n;
+}
+
 export function hasActiveNirFilters(f: NirFilters): boolean {
-  return (
-    f.search.trim() !== '' ||
-    (f.areaId !== '' && f.areaId !== 'all') ||
-    f.status !== 'all' ||
-    f.direction !== 'all'
-  );
+  return countActiveNirFilters(f) > 0;
 }
 
 /** Flatten one API report. `taktNameById` resolves sub_area_id to a name. */

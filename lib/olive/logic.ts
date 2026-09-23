@@ -407,6 +407,35 @@ export function yieldLoadInfo(
 }
 
 /**
+ * A yield estimate out of what someone typed.
+ *
+ * This is the only guard on the value there is. `yield_estimates.kg_per_dunam`
+ * carries no CHECK constraint and the route coerces with a bare `Number()`, and
+ * rejecting NaN here is the part that matters: `JSON.stringify(NaN)` is `null`,
+ * so a typo'd "12a" would not fail loudly — it would silently clear the
+ * estimate and look like a successful save.
+ *
+ * An empty field is a deliberate clear, not a mistake, so it parses to null.
+ */
+export function parseYieldDraft(
+  raw: string
+): { ok: true; value: number | null } | { ok: false; message: string } {
+  const trimmed = raw.trim();
+  if (trimmed === '') return { ok: true, value: null };
+
+  const parsed = Number(trimmed);
+  // NUMERIC(10,2) is eight digits before the point. Past that the insert fails
+  // in the database, long after the row has left the screen.
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 99999999.99) {
+    // The same string the plot drawer's zod refine uses, so the two entry
+    // points for this field cannot disagree about what is wrong.
+    return { ok: false, message: 'נדרש ערך חיובי' };
+  }
+
+  return { ok: true, value: parsed };
+}
+
+/**
  * Free-text plot search.
  *
  * Matches a plain substring across name/region/variety/grower, and also matches

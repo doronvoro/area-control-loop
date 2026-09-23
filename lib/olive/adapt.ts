@@ -25,6 +25,8 @@ export interface ApiPlot {
   planting_time: string | null;
   size: number | null;
   details?: {
+    /** The grower record. grower_name is the display value kept alongside it. */
+    grower_id?: string | null;
     grower_name: string | null;
     region: string | null;
     plot_type: string | null;

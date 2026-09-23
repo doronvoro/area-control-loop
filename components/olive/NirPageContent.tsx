@@ -158,15 +158,10 @@ export function NirPageContent({ initialAreaId }: { initialAreaId: string | null
   }, [rows, filters, rules, sort]);
 
   const pagination = usePagination(visibleRows, {
-    resetKey: [
-      filters.search,
-      filters.areaId,
-      filters.status,
-      filters.direction,
-      sort.field,
-      sort.direction,
-      seasonId,
-    ].join('|'),
+    // The whole filter object, not a hand-listed subset: that list was a second
+    // place to remember every time a filter was added, and forgetting it leaves
+    // you on a page that no longer exists, staring at an empty table.
+    resetKey: `${JSON.stringify(filters)}|${sort.field}|${sort.direction}|${seasonId}`,
   });
 
   const handleDelete = async () => {
@@ -230,20 +225,25 @@ export function NirPageContent({ initialAreaId }: { initialAreaId: string | null
         </div>
       )}
 
-      <section className="olive-card overflow-hidden">
-        <NirLogToolbar
-          filters={filters}
-          onFiltersChange={setFilters}
-          onClear={() => setFilters(EMPTY_NIR_FILTERS)}
-          plotOptions={plotOptions}
-          seasons={seasons ?? []}
-          seasonId={seasonId}
-          onSeasonChange={setSeasonId}
-          seasonLoading={reportsLoading}
-          shown={visibleRows.length}
-          total={rows.length}
-        />
+      {/* The panel brings its own surface, so it sits beside the table's card
+          rather than inside it. */}
+      <NirLogToolbar
+        filters={filters}
+        onFiltersChange={setFilters}
+        onClear={() => setFilters(EMPTY_NIR_FILTERS)}
+        plotOptions={plotOptions}
+        seasons={seasons ?? []}
+        seasonId={seasonId}
+        onSeasonChange={setSeasonId}
+        seasonLoading={reportsLoading}
+        shown={visibleRows.length}
+        total={rows.length}
+        // Arriving from the plots page pre-selects a plot; open the panel so
+        // the shortened list has a visible cause.
+        defaultExpanded={Boolean(initialAreaId)}
+      />
 
+      <section className="olive-card overflow-hidden">
         {visibleRows.length === 0 ? (
           <EmptyState
             filtered={hasActiveNirFilters(filters)}
