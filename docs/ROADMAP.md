@@ -1,6 +1,6 @@
 # Project Roadmap: Area Control Loop
 
-> **Last Updated:** 2026-01-25
+> **Last Updated:** 2026-09-22
 > **Status:** Phase 1 - Stabilization & Core Completion
 
 ---
@@ -272,6 +272,10 @@ This roadmap tracks progress from the current state (Monitoring + Action phases)
 ---
 
 ## Changelog
+
+### 2026-09-22
+- Olive forecast now refreshes on a schedule (`vercel.json` cron → `/api/cron/weather`, 02:00 UTC daily); the "רענן תחזית" button remains the manual fallback
+- Added a 10s timeout to the Open-Meteo fetch, plus first tests for `olive-weather.service.ts`
 
 ### 2026-01-25
 - Initial roadmap created

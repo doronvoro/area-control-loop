@@ -4,6 +4,13 @@ import { NextResponse, type NextRequest } from 'next/server';
 export async function updateSession(request: NextRequest) {
   // For API requests with Bearer tokens (mobile), skip cookie-based auth
   // and let the API route handlers authenticate via requireAuth()
+  //
+  // app/api/cron/* depends on this too: Vercel invokes a cron anonymously with
+  // `Authorization: Bearer <CRON_SECRET>`, and without this branch the request
+  // is redirected to /login — which Vercel counts as a completed invocation and
+  // does not log, so the nightly forecast refresh would stop with no trace.
+  // Removing or narrowing this branch means excluding api/cron from the matcher
+  // in middleware.ts and having those routes 401 on their own.
   const authHeader = request.headers.get('authorization');
   if (authHeader?.startsWith('Bearer ') && request.nextUrl.pathname.startsWith('/api/')) {
     const response = NextResponse.next({ request });

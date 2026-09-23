@@ -9,10 +9,23 @@
 /**
  * How old a forecast has to be before the dashboard says so.
  *
- * Two days, because nothing refreshes on a schedule — there is no cron anywhere
- * in the repo, only the "רענן תחזית" button on /olive/weather. A forecast that
- * nobody has pulled since the day before yesterday is describing a week that has
- * already partly happened.
+ * A nightly cron refreshes it (vercel.json → /api/cron/weather, 02:00 UTC), with
+ * the "רענן תחזית" button on /olive/weather as the manual fallback. So staleness
+ * now means the schedule is broken, which is exactly what it should mean.
+ *
+ * Two days, and NOT one, because the comparison below buckets by local calendar
+ * day and the run lands at 04:00–05:00 Israel time: between local midnight and
+ * the run, a perfectly healthy forecast is already one day old. A threshold of
+ * one would light the urgent pill every single morning and teach everyone to
+ * ignore the one alarm that means the automation stopped.
+ *
+ * At two the behaviour is right: healthy never trips, a single missed run shows
+ * a self-clearing warning the following morning, and a broken schedule stays lit
+ * from roughly 43 hours after the last good pull.
+ *
+ * If faster detection is ever wanted, the answer is not a smaller day count —
+ * it is comparing hours (say 30), which is immune to both the midnight boundary
+ * and the summer/winter offset shift.
  */
 export const FORECAST_STALE_DAYS = 2;
 

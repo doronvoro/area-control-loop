@@ -10,8 +10,10 @@ import { formatForecastDay, type ForecastFreshness } from '@/lib/olive/weather-v
  *
  * This section used to render only when a day crossed a threshold, which made a
  * calm week and an empty weather_days table look identical — both blank. Since
- * the forecast feeds harvest urgency and nothing refreshes it on a schedule,
- * "we have no forecast" is the one state that most needs saying out loud.
+ * the forecast feeds harvest urgency, "we have no forecast" is the one state
+ * that most needs saying out loud, and that is still true now that a nightly
+ * cron fills the table: an automated pull can fail, and it fails silently.
+ * Do not make this conditional again.
  *
  * Presentational only. Every number here comes from computeUpcomingWeather, and
  * the flags are the ones it set while building weatherLines, so the days this
@@ -162,7 +164,8 @@ function EmptyForecast() {
       <CloudSun className="text-muted-foreground/40 size-7" />
       <p className="text-sm font-bold">אין נתוני תחזית לימים הקרובים</p>
       <p className="olive-muted text-xs">
-        דחיפות המסיק מחושבת כרגע ללא מזג אוויר. רענון התחזית מתבצע ידנית.
+        דחיפות המסיק מחושבת כרגע ללא מזג אוויר. התחזית מתרעננת אוטומטית מדי בוקר, וניתן לרענן גם
+        ידנית.
       </p>
       <Link href="/olive/weather" className="mt-1 text-sm underline">
         מעבר למסך מזג אוויר לרענון התחזית
