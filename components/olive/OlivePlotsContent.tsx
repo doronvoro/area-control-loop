@@ -24,12 +24,15 @@ import {
   filterPlotRows,
   hasActivePlotFilters,
   nextOilWaterSort,
+  plotTypeCounts,
   sortPlotRows,
   toPlotRow,
   type PlotFilters,
   type PlotRow,
   type PlotSortField,
 } from '@/lib/olive/plot-rows';
+import { NONE } from '@/lib/forms/none-sentinel';
+import type { SearchableSelectOption } from '@/components/ui/searchable-select';
 import type { ParameterRule } from '@/types/database';
 
 /**
@@ -114,6 +117,22 @@ export function OlivePlotsContent({ initialSearch = null }: { initialSearch?: st
   const growers = useMemo<GrowerOption[]>(
     () => (growerData ?? []).map((g) => ({ id: g.id, name: g.name })),
     [growerData]
+  );
+
+  /**
+   * The grower filter's options. Derived from `growers` rather than from
+   * growerData again, so the drawers' list and the filter's cannot drift.
+   *
+   * No explicit "all" entry: SearchableSelect shows its placeholder when the
+   * value is '' and its clear-X only when it is not, so an "all" item would be
+   * a second spelling of one state.
+   */
+  const growerOptions = useMemo<SearchableSelectOption[]>(
+    () => [
+      ...growers.map((g) => ({ value: g.id, label: g.name })),
+      { value: NONE, label: 'ללא מגדל' },
+    ],
+    [growers]
   );
 
   const now = useMemo(() => new Date(), []);
@@ -241,17 +260,19 @@ export function OlivePlotsContent({ initialSearch = null }: { initialSearch?: st
     [rows, filters, sort]
   );
 
+  // What each grower-type chip shows. One extra filter pass over ~45 rows per
+  // keystroke, which is free, and it keeps the chips honest about the other
+  // filters rather than quoting the unfiltered list.
+  const typeCounts = useMemo(() => plotTypeCounts(rows, filters), [rows, filters]);
+
   const pagination = usePagination(visibleRows, {
     pageSize: 50,
-    resetKey: [
-      filters.search,
-      filters.plotType,
-      filters.category,
-      filters.harvest,
-      filters.nir,
-      sort.field,
-      sort.direction,
-    ].join('|'),
+    // The whole filter object, not a hand-listed subset: that list was a second
+    // place to remember every time a filter was added, and forgetting it leaves
+    // you on a page that no longer exists, staring at an empty table.
+    // PlotFilters is flat strings and every writer spreads the previous object,
+    // so key order — and the serialisation — is stable.
+    resetKey: `${JSON.stringify(filters)}|${sort.field}|${sort.direction}`,
   });
 
   // The `&& !data` guard matters: refetch() after saving the details dialog
@@ -283,15 +304,22 @@ export function OlivePlotsContent({ initialSearch = null }: { initialSearch?: st
     <div className="space-y-4">
       <PlotsHeader canCreate={canCreate} onCreate={() => setCreateOpen(true)} />
 
-      <section className="olive-card overflow-hidden">
-        <PlotsToolbar
-          filters={filters}
-          onFiltersChange={setFilters}
-          onClear={() => setFilters(EMPTY_PLOT_FILTERS)}
-          shown={visibleRows.length}
-          total={rows.length}
-        />
+      {/* The panel brings its own surface, so it sits beside the table's card
+          rather than inside it. The wrapper's space-y-4 supplies the gap. */}
+      <PlotsToolbar
+        filters={filters}
+        onFiltersChange={setFilters}
+        onClear={() => setFilters(EMPTY_PLOT_FILTERS)}
+        growerOptions={growerOptions}
+        typeCounts={typeCounts}
+        shown={visibleRows.length}
+        total={rows.length}
+        // Arriving from the growers screen lands a term in the search box; open
+        // the panel so the shortened list has a visible cause.
+        defaultExpanded={Boolean(initialSearch)}
+      />
 
+      <section className="olive-card overflow-hidden">
         {visibleRows.length === 0 ? (
           <EmptyState
             filtered={hasActivePlotFilters(filters)}

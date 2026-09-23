@@ -79,13 +79,22 @@ export const EMPTY_HARVEST_FILTERS: HarvestFilters = {
   finality: 'all',
 };
 
+/**
+ * How many filters are set, for the panel's "מסונן (n)" badge.
+ * hasActiveHarvestFilters is derived from it so the badge and the clear
+ * button's disabled state cannot disagree.
+ */
+export function countActiveHarvestFilters(f: HarvestFilters): number {
+  let n = 0;
+  if (f.search.trim() !== '') n += 1;
+  if (f.areaId !== '' && f.areaId !== 'all') n += 1;
+  if (f.harvester !== 'all') n += 1;
+  if (f.finality !== 'all') n += 1;
+  return n;
+}
+
 export function hasActiveHarvestFilters(f: HarvestFilters): boolean {
-  return (
-    f.search.trim() !== '' ||
-    (f.areaId !== '' && f.areaId !== 'all') ||
-    f.harvester !== 'all' ||
-    f.finality !== 'all'
-  );
+  return countActiveHarvestFilters(f) > 0;
 }
 
 /** Flatten one API report. `taktNameById` resolves sub_area_id to a name. */

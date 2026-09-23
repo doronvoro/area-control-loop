@@ -4,6 +4,8 @@ import {
   filterPlotRows,
   sortPlotRows,
   hasActivePlotFilters,
+  countActivePlotFilters,
+  plotTypeCounts,
   categoryLabel,
   nextOilWaterSort,
   EMPTY_PLOT_FILTERS,
@@ -11,6 +13,7 @@ import {
   type PlotSortField,
 } from '@/lib/olive/plot-rows';
 import type { ApiPlot } from '@/lib/olive/adapt';
+import { NONE } from '@/lib/forms/none-sentinel';
 import { PlotType } from '@/types/database';
 
 const NOW = new Date('2026-09-15T10:00:00');
@@ -23,6 +26,7 @@ function apiPlot(overrides: Partial<ApiPlot> = {}): ApiPlot {
     planting_time: '2003',
     size: '48.00',
     details: {
+      grower_id: 'g-1',
       grower_name: 'ארץ גשור',
       region: 'גולן',
       plot_type: PlotType.OWNER,
@@ -56,6 +60,7 @@ function row(overrides: Partial<PlotRow> = {}): PlotRow {
     id: 'p',
     name: 'מיצר',
     variety: null,
+    growerId: null,
     growerName: null,
     plotType: null,
     region: null,
@@ -132,8 +137,13 @@ describe('toPlotRow', () => {
     expect(build({ yieldEstimate: null }).yieldLoad).toBeNull();
   });
 
+  it('lifts the grower id, which is what the filter matches on', () => {
+    expect(build().growerId).toBe('g-1');
+  });
+
   it('survives a plot with no details row', () => {
     const r = build({ plot: apiPlot({ details: null, takts: [] }) });
+    expect(r.growerId).toBeNull();
     expect(r.growerName).toBeNull();
     expect(r.region).toBeNull();
     expect(r.plotType).toBeNull();
@@ -230,6 +240,7 @@ describe('filterPlotRows', () => {
       id: 'a',
       name: 'מיצר — 2003 — ארבקינה',
       variety: 'ארבקינה',
+      growerId: 'g-1',
       growerName: 'ארץ גשור',
       plotType: PlotType.OWNER,
       region: 'גולן',
@@ -240,14 +251,17 @@ describe('filterPlotRows', () => {
     row({
       id: 'b',
       name: 'גבעה',
+      growerId: 'g-2',
       plotType: PlotType.PARTNER,
       category: 'anomaly',
       harvested: false,
       daysSinceNir: 30,
     }),
+    // No grower at all — what the NONE option is for.
     row({
       id: 'c',
       name: 'תל',
+      growerId: null,
       plotType: PlotType.PARTNER,
       category: 'testing',
       daysSinceNir: null,
@@ -293,9 +307,67 @@ describe('filterPlotRows', () => {
     expect(filter({ search: 'מא' })).toEqual([]);
   });
 
+  it('filters by grower id', () => {
+    expect(filter({ growerId: 'g-1' })).toEqual(['a']);
+    expect(filter({ growerId: 'g-2' })).toEqual(['b']);
+  });
+
+  it('treats both spellings of "no grower filter" as no filter', () => {
+    // '' is what SearchableSelect's clear button emits; 'all' is the vocabulary
+    // every other filter here uses, and handing it over must not empty the list.
+    expect(filter({ growerId: '' })).toEqual(['a', 'b', 'c']);
+    expect(filter({ growerId: 'all' })).toEqual(['a', 'b', 'c']);
+  });
+
+  it('finds the plots with no grower at all', () => {
+    expect(filter({ growerId: NONE })).toEqual(['c']);
+  });
+
   it('combines filters with AND', () => {
     expect(filter({ plotType: PlotType.PARTNER, category: 'testing' })).toEqual(['c']);
     expect(filter({ plotType: PlotType.OWNER, category: 'testing' })).toEqual([]);
+    expect(filter({ growerId: 'g-2', plotType: PlotType.PARTNER })).toEqual(['b']);
+    expect(filter({ growerId: 'g-2', plotType: PlotType.OWNER })).toEqual([]);
+  });
+});
+
+// ─── chip counts ─────────────────────────────────────────────────────────────
+
+describe('plotTypeCounts', () => {
+  const rows = [
+    row({ id: 'a', name: 'מיצר', growerId: 'g-1', plotType: PlotType.OWNER, category: 'ready' }),
+    row({ id: 'b', name: 'גבעה', growerId: 'g-2', plotType: PlotType.PARTNER }),
+    row({ id: 'c', name: 'תל', plotType: PlotType.PARTNER }),
+    // Never classified. It is in `all` and in no chip.
+    row({ id: 'd', name: 'רמה', plotType: null }),
+  ];
+
+  const counts = (overrides: Partial<typeof EMPTY_PLOT_FILTERS> = {}) =>
+    plotTypeCounts(rows, { ...EMPTY_PLOT_FILTERS, ...overrides });
+
+  it('counts everything when nothing is set', () => {
+    expect(counts().all).toBe(4);
+    expect(counts()[PlotType.OWNER]).toBe(1);
+    expect(counts()[PlotType.PARTNER]).toBe(2);
+  });
+
+  it('leaves an unclassified plot out of every chip but inside all', () => {
+    // The chips deliberately do not sum to `all` — dropping 'רמה' from `all`
+    // would make the table show a plot the הכל chip does not admit exists.
+    const c = counts();
+    expect(c.all).toBe(4);
+    expect((c[PlotType.OWNER] ?? 0) + (c[PlotType.PARTNER] ?? 0)).toBe(3);
+  });
+
+  it('respects the other filters, so a chip cannot promise more than the table shows', () => {
+    const c = counts({ category: 'ready' });
+    expect(c.all).toBe(1);
+    expect(c[PlotType.OWNER]).toBe(1);
+    expect(c[PlotType.PARTNER]).toBeUndefined();
+  });
+
+  it('ignores plotType itself, so clicking a chip does not rewrite the counts', () => {
+    expect(counts({ plotType: PlotType.OWNER })).toEqual(counts());
   });
 });
 
@@ -310,9 +382,58 @@ describe('hasActivePlotFilters', () => {
 
   it('is true once any filter is set', () => {
     expect(hasActivePlotFilters({ ...EMPTY_PLOT_FILTERS, plotType: PlotType.OWNER })).toBe(true);
+    expect(hasActivePlotFilters({ ...EMPTY_PLOT_FILTERS, growerId: 'g-1' })).toBe(true);
     expect(hasActivePlotFilters({ ...EMPTY_PLOT_FILTERS, category: 'ready' })).toBe(true);
     expect(hasActivePlotFilters({ ...EMPTY_PLOT_FILTERS, harvest: 'active' })).toBe(true);
     expect(hasActivePlotFilters({ ...EMPTY_PLOT_FILTERS, nir: 'never' })).toBe(true);
+  });
+
+  it('is false for either spelling of an unset grower', () => {
+    expect(hasActivePlotFilters({ ...EMPTY_PLOT_FILTERS, growerId: '' })).toBe(false);
+    expect(hasActivePlotFilters({ ...EMPTY_PLOT_FILTERS, growerId: 'all' })).toBe(false);
+  });
+});
+
+describe('countActivePlotFilters', () => {
+  const count = (overrides: Partial<typeof EMPTY_PLOT_FILTERS> = {}) =>
+    countActivePlotFilters({ ...EMPTY_PLOT_FILTERS, ...overrides });
+
+  it('is zero for the empty set and for whitespace-only search', () => {
+    expect(count()).toBe(0);
+    expect(count({ search: '   ' })).toBe(0);
+  });
+
+  it('counts one per set filter', () => {
+    expect(count({ search: 'מיצר' })).toBe(1);
+    expect(count({ plotType: PlotType.OWNER })).toBe(1);
+    expect(count({ growerId: 'g-1' })).toBe(1);
+    expect(count({ category: 'ready' })).toBe(1);
+    expect(count({ harvest: 'active' })).toBe(1);
+    expect(count({ nir: 'never' })).toBe(1);
+  });
+
+  it('does not count an unset grower under either spelling', () => {
+    expect(count({ growerId: '' })).toBe(0);
+    expect(count({ growerId: 'all' })).toBe(0);
+  });
+
+  it('sums several', () => {
+    expect(count({ search: 'מיצר', growerId: 'g-1', category: 'ready' })).toBe(3);
+  });
+
+  it('agrees with hasActivePlotFilters', () => {
+    // The badge reads this number and the clear button reads that boolean; if
+    // they ever disagree you get "מסונן (2)" beside a greyed-out נקה סינון.
+    for (const overrides of [
+      {},
+      { search: '   ' },
+      { growerId: 'all' },
+      { growerId: 'g-1' },
+      { nir: 'never' as const },
+    ]) {
+      const filters = { ...EMPTY_PLOT_FILTERS, ...overrides };
+      expect(countActivePlotFilters(filters) > 0).toBe(hasActivePlotFilters(filters));
+    }
   });
 });
 

@@ -12,6 +12,7 @@
 
 import { PLOT_CATEGORY_CARDS } from './constants';
 import { daysSinceLabel, plotMatchesSearch, yieldLoadInfo, type PlotCategory } from './logic';
+import { NONE } from '@/lib/forms/none-sentinel';
 import type { ApiPlot } from './adapt';
 import type { SortState } from '@/components/ui/sortable-table-head';
 import { ParameterStatus } from '@/types/database';
@@ -21,6 +22,8 @@ export interface PlotRow {
   id: string;
   name: string;
   variety: string | null;
+  /** growers.id, which is what the grower filter matches on. */
+  growerId: string | null;
   growerName: string | null;
   /** PlotType value ('owner' | 'partner' | 'occasional'), or null. */
   plotType: string | null;
@@ -59,8 +62,13 @@ export type PlotSortField =
 
 export interface PlotFilters {
   search: string;
-  /** 'all' | a PlotType value. */
+  /** 'all' | a PlotType value. Driven by the header chips, not a dropdown. */
   plotType: string;
+  /**
+   * '' or 'all' both mean no filter — SearchableSelect's clear button emits ''.
+   * NONE means "this plot has no grower", the same word the plot forms use.
+   */
+  growerId: string;
   /** 'all' | a PlotCategory value. */
   category: string;
   /** 'all' | 'harvested' | 'active'. */
@@ -72,19 +80,34 @@ export interface PlotFilters {
 export const EMPTY_PLOT_FILTERS: PlotFilters = {
   search: '',
   plotType: 'all',
+  growerId: '',
   category: 'all',
   harvest: 'all',
   nir: 'all',
 };
 
+/**
+ * How many filters are set.
+ *
+ * The panel's "מסונן (n)" badge needs the number, and hasActivePlotFilters is
+ * derived from it so the two cannot disagree — the failure mode being a badge
+ * that says (2) beside a disabled "נקה סינון".
+ */
+export function countActivePlotFilters(f: PlotFilters): number {
+  let n = 0;
+  if (f.search.trim() !== '') n += 1;
+  if (f.plotType !== 'all') n += 1;
+  // Both spellings of "no grower filter" have to be checked here; collapsing
+  // this to a truthiness test would count 'all' as an active filter.
+  if (f.growerId !== '' && f.growerId !== 'all') n += 1;
+  if (f.category !== 'all') n += 1;
+  if (f.harvest !== 'all') n += 1;
+  if (f.nir !== 'all') n += 1;
+  return n;
+}
+
 export function hasActivePlotFilters(f: PlotFilters): boolean {
-  return (
-    f.search.trim() !== '' ||
-    f.plotType !== 'all' ||
-    f.category !== 'all' ||
-    f.harvest !== 'all' ||
-    f.nir !== 'all'
-  );
+  return countActivePlotFilters(f) > 0;
 }
 
 /** Display order for the category column, shared with the dashboard's cards. */
@@ -125,6 +148,7 @@ export function toPlotRow({
     id: plot.id,
     name: plot.name ?? '',
     variety: plot.variety,
+    growerId: details?.grower_id ?? null,
     growerName: details?.grower_name ?? null,
     plotType: details?.plot_type ?? null,
     region: details?.region ?? null,
@@ -169,9 +193,17 @@ export function nextOilWaterSort(sort: SortState<PlotSortField>): SortState<Plot
 
 export function filterPlotRows(rows: PlotRow[], filters: PlotFilters): PlotRow[] {
   const term = filters.search.trim();
+  // 'all' is tolerated as well as '', so a caller that hands the dropdown
+  // vocabulary to the searchable one is not silently filtering everything out.
+  const growerId = filters.growerId === 'all' ? '' : filters.growerId;
 
   return rows.filter((row) => {
     if (filters.plotType !== 'all' && row.plotType !== filters.plotType) return false;
+
+    if (growerId) {
+      if (growerId === NONE ? row.growerId !== null : row.growerId !== growerId) return false;
+    }
+
     if (filters.category !== 'all' && row.category !== filters.category) return false;
 
     if (filters.harvest !== 'all' && row.harvested !== (filters.harvest === 'harvested'))
@@ -216,6 +248,30 @@ export function sortPlotRows(rows: PlotRow[], sort: SortState<PlotSortField>): P
     if (compared === 0) return a.name.localeCompare(b.name, 'he');
     return compared * factor;
   });
+}
+
+/**
+ * What each grower-type chip shows.
+ *
+ * Counted over rows filtered by everything EXCEPT plotType, not over the raw
+ * list: a chip promising 29 next to a footer reading "מציג 4" is a lie, and the
+ * lie is worst exactly when the numbers matter. With nothing else set,
+ * counts.all equals the footer's total.
+ *
+ * A plot with no plot_type lands in `all` and in no chip, so the chips do not
+ * sum to `all`. That is honest — there is no chip for "unclassified", and
+ * dropping those rows from `all` would make the table show more plots than the
+ * הכל chip claims.
+ */
+export function plotTypeCounts(rows: PlotRow[], filters: PlotFilters): Record<string, number> {
+  const base = filterPlotRows(rows, { ...filters, plotType: 'all' });
+  const counts: Record<string, number> = { all: base.length };
+
+  for (const row of base) {
+    if (row.plotType) counts[row.plotType] = (counts[row.plotType] ?? 0) + 1;
+  }
+
+  return counts;
 }
 
 // --- Private helpers ---
