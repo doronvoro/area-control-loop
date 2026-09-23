@@ -8,11 +8,14 @@ import {
   plotTypeCounts,
   summarisePlotRows,
   categoryLabel,
+  categoryReadingText,
+  categoryRuleText,
   nextOilWaterSort,
   EMPTY_PLOT_FILTERS,
   type PlotRow,
   type PlotSortField,
 } from '@/lib/olive/plot-rows';
+import { DEFAULT_CATEGORY_THRESHOLDS } from '@/lib/olive/constants';
 import type { ApiPlot } from '@/lib/olive/adapt';
 import { NONE } from '@/lib/forms/none-sentinel';
 import { PlotType } from '@/types/database';
@@ -501,6 +504,74 @@ describe('categoryLabel', () => {
     expect(categoryLabel('anomaly')).toBe('חריגות');
     expect(categoryLabel('ready')).toBe('מוכן למסיק');
     expect(categoryLabel('testing')).toBe('בבדיקות');
+  });
+});
+
+// ─── categoryRuleText / categoryReadingText ──────────────────────────────────
+
+describe('categoryRuleText', () => {
+  // Deliberately NOT the defaults: every number in the sentence has to come
+  // from the row the client tuned, or the tooltip explains a band the app is
+  // not using.
+  const bands = {
+    ...DEFAULT_CATEGORY_THRESHOLDS,
+    readyOilMin: 15,
+    readyOilMax: 22,
+    readyWaterMin: 49,
+    readyWaterMax: 53,
+    anomalyWaterLow: 47,
+    anomalyWaterHigh: 58,
+    normalOilMax: 14,
+    normalWaterMax: 57,
+  };
+
+  it('quotes the tuned bands, not the shipped defaults', () => {
+    expect(categoryRuleText('ready', bands)).toContain('בין 15% ל-22%');
+    expect(categoryRuleText('ready', bands)).toContain('בין 49% ל-53%');
+    expect(categoryRuleText('anomaly', bands)).toContain('מתחת ל-47%');
+    expect(categoryRuleText('anomaly', bands)).toContain('מעל 58%');
+    expect(categoryRuleText('normal', bands)).toContain('עד 14%');
+    expect(categoryRuleText('normal', bands)).toContain('עד 57%');
+  });
+
+  it('names the dry-matter rule on חריגות, which is the one band not in the row', () => {
+    // classifyPlotCategory reads it from parameter_rules; a plot flagged on
+    // dry alone would otherwise have no explanation at all.
+    expect(categoryRuleText('anomaly', bands)).toContain('חומר יבש');
+  });
+
+  it('says both things בבדיקות means', () => {
+    const text = categoryRuleText('testing', bands);
+    expect(text).toContain('טרם נדגמה');
+    expect(text).toContain('אינה נכנסת');
+  });
+
+  it('writes every range with a Hebrew connector rather than a dash', () => {
+    // A dash between two digit runs is bidi-neutral, so "15–22" paints
+    // reversed in this RTL page. See the שמן / מים cell in PlotsTable.
+    for (const category of ['ready', 'anomaly', 'normal', 'testing'] as const) {
+      expect(categoryRuleText(category, bands)).not.toMatch(/[\d]\s*[–-]\s*[\d]/);
+    }
+  });
+});
+
+describe('categoryReadingText', () => {
+  it('reports the reading the category was computed from', () => {
+    const text = categoryReadingText(
+      row({ lastMeasuredLabel: 'לפני 4 ימים', oil: 21, water: 70, dry: 45.3 })
+    );
+    expect(text).toBe('לפני 4 ימים: שמן 21% · מים 70% · חומר יבש 45.3%');
+  });
+
+  it('drops the values that are missing rather than printing a dash for them', () => {
+    expect(categoryReadingText(row({ lastMeasuredLabel: 'היום', oil: 12 }))).toBe('היום: שמן 12%');
+  });
+
+  it('separates never sampled from sampled with nothing readable', () => {
+    expect(categoryReadingText(row())).toContain('טרם נרשמה');
+    // A reading whose three values are all null is why a sampled plot can
+    // still sit in בבדיקות.
+    expect(categoryReadingText(row({ lastMeasuredLabel: 'היום' }))).toContain('ללא ערכי');
   });
 });
 

@@ -277,11 +277,7 @@ describe('computeUpcomingWeather', () => {
       { entry_date: '2026-10-17' },
     ]);
 
-    expect(result.upcoming.map((d) => d.date)).toEqual([
-      '2026-10-16',
-      '2026-10-17',
-      '2026-10-18',
-    ]);
+    expect(result.upcoming.map((d) => d.date)).toEqual(['2026-10-16', '2026-10-17', '2026-10-18']);
   });
 });
 
@@ -581,7 +577,9 @@ describe('toCategoryThresholds', () => {
   });
 
   it('coerces the weather row the same way, and falls back the same way', () => {
-    expect(toWeatherThresholds({ rain_alert_mm: '5.00', wind_alert_kmh: '25.00' })).toEqual(WEATHER);
+    expect(toWeatherThresholds({ rain_alert_mm: '5.00', wind_alert_kmh: '25.00' })).toEqual(
+      WEATHER
+    );
     expect(toWeatherThresholds(null)).toEqual(WEATHER);
   });
 });
@@ -681,6 +679,26 @@ describe('yieldLoadInfo', () => {
   it('returns null when no estimate exists', () => {
     expect(yieldLoadInfo(null)).toBeNull();
     expect(yieldLoadInfo(undefined)).toBeNull();
+  });
+
+  it('carries the band without the prefix, for a column already headed עומס יבול', () => {
+    // The plot list and the yield screen both render this in such a column.
+    // They used to get there by label.replace('עומס יבול: ', '').
+    expect(yieldLoadInfo(1400)?.short).toBe('גבוה');
+    expect(yieldLoadInfo(1000)?.short).toBe('בינוני');
+    expect(yieldLoadInfo(500)?.short).toBe('נמוך');
+    for (const value of [1400, 1000, 500]) {
+      expect(yieldLoadInfo(value)?.label).toBe(`עומס יבול: ${yieldLoadInfo(value)?.short}`);
+    }
+  });
+
+  it('describes each band in words, for the tooltip on the pill', () => {
+    expect(yieldLoadInfo(1400)?.range).toBe('מעל 1300 ק״ג/דונם');
+    expect(yieldLoadInfo(1000)?.range).toBe('בין 900 ל-1300 ק״ג/דונם');
+    expect(yieldLoadInfo(500)?.range).toBe('מתחת ל-900 ק״ג/דונם');
+    // Never "900–1300": a dash between two digit runs is bidi-neutral and
+    // paints reversed in this RTL page.
+    expect(yieldLoadInfo(1000)?.range).not.toMatch(/\d\s*[–-]\s*\d/);
   });
 });
 

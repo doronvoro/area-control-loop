@@ -171,10 +171,17 @@ export function OlivePlotsContent({ initialSearch = null }: { initialSearch?: st
     [data, taktNameById]
   );
 
+  /**
+   * The client's tuned category bands. Hoisted out of the `rows` memo below
+   * because the table quotes them in the tooltip that explains each category
+   * pill — the same row that classified the plots has to be the one the
+   * explanation is written from.
+   */
+  const bands = useMemo(() => toCategoryThresholds(data?.categoryThresholds), [data]);
+
   const rows = useMemo(() => {
     if (!data) return [];
     const harvested = new Set(data.harvestedAreaIds || []);
-    const bands = toCategoryThresholds(data.categoryThresholds);
 
     return (data.plots || []).map((plot) => {
       const latest = data.latestNir?.[plot.id] as ApiNirReport | undefined;
@@ -190,7 +197,7 @@ export function OlivePlotsContent({ initialSearch = null }: { initialSearch?: st
         now,
       });
     });
-  }, [data, now]);
+  }, [data, bands, now]);
 
   // Derived, not a snapshot: a reading saved from the drawer stacked on top of
   // the plot drawer moves this plot's category and last-measured, and the stat
@@ -382,6 +389,7 @@ export function OlivePlotsContent({ initialSearch = null }: { initialSearch?: st
               onCycleOilWater={cycleOilWater}
               onOpenNir={openLatestNir}
               onAddNir={(row: PlotRow) => setNirEditor({ mode: 'create', areaId: row.id })}
+              bands={bands}
               seasonId={seasonId}
               onYieldSave={handleYieldSave}
               activeId={selectedId}
@@ -452,13 +460,7 @@ export function OlivePlotsContent({ initialSearch = null }: { initialSearch?: st
   );
 }
 
-function PlotsHeader({
-  canCreate,
-  onCreate,
-}: {
-  canCreate: boolean;
-  onCreate: () => void;
-}) {
+function PlotsHeader({ canCreate, onCreate }: { canCreate: boolean; onCreate: () => void }) {
   return (
     <PageHeader icon={MapPin} title="חלקות זית" description="פרטי חלקות, זנים ועומס יבול">
       <Button

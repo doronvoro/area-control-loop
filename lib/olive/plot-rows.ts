@@ -16,12 +16,13 @@ import {
   plotMatchesSearch,
   toDateString,
   yieldLoadInfo,
+  type CategoryThresholds,
   type PlotCategory,
+  type YieldLoad,
 } from './logic';
 import { NONE } from '@/lib/forms/none-sentinel';
 import type { ApiPlot } from './adapt';
 import type { SortState } from '@/components/ui/sortable-table-head';
-import { ParameterStatus } from '@/types/database';
 
 /** A plot flattened for display, with every numeric already coerced. */
 export interface PlotRow {
@@ -60,7 +61,7 @@ export interface PlotRow {
   water: number | null;
   dry: number | null;
   yieldKgPerDunam: number | null;
-  yieldLoad: { label: string; status: ParameterStatus } | null;
+  yieldLoad: YieldLoad | null;
   /** The row the edit dialog takes. */
   plot: ApiPlot;
 }
@@ -131,6 +132,65 @@ const CATEGORY_ORDER = new Map(PLOT_CATEGORY_CARDS.map((card, i) => [card.key, i
 
 export function categoryLabel(category: PlotCategory): string {
   return PLOT_CATEGORY_CARDS.find((c) => c.key === category)?.label ?? category;
+}
+
+/**
+ * What puts a plot in a category, in words and in the client's own numbers.
+ *
+ * The four labels are one word each — חריגות says that something is off, not
+ * which reading said so, and the bands behind them are tunable per client, so
+ * a reader who does not also have the settings dialog open cannot check the
+ * pill against the measurements beside it. This is the text of the tooltip on
+ * that pill.
+ *
+ * Derived from `bands` rather than written out, for the reason the settings
+ * dialog's own preview strip is: a sentence quoting 17% while the client has
+ * tuned the band to 15% is worse than no sentence. The wording deliberately
+ * echoes OliveThresholdsDialog's band notes — the same fact, read from the
+ * same row, should not arrive in two vocabularies.
+ *
+ * Kept in step with classifyPlotCategory, which is what actually decides. Its
+ * branch order matters and is documented there; this only describes the bands,
+ * so it cannot disagree about a plot — at worst it goes stale about a band,
+ * which `olive-plot-rows.test.ts` pins.
+ */
+export function categoryRuleText(category: PlotCategory, bands: CategoryThresholds): string {
+  switch (category) {
+    case 'ready':
+      // "בין X ל-Y", never "X–Y": a dash between two digit runs is bidi-neutral
+      // and would paint the range reversed in this RTL page. Same rule as the
+      // שמן / מים cell in PlotsTable, which documents it at length.
+      return `אחוז שמן בין ${bands.readyOilMin}% ל-${bands.readyOilMax}% ואחוז מים בין ${bands.readyWaterMin}% ל-${bands.readyWaterMax}% — שני הערכים בתוך הטווח.`;
+    case 'anomaly':
+      return `אחוז מים מתחת ל-${bands.anomalyWaterLow}% או מעל ${bands.anomalyWaterHigh}%, או אחוז שמן בחומר יבש שהגיע לטווח "מסיק".`;
+    case 'normal':
+      return `נדגמה, אחוז השמן עד ${bands.normalOilMax}% ואחוז המים עד ${bands.normalWaterMax}% — השמן עדיין בעלייה.`;
+    case 'testing':
+      return 'טרם נדגמה, או שהמדידה האחרונה אינה נכנסת לאף אחת מהקטגוריות האחרות — נדרשת בדיקה נוספת.';
+  }
+}
+
+/**
+ * The reading the category was computed from, for the line under that text.
+ *
+ * The rule alone does not say why THIS plot matched it, and on the narrow
+ * screens the oil, water and dry columns are hidden — where the pill is then
+ * the only thing on the row that speaks for the measurement at all.
+ */
+export function categoryReadingText(row: PlotRow): string {
+  if (!row.lastMeasuredLabel) return 'טרם נרשמה בדיקת NIR לחלקה.';
+
+  const parts = [
+    row.oil !== null ? `שמן ${row.oil}%` : null,
+    row.water !== null ? `מים ${row.water}%` : null,
+    row.dry !== null ? `חומר יבש ${row.dry}%` : null,
+  ].filter(Boolean);
+
+  // A reading with none of the three is why a sampled plot can still sit in
+  // בבדיקות — see classifyPlotCategory, where a missing value fails its band.
+  return parts.length === 0
+    ? `${row.lastMeasuredLabel} — הבדיקה האחרונה ללא ערכי שמן, מים וחומר יבש.`
+    : `${row.lastMeasuredLabel}: ${parts.join(' · ')}`;
 }
 
 interface ToPlotRowInput {
