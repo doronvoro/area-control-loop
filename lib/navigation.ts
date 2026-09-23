@@ -77,6 +77,9 @@ export const oliveGroup: NavGroup = {
   items: [
     { href: '/olive', label: 'סטטוס מסיק', icon: Gauge },
     { href: '/olive/plots', label: 'חלקות זית', icon: MapPin },
+    // Next to the plots rather than under ניהול: a grower exists to own plots,
+    // and the two screens link to each other.
+    { href: '/olive/growers', label: 'מגדלים', icon: Users },
     { href: '/olive/nir', label: 'בדיקות NIR', icon: FlaskConical },
     { href: '/olive/harvest', label: 'רישום מסיק', icon: Tractor },
     { href: '/olive/yield', label: 'הערכת יבול', icon: Scale },

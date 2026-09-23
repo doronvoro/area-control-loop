@@ -146,6 +146,27 @@ export function toPlotRow({
   };
 }
 
+/**
+ * The sort cycle behind the merged שמן/מים header.
+ *
+ * One header over two fields, so a click has to mean more than "flip": it steps
+ * oil → water at the direction already chosen, and flips only on the way back
+ * round. Four clicks visit all four states and return to the start. A plain
+ * two-state oil↔water cycle was the obvious shape and the wrong one — it
+ * quietly removes the ability to sort oil ascending, which the separate שמן %
+ * header could do.
+ *
+ * Arriving from any other column starts at oil descending, the same default
+ * useTableSort falls back to for a field absent from its directions map.
+ */
+export function nextOilWaterSort(sort: SortState<PlotSortField>): SortState<PlotSortField> {
+  if (sort.field === 'oil') return { field: 'water', direction: sort.direction };
+  if (sort.field === 'water') {
+    return { field: 'oil', direction: sort.direction === 'asc' ? 'desc' : 'asc' };
+  }
+  return { field: 'oil', direction: 'desc' };
+}
+
 export function filterPlotRows(rows: PlotRow[], filters: PlotFilters): PlotRow[] {
   const term = filters.search.trim();
 

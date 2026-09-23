@@ -5,6 +5,7 @@ import {
   sortPlotRows,
   hasActivePlotFilters,
   categoryLabel,
+  nextOilWaterSort,
   EMPTY_PLOT_FILTERS,
   type PlotRow,
   type PlotSortField,
@@ -312,6 +313,59 @@ describe('hasActivePlotFilters', () => {
     expect(hasActivePlotFilters({ ...EMPTY_PLOT_FILTERS, category: 'ready' })).toBe(true);
     expect(hasActivePlotFilters({ ...EMPTY_PLOT_FILTERS, harvest: 'active' })).toBe(true);
     expect(hasActivePlotFilters({ ...EMPTY_PLOT_FILTERS, nir: 'never' })).toBe(true);
+  });
+});
+
+describe('oil and water sorting', () => {
+  // The two now share one header, so nothing on screen says which of them a
+  // click actually sorted by. These are what catch it being wired to the
+  // wrong one: the orderings disagree on purpose.
+  const rows = [
+    row({ oil: 10, water: 60 }),
+    row({ oil: 18, water: 50 }),
+    row({ oil: 14, water: 70 }),
+  ];
+
+  it('sorts by oil independently of water', () => {
+    expect(sortBy(rows, 'oil', 'desc').map((r) => r.oil)).toEqual([18, 14, 10]);
+    expect(sortBy(rows, 'oil', 'asc').map((r) => r.oil)).toEqual([10, 14, 18]);
+  });
+
+  it('sorts by water independently of oil', () => {
+    expect(sortBy(rows, 'water', 'desc').map((r) => r.water)).toEqual([70, 60, 50]);
+    expect(sortBy(rows, 'water', 'asc').map((r) => r.water)).toEqual([50, 60, 70]);
+  });
+
+  it('puts a never-measured plot last in both directions', () => {
+    const withGap = [row({ oil: 10 }), row({ oil: null }), row({ oil: 18 })];
+    expect(sortBy(withGap, 'oil', 'desc').map((r) => r.oil)).toEqual([18, 10, null]);
+    expect(sortBy(withGap, 'oil', 'asc').map((r) => r.oil)).toEqual([10, 18, null]);
+  });
+});
+
+describe('nextOilWaterSort', () => {
+  it('laps through all four states in four clicks', () => {
+    // Four, not two: a bare oil↔water cycle would make ascending unreachable.
+    let sort = nextOilWaterSort({ field: 'name', direction: 'asc' });
+    expect(sort).toEqual({ field: 'oil', direction: 'desc' });
+
+    sort = nextOilWaterSort(sort);
+    expect(sort).toEqual({ field: 'water', direction: 'desc' });
+
+    sort = nextOilWaterSort(sort);
+    expect(sort).toEqual({ field: 'oil', direction: 'asc' });
+
+    sort = nextOilWaterSort(sort);
+    expect(sort).toEqual({ field: 'water', direction: 'asc' });
+
+    expect(nextOilWaterSort(sort)).toEqual({ field: 'oil', direction: 'desc' });
+  });
+
+  it('enters at oil descending from any other column', () => {
+    expect(nextOilWaterSort({ field: 'size', direction: 'asc' })).toEqual({
+      field: 'oil',
+      direction: 'desc',
+    });
   });
 });
 
