@@ -1528,6 +1528,10 @@ export interface Database {
           maturity: number | null;
           irrig_amount: number | null;
           direction: string | null;
+          /** When it was sent to the client. NULL = not sent. An instant, not a day. */
+          sent_to_client_at: string | null;
+          /** auth.users.id of whoever marked it sent — NOT workers.id. */
+          sent_to_client_by: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -1541,6 +1545,8 @@ export interface Database {
           maturity?: number | null;
           irrig_amount?: number | null;
           direction?: string | null;
+          sent_to_client_at?: string | null;
+          sent_to_client_by?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -1554,6 +1560,8 @@ export interface Database {
           maturity?: number | null;
           irrig_amount?: number | null;
           direction?: string | null;
+          sent_to_client_at?: string | null;
+          sent_to_client_by?: string | null;
           created_at?: string;
           updated_at?: string;
         };

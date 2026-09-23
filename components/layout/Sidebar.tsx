@@ -48,20 +48,31 @@ function NavItemLink({
 }) {
   const Icon = item.icon;
 
-  const link = (
-    <Link
-      href={item.href}
-      data-active={active}
-      className={cn(
-        'sidebar-nav-item flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium',
-        active
-          ? 'bg-sidebar-accent text-sidebar-primary'
-          : 'text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground',
-        collapsed && 'justify-center px-0',
-      )}
-    >
+  const className = cn(
+    'sidebar-nav-item flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium',
+    active
+      ? 'bg-sidebar-accent text-sidebar-primary'
+      : 'text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground',
+    collapsed && 'justify-center px-0',
+  );
+
+  const body = (
+    <>
       <Icon className="size-5 shrink-0" />
       {!collapsed && <span className="truncate">{item.label}</span>}
+    </>
+  );
+
+  // An external item is a document, not a screen: a plain anchor to a new tab,
+  // so the client router is never asked for a route that does not exist and
+  // the user does not lose the screen they were on.
+  const link = item.external ? (
+    <a href={item.href} target="_blank" rel="noopener noreferrer" className={className}>
+      {body}
+    </a>
+  ) : (
+    <Link href={item.href} data-active={active} className={className}>
+      {body}
     </Link>
   );
 

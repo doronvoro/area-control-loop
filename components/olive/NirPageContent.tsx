@@ -54,16 +54,25 @@ function messageOf(err: unknown, fallback: string): string {
   return err instanceof Error && err.message ? err.message : fallback;
 }
 
-export function NirPageContent({ initialAreaId }: { initialAreaId: string | null }) {
+export function NirPageContent({
+  initialAreaId,
+  initialSent = null,
+}: {
+  initialAreaId: string | null;
+  /** 'unsent' from the dashboard's season counter. Seeds the filter, then is consumed. */
+  initialSent?: string | null;
+}) {
   // Lazy initial state rather than an effect, so arriving from the plots page
   // opens the drawer on the first render with nothing to reconcile afterwards.
   const [editor, setEditor] = useState<NirEditorState | null>(
     initialAreaId ? { mode: 'create', areaId: initialAreaId } : null
   );
   const [seasonId, setSeasonId] = useState<string>('');
-  const [filters, setFilters] = useState<NirFilters>(() =>
-    initialAreaId ? { ...EMPTY_NIR_FILTERS, areaId: initialAreaId } : EMPTY_NIR_FILTERS
-  );
+  const [filters, setFilters] = useState<NirFilters>(() => ({
+    ...EMPTY_NIR_FILTERS,
+    ...(initialAreaId ? { areaId: initialAreaId } : {}),
+    ...(initialSent ? { sent: initialSent } : {}),
+  }));
   const [pendingDelete, setPendingDelete] = useState<ReturnType<typeof toNirRow> | null>(null);
 
   // Reference data. None of it changes while the screen is open.
@@ -116,7 +125,7 @@ export function NirPageContent({ initialAreaId }: { initialAreaId: string | null
   // Consume the deep link once. Empty deps on purpose: with initialAreaId in
   // them this re-runs and loops.
   useEffect(() => {
-    if (initialAreaId) window.history.replaceState(null, '', '/olive/nir');
+    if (initialAreaId || initialSent) window.history.replaceState(null, '', '/olive/nir');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -163,6 +172,37 @@ export function NirPageContent({ initialAreaId }: { initialAreaId: string | null
     // you on a page that no longer exists, staring at an empty table.
     resetKey: `${JSON.stringify(filters)}|${sort.field}|${sort.direction}|${seasonId}`,
   });
+
+  const [togglingSent, setTogglingSent] = useState<string | null>(null);
+
+  /**
+   * Mark the reading sent, or clear it. The instant is the click, not a chosen
+   * day — sending is an event — and `sent_to_client_by` is stamped server-side
+   * from the session, so nothing about the actor is sent from here.
+   */
+  const handleToggleSent = async (row: ReturnType<typeof toNirRow>) => {
+    setTogglingSent(row.id);
+    try {
+      const response = await fetch('/api/olive/nir', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          report_area_id: row.id,
+          sent_to_client_at: row.sentToClientAt ? null : new Date().toISOString(),
+        }),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.error || 'שגיאה בעדכון סימון השליחה');
+      }
+      showToast.success(row.sentToClientAt ? 'סימון השליחה בוטל' : 'סומן כנשלח ללקוח');
+      await fetchReports();
+    } catch (err) {
+      showToast.error(messageOf(err, 'שגיאה בעדכון סימון השליחה'));
+    } finally {
+      setTogglingSent(null);
+    }
+  };
 
   const handleDelete = async () => {
     if (!pendingDelete) return;
@@ -240,7 +280,7 @@ export function NirPageContent({ initialAreaId }: { initialAreaId: string | null
         total={rows.length}
         // Arriving from the plots page pre-selects a plot; open the panel so
         // the shortened list has a visible cause.
-        defaultExpanded={Boolean(initialAreaId)}
+        defaultExpanded={Boolean(initialAreaId || initialSent)}
       />
 
       <section className="olive-card overflow-hidden">
@@ -262,6 +302,8 @@ export function NirPageContent({ initialAreaId }: { initialAreaId: string | null
               onSort={toggle}
               onEdit={(row) => setEditor({ mode: 'edit', row })}
               onDelete={setPendingDelete}
+              onToggleSent={handleToggleSent}
+              togglingSentId={togglingSent}
               activeId={editor?.mode === 'edit' ? editor.row.id : null}
               now={new Date()}
             />

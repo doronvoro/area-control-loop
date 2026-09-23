@@ -145,22 +145,44 @@ export function MobileMoreMenu({ open, onOpenChange }: MobileMoreMenuProps) {
                     {group.items.map((item) => {
                       const Icon = item.icon;
                       const active = pathname === item.href;
+                      const className = cn(
+                        'flex items-center gap-3 px-5 py-3 transition-colors',
+                        active
+                          ? 'bg-accent text-primary font-medium'
+                          : 'text-foreground active:bg-muted',
+                      );
+                      const body = (
+                        <>
+                          <Icon className="size-5 shrink-0" />
+                          <span className="flex-1 text-sm">{item.label}</span>
+                          <ChevronLeft className="size-4 text-muted-foreground" />
+                        </>
+                      );
+
+                      // A document rather than a screen — see NavItem.external.
+                      if (item.external) {
+                        return (
+                          <a
+                            key={item.href}
+                            href={item.href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={() => onOpenChange(false)}
+                            className={className}
+                          >
+                            {body}
+                          </a>
+                        );
+                      }
 
                       return (
                         <Link
                           key={item.href}
                           href={item.href}
                           onClick={() => onOpenChange(false)}
-                          className={cn(
-                            'flex items-center gap-3 px-5 py-3 transition-colors',
-                            active
-                              ? 'bg-accent text-primary font-medium'
-                              : 'text-foreground active:bg-muted',
-                          )}
+                          className={className}
                         >
-                          <Icon className="size-5 shrink-0" />
-                          <span className="flex-1 text-sm">{item.label}</span>
-                          <ChevronLeft className="size-4 text-muted-foreground" />
+                          {body}
                         </Link>
                       );
                     })}

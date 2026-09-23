@@ -8,6 +8,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -15,7 +16,12 @@ import {
 import { SortableTableHead, type SortState } from '@/components/ui/sortable-table-head';
 import { PARAMETER_STATUS_CONFIG, PLOT_TYPE_LABELS } from '@/types/database';
 import type { RowFlash } from '@/hooks/useRowFlash';
-import { categoryLabel, type PlotRow, type PlotSortField } from '@/lib/olive/plot-rows';
+import {
+  categoryLabel,
+  type PlotRow,
+  type PlotSortField,
+  type PlotSummary,
+} from '@/lib/olive/plot-rows';
 import { parseYieldDraft, type PlotCategory } from '@/lib/olive/logic';
 import { showToast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
@@ -44,12 +50,19 @@ const CATEGORY_PILL: Record<PlotCategory, string> = {
 interface PlotsTableProps {
   /** Already filtered, sorted and paged. */
   rows: PlotRow[];
+  /**
+   * The footer line, over every filtered row rather than over `rows` — see
+   * summarisePlotRows. Null, or a single plot, and no footer is drawn.
+   */
+  summary?: PlotSummary | null;
   sort: SortState<PlotSortField>;
   onSort: (field: PlotSortField) => void;
   onEdit: (row: PlotRow) => void;
   /** Steps the merged שמן/מים header through its four sort states. */
   onCycleOilWater: () => void;
   /** Opens the NIR form for this plot, over the table. */
+  /** Opens the plot's latest NIR reading for editing. */
+  onOpenNir: (row: PlotRow) => void;
   onAddNir: (row: PlotRow) => void;
   /** The active season. Null means the yield cell cannot be written to. */
   seasonId: string | null;
@@ -64,12 +77,51 @@ function num(value: number | null, digits = 0): string {
   return value === null ? '—' : value.toFixed(digits);
 }
 
+/**
+ * The region, but only when the plot's name does not already say it.
+ *
+ * It had a column of its own until the גשור data showed what that column
+ * mostly held: 50 of the 51 plots that carry a region repeat it at the head of
+ * their name — "זית בוגר (מיצר) – 2003 – ארבקינה" under region
+ * "זית בוגר (מיצר)" — so the column, and the width it took from the numbers,
+ * went on echoing the one beside it. The plot where the region is news
+ * (חלקה "דרום", אזור "מנחת") still shows it, here, under the name.
+ *
+ * Nothing else about region changed: filterPlotRows still searches it, and the
+ * drawer still shows and edits it.
+ */
+/**
+ * "3 בדיקות", and "בדיקה אחת" for one — Hebrew has no bare-number form that
+ * reads well at 1, and a lone "(1)" next to a date says nothing about what is
+ * being counted.
+ *
+ * Zero never reaches here — the caller drops the line entirely, which covers
+ * both "never sampled" and "last sampled before this season" rather than
+ * printing a 0 that looks like a measurement.
+ */
+function nirCountLabel(count: number): string {
+  return countLabel(count, 'בדיקה אחת', 'בדיקות');
+}
+
+/** The same shape for every count on this screen: "בדיקה אחת", "3 בדיקות". */
+function countLabel(count: number, one: string, many: string): string {
+  return count === 1 ? one : `${count} ${many}`;
+}
+
+function regionAside(row: PlotRow): string | null {
+  const region = row.region?.trim();
+  if (!region) return null;
+  return row.name.includes(region) ? null : region;
+}
+
 export function PlotsTable({
   rows,
+  summary,
   sort,
   onSort,
   onEdit,
   onCycleOilWater,
+  onOpenNir,
   onAddNir,
   seasonId,
   onYieldSave,
@@ -90,14 +142,6 @@ export function PlotsTable({
             className="hidden lg:table-cell"
           >
             מגדל
-          </SortableTableHead>
-          <SortableTableHead
-            field="region"
-            sort={sort}
-            onSort={onSort}
-            className="hidden xl:table-cell"
-          >
-            אזור
           </SortableTableHead>
           <SortableTableHead
             field="size"
@@ -149,7 +193,11 @@ export function PlotsTable({
             <TableCell>
               <span className="font-medium">{row.name || '—'}</span>
               <span className="olive-muted block text-xs">
-                {[row.variety, row.plotType ? PLOT_TYPE_LABELS[row.plotType as never] : null]
+                {[
+                  row.variety,
+                  row.plotType ? PLOT_TYPE_LABELS[row.plotType as never] : null,
+                  regionAside(row),
+                ]
                   .filter(Boolean)
                   .join(' · ') || ' '}
                 {row.harvested && <span className="text-primary font-semibold"> · נמסק</span>}
@@ -157,9 +205,6 @@ export function PlotsTable({
             </TableCell>
             <TableCell className="olive-muted hidden text-xs lg:table-cell">
               {row.growerName ?? '—'}
-            </TableCell>
-            <TableCell className="olive-muted hidden text-xs xl:table-cell">
-              {row.region ?? '—'}
             </TableCell>
             <TableCell className="hidden tabular-nums md:table-cell">{num(row.size, 1)}</TableCell>
             <TableCell>
@@ -173,6 +218,13 @@ export function PlotsTable({
               ) : (
                 <span className="olive-muted text-xs">טרם נבדקה</span>
               )}
+              {/* Under the date, not beside it: the count is context for the
+                  date above, and this column is the narrowest on the screen. */}
+              {row.nirCountInSeason > 0 && (
+                <span className="olive-muted block text-xs">
+                  {nirCountLabel(row.nirCountInSeason)}
+                </span>
+              )}
             </TableCell>
             <TableCell className="hidden tabular-nums sm:table-cell">
               {row.oil === null && row.water === null ? (
@@ -185,13 +237,36 @@ export function PlotsTable({
                 // digits but not the header, leaving שמן over the water; as
                 // flex children in an RTL row the parts cannot reorder at all,
                 // and the first one lands rightmost, under שמן.
-                <span className="inline-flex items-center gap-1">
+                // Green once the reading has reached the client, red until it
+                // has — the one cell on this screen that speaks for the reading
+                // itself. Colour alone would be invisible to a colour-blind
+                // reader, so the title and aria-label carry the same fact in
+                // words. A button, not a link: it opens the reading over this
+                // table rather than navigating, for the reason the NIR action
+                // below documents.
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenNir(row);
+                  }}
+                  title={
+                    row.nirSentToClientAt
+                      ? `נשלח ללקוח ב-${row.nirSentToClientAt} — פתח את הבדיקה`
+                      : 'טרם נשלח ללקוח — פתח את הבדיקה'
+                  }
+                  aria-label={`בדיקת NIR בחלקה ${row.name} — ${
+                    row.nirSentToClientAt ? 'נשלחה ללקוח' : 'טרם נשלחה ללקוח'
+                  }`}
+                  className={cn(
+                    'inline-flex items-center gap-1 rounded underline decoration-dotted underline-offset-4 hover:opacity-75 focus-visible:ring-2 focus-visible:outline-none',
+                    row.nirSentToClientAt ? 'olive-sent-yes' : 'olive-sent-no'
+                  )}
+                >
                   <span>{num(row.oil, 1)}</span>
-                  <span className="olive-muted" aria-hidden>
-                    /
-                  </span>
+                  <span aria-hidden>/</span>
                   <span>{num(row.water, 1)}</span>
-                </span>
+                </button>
               )}
             </TableCell>
             <YieldCell
@@ -247,6 +322,79 @@ export function PlotsTable({
           </TableRow>
         ))}
       </TableBody>
+
+      {/*
+        The summary line. Drawn only from two plots up — under a single row it
+        would just repeat it, one line lower and in different words.
+      */}
+      {summary && summary.plotCount > 1 && (
+        <TableFooter className="olive-table-summary">
+          {/* No hover tint: unlike every row above it, nothing here opens. */}
+          <TableRow className="hover:bg-transparent">
+            <TableCell>
+              <span className="font-semibold">סיכום</span>
+              <span className="olive-muted block text-xs font-normal">
+                {countLabel(summary.plotCount, 'חלקה אחת', 'חלקות')}
+                {/* Only when the table is paged: the footer counts every
+                    filtered plot, and the page below it does not. */}
+                {summary.plotCount !== rows.length && ' — כל העמודים'}
+              </span>
+            </TableCell>
+            <TableCell className="olive-muted hidden text-xs font-normal lg:table-cell">
+              {summary.growerCount > 0
+                ? countLabel(summary.growerCount, 'מגדל אחד', 'מגדלים')
+                : '—'}
+            </TableCell>
+            <TableCell className="hidden tabular-nums md:table-cell">
+              {num(summary.totalDunam, 1)}
+              {/* Which arithmetic this cell did. Three of the columns below
+                  total, average and weight-average respectively, and a bare
+                  number in a footer is read as a sum by default. */}
+              <span className="olive-muted block text-xs font-normal">סה״כ</span>
+            </TableCell>
+            <TableCell className="olive-muted text-xs font-normal">
+              {summary.anomalyCount > 0
+                ? countLabel(summary.anomalyCount, 'חריגה אחת', 'חריגות')
+                : 'אין חריגות'}
+            </TableCell>
+            <TableCell className="olive-muted text-xs font-normal">
+              {summary.neverMeasured === 0
+                ? 'כולן נבדקו'
+                : summary.neverMeasured === 1
+                  ? 'חלקה אחת טרם נבדקה'
+                  : `${summary.neverMeasured} טרם נבדקו`}
+            </TableCell>
+            <TableCell className="hidden tabular-nums sm:table-cell">
+              {summary.measuredCount === 0 ? (
+                <span className="olive-muted">—</span>
+              ) : (
+                <>
+                  {/* Three elements around the slash, for the bidi reason the
+                      row's own cell documents at length. */}
+                  <span className="flex items-center gap-1">
+                    <span>{num(summary.avgOil, 1)}</span>
+                    <span aria-hidden>/</span>
+                    <span>{num(summary.avgWater, 1)}</span>
+                  </span>
+                  <span className="olive-muted block text-xs font-normal">
+                    {summary.measuredCount === summary.plotCount
+                      ? 'ממוצע'
+                      : `ממוצע ${countLabel(summary.measuredCount, 'חלקה אחת', 'חלקות')}`}
+                  </span>
+                </>
+              )}
+            </TableCell>
+            {/* px-3, not the default p-2: the yield cells above hold a button
+                with its own padding, and the digits line up only at 12px. */}
+            <TableCell className="hidden px-3 tabular-nums md:table-cell">
+              {num(summary.avgYieldPerDunam, 0)}
+              <span className="olive-muted block text-xs font-normal">ממוצע משוקלל</span>
+            </TableCell>
+            <TableCell className="hidden md:table-cell" />
+            <TableCell className="w-px" />
+          </TableRow>
+        </TableFooter>
+      )}
     </Table>
   );
 }
@@ -415,10 +563,19 @@ function YieldCell({
         <button
           type="button"
           onClick={open}
-          className="rounded-md px-2 py-1 tabular-nums transition-colors hover:bg-accent"
+          className="group/yield inline-flex items-center gap-1.5 rounded-md px-2 py-1 tabular-nums transition-colors hover:bg-accent"
           aria-label={`ערוך יבול צפוי בחלקה ${plotName}`}
         >
           {num(value, 0)}
+          {/*
+           * The pencil is the affordance, and it is on at rest rather than on
+           * hover. Before an estimate is entered the whole column is a run of
+           * identical em-dashes, and the only thing that said it could be
+           * typed into was a hover background — which a touch device never
+           * reports and a screenshot never shows. Lighter and smaller than the
+           * row's own edit button, which opens the whole drawer.
+           */}
+          <Pencil className="size-3 shrink-0 text-muted-foreground/60 transition-colors group-hover/yield:text-foreground" />
         </button>
       )}
     </TableCell>

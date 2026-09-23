@@ -20,13 +20,28 @@ import {
   CalendarRange,
   Building2,
   MapPinned,
+  BookOpen,
   type LucideIcon,
 } from 'lucide-react';
+
+/**
+ * The olive help document. A file under `public/`, not a route — but `.html`
+ * is not in the middleware matcher's exclusion list, so it is behind the same
+ * session check as every screen. That matters: the document is built from
+ * screenshots of live tenant data.
+ */
+export const OLIVE_HELP_HREF = '/docs/olive-features.html';
 
 export interface NavItem {
   href: string;
   label: string;
   icon: LucideIcon;
+  /**
+   * Not an app route. Rendered as a plain anchor opening a new tab, because
+   * next/link would hand the path to the client router, which owns no such
+   * route. Today that is the static help document under `public/`.
+   */
+  external?: boolean;
 }
 
 /** Feature flags that gate a whole nav group, independent of role. */
@@ -85,6 +100,11 @@ export const oliveGroup: NavGroup = {
     { href: '/olive/yield', label: 'הערכת יבול', icon: Scale },
     { href: '/olive/weather', label: 'מזג אוויר', icon: CloudSun },
     { href: '/olive/seasons', label: 'עונות', icon: CalendarRange },
+    // Last in the group, and the only external item: a static document rather
+    // than a screen. It is served from public/ as a single self-contained HTML
+    // file, so the same URL is both what the link opens and what the download
+    // button saves.
+    { href: OLIVE_HELP_HREF, label: 'עזרה ומדריך', icon: BookOpen, external: true },
   ],
 };
 

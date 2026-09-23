@@ -11,7 +11,13 @@
  */
 
 import { PLOT_CATEGORY_CARDS } from './constants';
-import { daysSinceLabel, plotMatchesSearch, yieldLoadInfo, type PlotCategory } from './logic';
+import {
+  daysSinceLabel,
+  plotMatchesSearch,
+  toDateString,
+  yieldLoadInfo,
+  type PlotCategory,
+} from './logic';
 import { NONE } from '@/lib/forms/none-sentinel';
 import type { ApiPlot } from './adapt';
 import type { SortState } from '@/components/ui/sortable-table-head';
@@ -37,8 +43,19 @@ export interface PlotRow {
   harvested: boolean;
   /** Days since the last NIR reading; null when never measured. */
   daysSinceNir: number | null;
+  /**
+   * Readings taken in the active season, 0 when none. Not a lifetime total —
+   * see nirCountByAreaInSeason, which produces it.
+   */
+  nirCountInSeason: number;
   /** "היום" / "לפני N ימים", or null when never measured. */
   lastMeasuredLabel: string | null;
+  /**
+   * Local day the latest reading was sent to the client, or null if it has not
+   * been. Colours the שמן / מים cell, which is the only place on this screen
+   * that says anything about the reading itself.
+   */
+  nirSentToClientAt: string | null;
   oil: number | null;
   water: number | null;
   dry: number | null;
@@ -51,7 +68,6 @@ export interface PlotRow {
 export type PlotSortField =
   | 'name'
   | 'growerName'
-  | 'region'
   | 'size'
   | 'taktCount'
   | 'category'
@@ -126,6 +142,20 @@ interface ToPlotRowInput {
     water: number | null;
     dry: number | null;
   } | null;
+  /**
+   * The latest reading's send stamp, as a raw instant.
+   *
+   * Passed separately rather than folded into `nir` above: that object is
+   * NirLike, which exists for the harvest rules, and when a reading reached the
+   * client has no bearing on whether the fruit is ripe.
+   */
+  nirSentToClientAt?: string | null;
+  /**
+   * Readings this plot has in the active season. Optional and 0 by default, so
+   * a caller with no season in hand — the grower report builds rows the same
+   * way — simply gets no count rather than a wrong one.
+   */
+  nirCountInSeason?: number;
   category: PlotCategory;
   harvested: boolean;
   /** The yield estimate row for this plot, if the season has one. */
@@ -136,6 +166,8 @@ interface ToPlotRowInput {
 export function toPlotRow({
   plot,
   nir,
+  nirSentToClientAt,
+  nirCountInSeason = 0,
   category,
   harvested,
   yieldEstimate,
@@ -160,7 +192,11 @@ export function toPlotRow({
     category,
     harvested,
     daysSinceNir: daysSince(nir?.report_date ?? null, now),
+    nirCountInSeason,
     lastMeasuredLabel: daysSinceLabel(nir?.report_date ?? null, now),
+    // Local day, not a slice: the stamp is an instant, and a late-evening send
+    // is the previous day in UTC. See lib/olive/logic.ts toDateString.
+    nirSentToClientAt: nirSentToClientAt ? toDateString(new Date(String(nirSentToClientAt))) : null,
     oil: numeric(nir?.oil),
     water: numeric(nir?.water),
     dry: numeric(nir?.dry),
@@ -274,6 +310,104 @@ export function plotTypeCounts(rows: PlotRow[], filters: PlotFilters): Record<st
   return counts;
 }
 
+/**
+ * The footer line under the plot list.
+ *
+ * Computed over every row the filters let through, not over the page on screen:
+ * a total that changes when you turn the page is not a total. PlotsTable says
+ * so in the footer on the rare occasion the two differ.
+ *
+ * Mixed arithmetic, on purpose — one column at a time, each labelled in the
+ * footer with which it is. דונם is a sum. שמן and מים are plain means over the
+ * plots that carry a reading. יבול is weighted by area: the average plot's rate
+ * and the block's rate are different numbers (52 dunam at 1800 beside 4 dunam
+ * at 1700 is 1792 per dunam, not 1750), and the block's is the one that
+ * multiplies back out to the fruit.
+ */
+export interface PlotSummary {
+  plotCount: number;
+  /** Distinct growers. A plot with no grower counts towards none of them. */
+  growerCount: number;
+  /** Sum of the sizes present. Null when not one row carries a size. */
+  totalDunam: number | null;
+  /** Mean over the rows carrying that measurement — each over its own. */
+  avgOil: number | null;
+  avgWater: number | null;
+  /**
+   * Rows with a reading behind them, which is the figure the footer quotes
+   * beside the means. It can only differ from either mean's own denominator if
+   * a reading ever lands with one half of the pair missing.
+   */
+  measuredCount: number;
+  /** Rows whose בדיקה אחרונה cell reads "טרם נבדקה". */
+  neverMeasured: number;
+  anomalyCount: number;
+  /** Σ(kg/dunam × dunam) ÷ Σ dunam, over the rows carrying both. */
+  avgYieldPerDunam: number | null;
+}
+
+export function summarisePlotRows(rows: PlotRow[]): PlotSummary {
+  const growers = new Set<string>();
+  let dunam = 0;
+  let sized = 0;
+  let oil = 0;
+  let oilCount = 0;
+  let water = 0;
+  let waterCount = 0;
+  let measuredCount = 0;
+  let neverMeasured = 0;
+  let anomalyCount = 0;
+  let fruitKg = 0;
+  let yieldDunam = 0;
+
+  for (const row of rows) {
+    // The id where there is one, so two plots naming the same grower count
+    // once; the name only for a plot whose grower the resolver never matched.
+    const grower = row.growerId ?? row.growerName;
+    if (grower) growers.add(grower);
+
+    if (row.size !== null) {
+      dunam += row.size;
+      sized += 1;
+    }
+
+    if (row.oil !== null) {
+      oil += row.oil;
+      oilCount += 1;
+    }
+    if (row.water !== null) {
+      water += row.water;
+      waterCount += 1;
+    }
+    if (row.oil !== null || row.water !== null) measuredCount += 1;
+
+    // The same test the cell renders on, so the count and the column it sits
+    // under cannot disagree.
+    if (row.lastMeasuredLabel === null) neverMeasured += 1;
+
+    if (row.category === 'anomaly') anomalyCount += 1;
+
+    // Both or neither: an estimate on a plot of unknown size has no weight to
+    // carry, and letting it in unweighted would tilt the rate towards it.
+    if (row.yieldKgPerDunam !== null && row.size !== null) {
+      fruitKg += row.yieldKgPerDunam * row.size;
+      yieldDunam += row.size;
+    }
+  }
+
+  return {
+    plotCount: rows.length,
+    growerCount: growers.size,
+    totalDunam: sized > 0 ? dunam : null,
+    avgOil: oilCount > 0 ? oil / oilCount : null,
+    avgWater: waterCount > 0 ? water / waterCount : null,
+    measuredCount,
+    neverMeasured,
+    anomalyCount,
+    avgYieldPerDunam: yieldDunam > 0 ? fruitKg / yieldDunam : null,
+  };
+}
+
 // --- Private helpers ---
 
 type Comparison = number | 'a-null' | 'b-null' | null;
@@ -283,8 +417,8 @@ function compare(a: PlotRow, b: PlotRow, field: PlotSortField): Comparison {
     return a.name.localeCompare(b.name, 'he');
   }
 
-  if (field === 'growerName' || field === 'region') {
-    // Hebrew collation, and a plot with no grower or region sorts last.
+  if (field === 'growerName') {
+    // Hebrew collation, and a plot with no grower sorts last.
     return nullsLast(a[field], b[field], (x, y) => x.localeCompare(y, 'he'));
   }
 

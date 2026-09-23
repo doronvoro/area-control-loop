@@ -130,7 +130,7 @@ export interface ImportOptions {
   defaultTaktCount?: number | null;
 }
 
-export type SeasonOutcome = 'existed' | 'created' | 'would-create';
+export type SeasonOutcome = 'existed' | 'created' | 'would-create' | 'adopted';
 
 export interface ImportResult {
   season: { name: string; yearType: string | null; outcome: SeasonOutcome };
@@ -544,38 +544,89 @@ export async function importBackup(
   }
 
   // --- season ---
-  const seasonName = backup.harvestYear ? `מסיק ${backup.harvestYear}` : 'מסיק (מיובא)';
+  // Yield estimates are keyed by season, and every screen that shows one reads
+  // it through getActiveSeason(). A season that is not the active one is a
+  // season nothing in the app displays, so this pass has two jobs: land the
+  // import on a season the app will read, and leave exactly ONE season active.
+  //
+  // The prototype's harvestYear is empty in every real export so far — the
+  // גשור file has `"harvestYear":""` — and inventing
+  // "מסיק (מיובא)" for it put 44 estimates on a season the yield
+  // screen, the plot cards and the grower report all looked straight past. When
+  // the file names no season we therefore ADOPT the active one instead of
+  // creating a rival, and only fall back to inventing a name when no season is
+  // active at all.
+  //
+  // seasons carries no customer_id: it is shared by every tenant. Adopting is
+  // what keeps an import for one tenant from moving another tenant's season out
+  // from under them, which is why a nameless file never creates or switches.
+  const namedSeason = backup.harvestYear ? `מסיק ${backup.harvestYear}` : null;
   const yearType = backup.harvestYearType || null;
   const year = Number(backup.harvestYear) || new Date().getFullYear();
   let seasonId: string | null = null;
+  let seasonName: string;
   let seasonOutcome: SeasonOutcome;
 
-  const { data: existingSeason } = await supabase
+  // limit(1) before maybeSingle(): two rows would make maybeSingle() a PGRST116
+  // error and this read silently null, which is the very state being repaired.
+  const { data: activeSeason } = await supabase
     .from('seasons')
-    .select('id')
-    .eq('name', seasonName)
+    .select('id, name')
+    .eq('is_active', true)
+    .order('starts_on', { ascending: false })
+    .limit(1)
     .maybeSingle();
 
-  if (existingSeason) {
-    seasonId = (existingSeason as any).id;
-    seasonOutcome = 'existed';
-  } else if (apply) {
-    const { data, error } = await supabase
-      .from('seasons')
-      .insert({
-        name: seasonName,
-        year_type: yearType,
-        starts_on: `${year}-09-01`,
-        ends_on: `${year}-12-31`,
-        is_active: true,
-      } as any)
-      .select('id')
-      .single();
-    if (error) throw error;
-    seasonId = (data as any).id;
-    seasonOutcome = 'created';
+  if (!namedSeason && activeSeason) {
+    seasonId = (activeSeason as any).id;
+    seasonName = (activeSeason as any).name;
+    seasonOutcome = 'adopted';
   } else {
-    seasonOutcome = 'would-create';
+    seasonName = namedSeason ?? 'מסיק (מיובא)';
+
+    const { data: existingSeason } = await supabase
+      .from('seasons')
+      .select('id')
+      .eq('name', seasonName)
+      .maybeSingle();
+
+    if (existingSeason) {
+      seasonId = (existingSeason as any).id;
+      seasonOutcome = 'existed';
+    } else if (apply) {
+      const { data, error } = await supabase
+        .from('seasons')
+        .insert({
+          name: seasonName,
+          year_type: yearType,
+          starts_on: `${year}-09-01`,
+          ends_on: `${year}-12-31`,
+          is_active: true,
+        } as any)
+        .select('id')
+        .single();
+      if (error) throw error;
+      seasonId = (data as any).id;
+      seasonOutcome = 'created';
+    } else {
+      seasonOutcome = 'would-create';
+    }
+
+    // Single-winner, the same rule upsertSeason() enforces. Without it an
+    // import left two rows with is_active = true, getActiveSeason() came back
+    // null on PGRST116, and the app lost its season entirely — for every
+    // tenant, not just the one being imported.
+    if (apply && seasonId) {
+      const { error } = await (supabase.from('seasons') as any)
+        .update({ is_active: true })
+        .eq('id', seasonId);
+      if (error) throw error;
+
+      const { error: deactivateError } = await (supabase.from('seasons') as any)
+        .update({ is_active: false })
+        .neq('id', seasonId);
+      if (deactivateError) throw deactivateError;
+    }
   }
 
   // --- plots ---

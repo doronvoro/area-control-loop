@@ -6,6 +6,7 @@ import {
   hasActivePlotFilters,
   countActivePlotFilters,
   plotTypeCounts,
+  summarisePlotRows,
   categoryLabel,
   nextOilWaterSort,
   EMPTY_PLOT_FILTERS,
@@ -72,7 +73,9 @@ function row(overrides: Partial<PlotRow> = {}): PlotRow {
     category: 'testing',
     harvested: false,
     daysSinceNir: null,
+    nirCountInSeason: 0,
     lastMeasuredLabel: null,
+    nirSentToClientAt: null,
     oil: null,
     water: null,
     dry: null,
@@ -498,5 +501,95 @@ describe('categoryLabel', () => {
     expect(categoryLabel('anomaly')).toBe('חריגות');
     expect(categoryLabel('ready')).toBe('מוכן למסיק');
     expect(categoryLabel('testing')).toBe('בבדיקות');
+  });
+});
+
+// ─── summarisePlotRows ───────────────────────────────────────────────────────
+
+describe('summarisePlotRows', () => {
+  const measured = (o: Partial<PlotRow> = {}) =>
+    row({ lastMeasuredLabel: 'לפני 15 ימים', daysSinceNir: 15, oil: 20, water: 50, ...o });
+
+  it('sums the area and averages the measurements over the plots that carry one', () => {
+    const s = summarisePlotRows([
+      measured({ size: 52, oil: 60.7, water: 8 }),
+      measured({ size: 4, oil: 66.6, water: 6 }),
+      // Never sampled: it belongs in the area total and in neither mean.
+      row({ size: 10 }),
+    ]);
+
+    expect(s.plotCount).toBe(3);
+    expect(s.totalDunam).toBe(66);
+    expect(s.measuredCount).toBe(2);
+    expect(s.avgOil).toBeCloseTo(63.65, 2);
+    expect(s.avgWater).toBe(7);
+    expect(s.neverMeasured).toBe(1);
+  });
+
+  it('weights the yield average by area rather than by plot', () => {
+    // 52 dunam at 1800 beside 4 at 1700: the block runs at 1792.9 per dunam,
+    // and only the plain mean of the two rates says 1750.
+    const s = summarisePlotRows([
+      row({ size: 52, yieldKgPerDunam: 1800 }),
+      row({ size: 4, yieldKgPerDunam: 1700 }),
+    ]);
+
+    expect(s.avgYieldPerDunam).toBeCloseTo(1792.86, 2);
+  });
+
+  it('drops an estimate whose plot has no size out of the weighted average', () => {
+    // It has no weight to carry, and letting it in unweighted would tilt the
+    // rate towards it.
+    const s = summarisePlotRows([
+      row({ size: 50, yieldKgPerDunam: 1000 }),
+      row({ size: null, yieldKgPerDunam: 9000 }),
+    ]);
+
+    expect(s.avgYieldPerDunam).toBe(1000);
+  });
+
+  it('counts a grower once however many plots it has, and skips plots with none', () => {
+    const s = summarisePlotRows([
+      row({ growerId: 'g-1', growerName: 'ארץ גשור' }),
+      row({ growerId: 'g-1', growerName: 'ארץ גשור' }),
+      row({ growerId: 'g-2', growerName: 'זית בבית' }),
+      row({ growerId: null, growerName: null }),
+    ]);
+
+    expect(s.growerCount).toBe(2);
+  });
+
+  it('counts the anomalies the category column shows', () => {
+    const s = summarisePlotRows([
+      row({ category: 'anomaly' }),
+      row({ category: 'anomaly' }),
+      row({ category: 'normal' }),
+      row({ category: 'ready' }),
+    ]);
+
+    expect(s.anomalyCount).toBe(2);
+  });
+
+  it('returns nulls, not zeros, when nothing carries a number', () => {
+    // A zero in the footer would read as a measurement; these columns have no
+    // value at all.
+    const s = summarisePlotRows([row(), row()]);
+
+    expect(s.totalDunam).toBeNull();
+    expect(s.avgOil).toBeNull();
+    expect(s.avgWater).toBeNull();
+    expect(s.avgYieldPerDunam).toBeNull();
+    expect(s.measuredCount).toBe(0);
+    expect(s.neverMeasured).toBe(2);
+  });
+
+  it('is empty-safe — the table renders no footer for it either', () => {
+    expect(summarisePlotRows([])).toMatchObject({
+      plotCount: 0,
+      growerCount: 0,
+      totalDunam: null,
+      avgOil: null,
+      avgYieldPerDunam: null,
+    });
   });
 });

@@ -507,6 +507,22 @@ export function daysSinceLabel(dateStr: string | null, now: Date): string | null
   return `לפני ${diffDays} ימים`;
 }
 
+/**
+ * Local-date YYYY-MM-DD. Avoids toISOString(), which shifts across timezones.
+ *
+ * Public because it is the ONLY correct way to turn a stored instant into the
+ * day to display. `nir_report.sent_to_client_at` is an instant, and Israel is
+ * UTC+2/+3, so a 01:30 local event is …T22:30:00Z the previous day — slicing the
+ * ISO string would show yesterday. Five files still carry a private copy of this
+ * under the name todayString(); prefer this one in new code.
+ */
+export function toDateString(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 // --- Private helpers ---
 
 /**
@@ -528,12 +544,4 @@ function toNumber(value: unknown): number | null {
  */
 function within(value: number | null, min: number, max: number): boolean {
   return value !== null && value >= min && value <= max;
-}
-
-/** Local-date YYYY-MM-DD. Avoids toISOString(), which shifts across timezones. */
-function toDateString(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
 }

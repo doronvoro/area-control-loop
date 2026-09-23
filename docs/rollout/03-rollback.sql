@@ -75,6 +75,11 @@
 -- begin;
 --
 -- drop table if exists nir_report cascade;
+--
+-- To undo step 13 alone, without losing the readings themselves:
+-- alter table public.nir_report
+--   drop column if exists sent_to_client_at,
+--   drop column if exists sent_to_client_by;
 -- drop table if exists harvest_report cascade;
 -- drop table if exists yield_estimates cascade;
 -- drop table if exists variety_windows cascade;

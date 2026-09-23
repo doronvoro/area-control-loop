@@ -755,3 +755,40 @@
     transform: none;
   }
 }
+
+/* --- Sent to the client ---------------------------------------------------
+   Colours the plots table's שמן / מים, which is the one cell on that screen
+   that speaks for the latest NIR reading. The two values are the TEXT colours
+   of .olive-pill-ok and .olive-pill-urgent rather than new ones, so a plot's
+   send state reads in the same green and red as its harvest status above it.
+   Only the text is tinted: a filled pill on a number column would fight the
+   קטגוריה pills for attention, and this is the secondary fact of the two. */
+.olive-sent-yes {
+  color: oklch(0.4 0.06 125);
+}
+
+.olive-sent-no {
+  color: oklch(0.5 0.13 38);
+}
+
+/* --- The summary row under the plots table --------------------------------
+   ui/table's <tfoot> ships bg-muted/50 — the app's neutral grey, which on this
+   module's cream card reads as a stray band rather than as a line of totals.
+   Cream and gold instead: the background and border .olive-kpi already use for
+   a figure meant to be read, and a 2px gold rule above it, so the totals part
+   from the last plot more firmly than the hairline between two plots does.
+
+   `tfoot.` rather than a bare class: this has to outrank the utility the
+   component itself put on the element, and an element+class selector does that
+   whatever order the two sheets land in. */
+tfoot.olive-table-summary {
+  background: oklch(0.97 0.022 88);
+  border-top: 2px solid oklch(0.84 0.07 88);
+}
+
+/* The sub-labels — "סה״כ", "ממוצע", "ממוצע משוקלל" — a step darker than
+   .olive-muted is elsewhere. That grey was picked against white, and at 12px
+   on the cream above it lands just under the 4.5:1 it clears on a white row. */
+tfoot.olive-table-summary .olive-muted {
+  color: oklch(0.47 0.025 85);
+}
