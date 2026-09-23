@@ -328,7 +328,7 @@ export function PlotsTable({
         would just repeat it, one line lower and in different words.
       */}
       {summary && summary.plotCount > 1 && (
-        <TableFooter>
+        <TableFooter className="olive-table-summary">
           {/* No hover tint: unlike every row above it, nothing here opens. */}
           <TableRow className="hover:bg-transparent">
             <TableCell>
