@@ -45,6 +45,11 @@ export interface PanelDomain {
 
 /**
  * A "nice" gridline step: 1, 2, 2.5, 5 or 10, scaled by a power of ten.
+ *
+ * Rounds to the NEAREST rung, not up. Always rounding up doubles the step
+ * whenever the ideal lands just past a rung — an ideal of 0.54 became 1, which
+ * on a 2.2-point window left two gridlines with the lower one clipped by the
+ * panel edge. The thresholds are the geometric midpoints between rungs.
  */
 function niceStep(raw: number): number {
   if (!Number.isFinite(raw) || raw <= 0) return 1;
@@ -52,7 +57,15 @@ function niceStep(raw: number): number {
   const base = 10 ** exponent;
   const normalised = raw / base;
   const multiplier =
-    normalised <= 1 ? 1 : normalised <= 2 ? 2 : normalised <= 2.5 ? 2.5 : normalised <= 5 ? 5 : 10;
+    normalised <= 1.5
+      ? 1
+      : normalised <= 2.25
+        ? 2
+        : normalised <= 3.5
+          ? 2.5
+          : normalised <= 7.5
+            ? 5
+            : 10;
   return multiplier * base;
 }
 

@@ -49,11 +49,15 @@ describe('panelDomain', () => {
     expect(domain.max).toBeGreaterThanOrEqual(60);
   });
 
-  it('spans both series on the shared oil / dry panel', () => {
-    // oil 4.8→5.3 plotted against dry 14.93→16.26.
-    const domain = panelDomain([4.8, 5.3, 14.93, 16.26])!;
-    expect(domain.min).toBeLessThanOrEqual(4.8);
-    expect(domain.max).toBeGreaterThanOrEqual(16.26);
+  it('keeps early-season oil readable on its own axis', () => {
+    // שדות — 2023 — פיקואל: oil 4.8→5.3 while dry sits at 15.05→16.21. Sharing
+    // one axis with dry spans 3..18 and gives this rise ~3% of the panel — the
+    // flat line the whole scale exists to prevent. Each series gets its own.
+    const oil = panelDomain([4.8, 5.3])!;
+    expect((5.3 - 4.8) / (oil.max - oil.min)).toBeGreaterThan(0.2);
+
+    const shared = panelDomain([4.8, 5.3, 15.05, 16.21])!;
+    expect((5.3 - 4.8) / (shared.max - shared.min)).toBeLessThan(0.05);
   });
 
   it('keeps the water panel tight around its own range', () => {

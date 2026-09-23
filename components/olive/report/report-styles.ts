@@ -162,9 +162,11 @@ export const REPORT_CSS = `
 
 /* --- chart --- */
 .rpt-chart-panel{ margin-bottom:10px; }
-.rpt-chart-title{ font-size:.72rem; color:var(--rpt-ink-soft); margin:0 0 2px; font-weight:600; }
-.rpt-legend{ display:flex; gap:14px; font-size:.7rem; color:var(--rpt-ink); margin-top:2px; }
-.rpt-legend span span{ display:inline-block; width:9px; height:9px; border-radius:50%; margin-inline-end:4px; }
+.rpt-chart-title{
+  display:flex; align-items:center; gap:6px;
+  font-size:.72rem; color:var(--rpt-ink-soft); margin:0 0 2px; font-weight:600;
+}
+.rpt-chart-swatch{ display:inline-block; width:9px; height:9px; border-radius:50%; flex:none; }
 .rpt-note{ font-size:.8rem; color:var(--rpt-ink-soft); margin:0; }
 
 /* --- footer --- */

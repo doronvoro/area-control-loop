@@ -5,11 +5,12 @@
  * dialog and a headless Chromium with no client JavaScript running. A canvas
  * chart renders blank in both.
  *
- * TWO PANELS, NOT ONE. The prototype drew oil, water and dry on a single 0..100
- * axis, which flattened all three (see lib/olive/report/chart-scale.ts). Oil and
- * dry-matter share a range and belong together — dry is derived from oil, so
- * their lines moving in step is meaningful. Water lives 50 points higher and
- * gets its own panel; forcing it onto the same axis is what squashed the others.
+ * ONE PANEL PER SERIES. The prototype drew oil, water and dry on a single 0..100
+ * axis, which flattened all three (see lib/olive/report/chart-scale.ts). No two
+ * of these three share a range: water runs 50..70, dry is about three times oil
+ * by construction, and any pairing squashes whichever series sits lower. Small
+ * multiples are the honest answer — each axis fits its own data, and the reader
+ * compares shapes rather than heights.
  */
 
 import { panelDomain } from '@/lib/olive/report/chart-scale';
@@ -27,7 +28,7 @@ const COLOR_DRY = '#BD5A3F';
 const MAX_POINTS = 12;
 
 const WIDTH = 640;
-const PANEL_HEIGHT = 150;
+const PANEL_HEIGHT = 120;
 const PAD_LEFT = 38;
 const PAD_RIGHT = 14;
 const PAD_TOP = 12;
@@ -39,12 +40,23 @@ interface Series {
   color: string;
 }
 
-const OIL_PANEL: Series[] = [
-  { key: 'oil', label: 'שמן%', color: COLOR_OIL },
-  { key: 'dry', label: 'שמן בחו"י%', color: COLOR_DRY },
+/**
+ * One panel per series, each on its own axis.
+ *
+ * Grouping oil with dry-matter looks reasonable and is wrong: dry is
+ * oil / (100 - water) * 100, so it sits at roughly three times oil no matter
+ * what. Early in the season — oil 4.8, dry 15.05 — a shared axis spans 3..18 and
+ * gives oil's half-point rise 3% of the panel height, which is the flat line
+ * this chart exists to avoid. They only appear to share a range late on, when
+ * oil is high enough for the bands to overlap.
+ *
+ * Order follows the KPI tiles above the chart.
+ */
+const PANELS: Series[][] = [
+  [{ key: 'oil', label: 'שמן%', color: COLOR_OIL }],
+  [{ key: 'water', label: 'מים%', color: COLOR_WATER }],
+  [{ key: 'dry', label: 'שמן בחו"י%', color: COLOR_DRY }],
 ];
-
-const WATER_PANEL: Series[] = [{ key: 'water', label: 'מים%', color: COLOR_WATER }];
 
 interface PanelProps {
   title: string;
@@ -66,7 +78,10 @@ function Panel({ title, series, rows }: PanelProps) {
 
   return (
     <div className="rpt-chart-panel">
-      <p className="rpt-chart-title">{title}</p>
+      <p className="rpt-chart-title">
+        <span className="rpt-chart-swatch" style={{ background: series[0].color }} />
+        {title}
+      </p>
       <svg viewBox={`0 0 ${WIDTH} ${PANEL_HEIGHT}`} style={{ width: '100%', height: 'auto' }}>
         {domain.ticks.map((tick) => (
           <g key={tick}>
@@ -126,14 +141,6 @@ function Panel({ title, series, rows }: PanelProps) {
           </text>
         ))}
       </svg>
-      <div className="rpt-legend">
-        {series.map((s) => (
-          <span key={s.key}>
-            <span style={{ background: s.color }} />
-            {s.label}
-          </span>
-        ))}
-      </div>
     </div>
   );
 }
@@ -151,8 +158,14 @@ export function NirTrendChart({ rows }: { rows: NirRow[] }) {
 
   return (
     <>
-      <Panel title="שמן / שמן בחומר יבש" series={OIL_PANEL} rows={points} />
-      <Panel title="מים" series={WATER_PANEL} rows={points} />
+      {PANELS.map((series) => (
+        <Panel
+          key={series[0].key}
+          title={series[0].label.replace('%', '')}
+          series={series}
+          rows={points}
+        />
+      ))}
     </>
   );
 }
