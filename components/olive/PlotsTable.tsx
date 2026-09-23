@@ -441,10 +441,19 @@ function YieldCell({
         <button
           type="button"
           onClick={open}
-          className="rounded-md px-2 py-1 tabular-nums transition-colors hover:bg-accent"
+          className="group/yield inline-flex items-center gap-1.5 rounded-md px-2 py-1 tabular-nums transition-colors hover:bg-accent"
           aria-label={`ערוך יבול צפוי בחלקה ${plotName}`}
         >
           {num(value, 0)}
+          {/*
+           * The pencil is the affordance, and it is on at rest rather than on
+           * hover. Before an estimate is entered the whole column is a run of
+           * identical em-dashes, and the only thing that said it could be
+           * typed into was a hover background — which a touch device never
+           * reports and a screenshot never shows. Lighter and smaller than the
+           * row's own edit button, which opens the whole drawer.
+           */}
+          <Pencil className="size-3 shrink-0 text-muted-foreground/60 transition-colors group-hover/yield:text-foreground" />
         </button>
       )}
     </TableCell>
