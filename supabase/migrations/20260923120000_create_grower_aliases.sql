@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS grower_aliases (
 COMMENT ON TABLE grower_aliases IS
   'Other names one grower appears under in an import file. Read by trg_olive_plot_details_resolve_grower; written by a merge on /api/growers. See 20260923120000.';
 COMMENT ON COLUMN grower_aliases.alias IS
-  'The absorbed spelling, trimmed. Never equal to any growers.name of the same tenant — enforced by trg_grower_aliases_no_name_collision.';
+  'The absorbed spelling, trimmed. Never equal to any growers.name of the same tenant — enforced by trg_grower_aliases_validate.';
 COMMENT ON COLUMN grower_aliases.customer_id IS
   'Derived from growers.customer_id on write. Never accepted from a caller.';
 

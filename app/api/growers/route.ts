@@ -388,7 +388,7 @@ async function addAliases(
   // another tenant.
   const { error } = await ctx.supabase
     .from('grower_aliases')
-    .insert(aliases.map((alias) => ({ grower_id: growerId, alias })) as never);
+    .insert(aliases.map((alias) => ({ grower_id: growerId, alias })));
 
   if (error) {
     // Lost the race with a second tab that took the same alias.

@@ -107,7 +107,7 @@ export async function POST(request: Request) {
     //    name by hand in the drawer, which is the same write.
     const { error: aliasError } = await ctx.supabase
       .from('grower_aliases')
-      .insert({ grower_id: targetId, alias: source.name } as never);
+      .insert({ grower_id: targetId, alias: source.name });
     if (aliasError && aliasError.code !== '23505') throw aliasError;
 
     return NextResponse.json({
