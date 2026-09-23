@@ -38,7 +38,7 @@ export default async function PlotReportPage({ params }: { params: Promise<{ id:
 
   return (
     <div className="rpt-shell">
-      <ReportToolbar areaId={id} />
+      <ReportToolbar pdfHref={`/api/olive/report/plot/${id}/pdf`} />
       <PlotReportDocument data={data} logoSrc="/olive/gashur-logo.png" />
     </div>
   );

@@ -6,7 +6,8 @@ import { NextResponse } from 'next/server';
 import { getRequestScope } from '@/lib/api/auth-context';
 import { handleApiError } from '@/lib/api-utils';
 import { fetchPlotReport } from '@/lib/olive/report/fetch-plot-report';
-import { renderPlotReportPdf } from '@/lib/olive/report/render-pdf';
+import { renderReportPdf } from '@/lib/olive/report/render-pdf';
+import { PlotReportDocument } from '@/components/olive/report/PlotReportDocument';
 
 /**
  * The plot status report as a downloadable PDF.
@@ -45,7 +46,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: 'חלקה לא נמצאה' }, { status: 404 });
     }
 
-    const pdf = await renderPlotReportPdf(data, await logoDataUri());
+    const pdf = await renderReportPdf(
+      <PlotReportDocument data={data} logoSrc={await logoDataUri()} />
+    );
 
     // The Hebrew name goes in filename*, per RFC 5987; filename= keeps a plain
     // ASCII fallback for clients that ignore it.

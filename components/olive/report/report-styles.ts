@@ -105,7 +105,13 @@ export const REPORT_CSS = `
 .rpt-tag b{ color:var(--rpt-ink); font-weight:600; }
 
 .rpt-section{ margin-bottom:26px; }
-.rpt-section h3{
+/*
+ * Same spacing, but WITHOUT the break-inside:avoid that .rpt-section gets in
+ * print. A grouped table longer than a page under break-inside:avoid is split by
+ * the UA wherever it runs out of room; this one is allowed to paginate properly.
+ */
+.rpt-section-flow{ margin-bottom:26px; }
+.rpt-section h3, .rpt-section-flow h3{
   font-family:var(--font-heebo,'Heebo'),sans-serif; font-weight:600; font-size:.78rem;
   color:var(--rpt-ink-soft); margin:0 0 12px; text-transform:uppercase; letter-spacing:.06em;
   padding-bottom:8px; border-bottom:1px solid var(--rpt-line);
@@ -169,6 +175,32 @@ export const REPORT_CSS = `
 .rpt-chart-swatch{ display:inline-block; width:9px; height:9px; border-radius:50%; flex:none; }
 .rpt-note{ font-size:.8rem; color:var(--rpt-ink-soft); margin:0; }
 
+/* --- grower season report --- */
+.rpt-glance{ padding:8px 0; border-bottom:1px solid #EFE4C6; font-size:.82rem; }
+.rpt-glance:last-child{ border-bottom:none; }
+.rpt-glance-headline{
+  display:block; font-family:var(--font-heebo,'Heebo'),sans-serif; font-weight:700;
+  color:var(--rpt-ink); margin-bottom:2px;
+}
+.rpt-glance-names{ display:block; color:var(--rpt-ink-soft); line-height:1.6; }
+.rpt-glance.level-urgent .rpt-glance-headline{ color:var(--rpt-terracotta); }
+.rpt-glance.level-plan .rpt-glance-headline{ color:var(--rpt-gold-deep); }
+
+/* A group header inside the plots table, not a row of data. */
+.rpt-group-head td{
+  background:var(--rpt-cream); font-family:var(--font-heebo,'Heebo'),sans-serif;
+  font-weight:700; font-size:.72rem; color:var(--rpt-ink-soft);
+  letter-spacing:.04em; padding:7px 8px;
+}
+.rpt-dot{
+  display:inline-block; width:7px; height:7px; border-radius:50%;
+  margin-inline-end:6px; background:var(--rpt-ink-soft);
+}
+.rpt-dot.dot-urgent{ background:var(--rpt-terracotta); }
+.rpt-dot.dot-plan{ background:var(--rpt-gold); }
+.rpt-dot.dot-ok{ background:var(--rpt-sage); }
+.rpt-dot.dot-unsampled{ background:#B5AC96; }
+
 /* --- footer --- */
 .rpt-footer{
   padding:16px 42px; border-top:1px solid var(--rpt-line); display:flex;
@@ -195,5 +227,11 @@ export const REPORT_CSS = `
   .rpt-table{ break-inside:auto; }
   .rpt-table tr{ break-inside:avoid; }
   .rpt-header{ break-after:avoid; }
+
+  /* A table that spans pages needs its column headers on each one, or page two
+     is a grid of unlabelled numbers. */
+  .rpt-table thead{ display:table-header-group; }
+  /* Never strand a group title at the foot of a page above an empty gap. */
+  .rpt-group-head{ break-after:avoid; }
 }
 `;

@@ -1,13 +1,13 @@
 'use client';
 
 /**
- * The report's on-screen controls. The only client component in the report —
+ * The report's on-screen controls. The only client component in either report —
  * everything below it renders on the server so the PDF path can reuse it.
  *
  * Hidden in print by `.rpt-toolbar { display: none }` in report-styles.ts.
  */
 
-export function ReportToolbar({ areaId }: { areaId: string }) {
+export function ReportToolbar({ pdfHref }: { pdfHref: string }) {
   return (
     <div className="rpt-toolbar">
       <div className="rpt-toolbar-actions">
@@ -16,7 +16,7 @@ export function ReportToolbar({ areaId }: { areaId: string }) {
         </button>
         <a
           className="rpt-btn-pdf"
-          href={`/api/olive/report/plot/${areaId}/pdf`}
+          href={pdfHref}
           style={{
             borderRadius: 999,
             padding: '9px 18px',

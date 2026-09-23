@@ -22,8 +22,7 @@
 import chromium from '@sparticuz/chromium';
 import puppeteer from 'puppeteer-core';
 
-import { PlotReportDocument } from '@/components/olive/report/PlotReportDocument';
-import type { PlotReportData } from '@/lib/olive/report/fetch-plot-report';
+import type { ReactElement } from 'react';
 
 /** How long to wait for webfonts before printing in the fallback instead. */
 const FONT_TIMEOUT_MS = 5000;
@@ -102,7 +101,10 @@ function wrapDocument(body: string): string {
 }
 
 /**
- * The report as an A4 PDF.
+ * A report document as an A4 PDF.
+ *
+ * Takes the element rather than the data so the plot and grower reports share
+ * one Chromium launch, one font wait and one set of page settings.
  *
  * WHY react-dom/server IS IMPORTED AT RUN TIME
  * Next refuses a static `import ... from 'react-dom/server'` anywhere in the app
@@ -112,12 +114,9 @@ function wrapDocument(body: string): string {
  * string for a browser that is not Next's. Deferring the import to call time
  * keeps it out of that graph, and the cost is one lazy require per PDF.
  */
-export async function renderPlotReportPdf(
-  data: PlotReportData,
-  logoSrc: string
-): Promise<Uint8Array> {
+export async function renderReportPdf(node: ReactElement): Promise<Uint8Array> {
   const { renderToStaticMarkup } = await import('react-dom/server');
-  const body = renderToStaticMarkup(<PlotReportDocument data={data} logoSrc={logoSrc} />);
+  const body = renderToStaticMarkup(node);
 
   const browser = await puppeteer.launch({
     // chromium.args belongs to the Lambda build and carries flags such as

@@ -19,7 +19,7 @@
  */
 
 import { NirTrendChart } from './NirTrendChart';
-import { REPORT_CSS } from './report-styles';
+import { ReportStyles } from './ReportStyles';
 import type { PlotReportData } from '@/lib/olive/report/fetch-plot-report';
 
 function num(value: number | null | undefined, digits = 1): string {
@@ -70,7 +70,7 @@ export function PlotReportDocument({ data, logoSrc }: PlotReportDocumentProps) {
 
   return (
     <>
-      <style dangerouslySetInnerHTML={{ __html: REPORT_CSS }} />
+      <ReportStyles />
 
       <div className="rpt-page">
         <header className="rpt-header">

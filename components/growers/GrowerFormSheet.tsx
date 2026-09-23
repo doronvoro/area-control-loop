@@ -4,7 +4,17 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { AlertTriangle, Loader2, MapPin, Plus, StickyNote, User, Users, X } from 'lucide-react';
+import {
+  AlertTriangle,
+  FileText,
+  Loader2,
+  MapPin,
+  Plus,
+  StickyNote,
+  User,
+  Users,
+  X,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -210,14 +220,37 @@ function GrowerFormBody({
             )}
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="סגור"
-          className="absolute top-4 left-4 z-10 rounded-lg p-1.5 text-white/80 transition-colors hover:bg-white/15 hover:text-white"
-        >
-          <X className="size-5" />
-        </button>
+        <div className="absolute top-4 left-4 z-10 flex items-center gap-2">
+          {/* Edit mode only — a grower being created has no id to report on.
+              Disabled with no plots because the report would be an empty table,
+              and while the form is dirty because it renders the saved rows. */}
+          {isEdit && (
+            <button
+              type="button"
+              disabled={row!.plotCount === 0 || form.formState.isDirty}
+              title={
+                row!.plotCount === 0
+                  ? 'אין חלקות משויכות למגדל זה'
+                  : form.formState.isDirty
+                    ? 'שמור תחילה כדי לכלול את השינויים'
+                    : undefined
+              }
+              onClick={() => window.open(`/olive/report/grower/${row!.id}`, '_blank', 'noopener')}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-white/25 bg-white/10 px-2.5 py-1.5 text-xs font-semibold text-white/90 transition-colors hover:bg-white/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/10"
+            >
+              <FileText className="size-3.5" />
+              דוח עונתי
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="סגור"
+            className="rounded-lg p-1.5 text-white/80 transition-colors hover:bg-white/15 hover:text-white"
+          >
+            <X className="size-5" />
+          </button>
+        </div>
       </div>
 
       <Form {...form}>
