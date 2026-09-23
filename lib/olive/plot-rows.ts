@@ -43,6 +43,11 @@ export interface PlotRow {
   harvested: boolean;
   /** Days since the last NIR reading; null when never measured. */
   daysSinceNir: number | null;
+  /**
+   * Readings taken in the active season, 0 when none. Not a lifetime total —
+   * see nirCountByAreaInSeason, which produces it.
+   */
+  nirCountInSeason: number;
   /** "היום" / "לפני N ימים", or null when never measured. */
   lastMeasuredLabel: string | null;
   /**
@@ -63,7 +68,6 @@ export interface PlotRow {
 export type PlotSortField =
   | 'name'
   | 'growerName'
-  | 'region'
   | 'size'
   | 'taktCount'
   | 'category'
@@ -146,6 +150,12 @@ interface ToPlotRowInput {
    * client has no bearing on whether the fruit is ripe.
    */
   nirSentToClientAt?: string | null;
+  /**
+   * Readings this plot has in the active season. Optional and 0 by default, so
+   * a caller with no season in hand — the grower report builds rows the same
+   * way — simply gets no count rather than a wrong one.
+   */
+  nirCountInSeason?: number;
   category: PlotCategory;
   harvested: boolean;
   /** The yield estimate row for this plot, if the season has one. */
@@ -157,6 +167,7 @@ export function toPlotRow({
   plot,
   nir,
   nirSentToClientAt,
+  nirCountInSeason = 0,
   category,
   harvested,
   yieldEstimate,
@@ -181,6 +192,7 @@ export function toPlotRow({
     category,
     harvested,
     daysSinceNir: daysSince(nir?.report_date ?? null, now),
+    nirCountInSeason,
     lastMeasuredLabel: daysSinceLabel(nir?.report_date ?? null, now),
     // Local day, not a slice: the stamp is an instant, and a late-evening send
     // is the previous day in UTC. See lib/olive/logic.ts toDateString.
@@ -307,8 +319,8 @@ function compare(a: PlotRow, b: PlotRow, field: PlotSortField): Comparison {
     return a.name.localeCompare(b.name, 'he');
   }
 
-  if (field === 'growerName' || field === 'region') {
-    // Hebrew collation, and a plot with no grower or region sorts last.
+  if (field === 'growerName') {
+    // Hebrew collation, and a plot with no grower sorts last.
     return nullsLast(a[field], b[field], (x, y) => x.localeCompare(y, 'he'));
   }
 

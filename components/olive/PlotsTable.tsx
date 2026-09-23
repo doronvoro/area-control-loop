@@ -66,6 +66,38 @@ function num(value: number | null, digits = 0): string {
   return value === null ? '—' : value.toFixed(digits);
 }
 
+/**
+ * The region, but only when the plot's name does not already say it.
+ *
+ * It had a column of its own until the גשור data showed what that column
+ * mostly held: 50 of the 51 plots that carry a region repeat it at the head of
+ * their name — "זית בוגר (מיצר) – 2003 – ארבקינה" under region
+ * "זית בוגר (מיצר)" — so the column, and the width it took from the numbers,
+ * went on echoing the one beside it. The plot where the region is news
+ * (חלקה "דרום", אזור "מנחת") still shows it, here, under the name.
+ *
+ * Nothing else about region changed: filterPlotRows still searches it, and the
+ * drawer still shows and edits it.
+ */
+function regionAside(row: PlotRow): string | null {
+  const region = row.region?.trim();
+  if (!region) return null;
+  return row.name.includes(region) ? null : region;
+}
+
+/**
+ * "3 בדיקות", and "בדיקה אחת" for one — Hebrew has no bare-number form that
+ * reads well at 1, and a lone "(1)" next to a date says nothing about what is
+ * being counted.
+ *
+ * Zero never reaches here — the caller drops the line entirely, which covers
+ * both "never sampled" and "last sampled before this season" rather than
+ * printing a 0 that looks like a measurement.
+ */
+function nirCountLabel(count: number): string {
+  return count === 1 ? 'בדיקה אחת' : `${count} בדיקות`;
+}
+
 export function PlotsTable({
   rows,
   sort,
@@ -93,14 +125,6 @@ export function PlotsTable({
             className="hidden lg:table-cell"
           >
             מגדל
-          </SortableTableHead>
-          <SortableTableHead
-            field="region"
-            sort={sort}
-            onSort={onSort}
-            className="hidden xl:table-cell"
-          >
-            אזור
           </SortableTableHead>
           <SortableTableHead
             field="size"
@@ -152,7 +176,11 @@ export function PlotsTable({
             <TableCell>
               <span className="font-medium">{row.name || '—'}</span>
               <span className="olive-muted block text-xs">
-                {[row.variety, row.plotType ? PLOT_TYPE_LABELS[row.plotType as never] : null]
+                {[
+                  row.variety,
+                  row.plotType ? PLOT_TYPE_LABELS[row.plotType as never] : null,
+                  regionAside(row),
+                ]
                   .filter(Boolean)
                   .join(' · ') || ' '}
                 {row.harvested && <span className="text-primary font-semibold"> · נמסק</span>}
@@ -160,9 +188,6 @@ export function PlotsTable({
             </TableCell>
             <TableCell className="olive-muted hidden text-xs lg:table-cell">
               {row.growerName ?? '—'}
-            </TableCell>
-            <TableCell className="olive-muted hidden text-xs xl:table-cell">
-              {row.region ?? '—'}
             </TableCell>
             <TableCell className="hidden tabular-nums md:table-cell">{num(row.size, 1)}</TableCell>
             <TableCell>
@@ -175,6 +200,13 @@ export function PlotsTable({
                 <span className="text-xs">{row.lastMeasuredLabel}</span>
               ) : (
                 <span className="olive-muted text-xs">טרם נבדקה</span>
+              )}
+              {/* Under the date, not beside it: the count is context for the
+                  date above, and this column is the narrowest on the screen. */}
+              {row.nirCountInSeason > 0 && (
+                <span className="olive-muted block text-xs">
+                  {nirCountLabel(row.nirCountInSeason)}
+                </span>
               )}
             </TableCell>
             <TableCell className="hidden tabular-nums sm:table-cell">

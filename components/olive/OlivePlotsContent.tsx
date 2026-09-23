@@ -66,6 +66,8 @@ interface DashboardPayload {
   categoryThresholds: Record<string, unknown> | null;
   /** The active season. A yield estimate cannot be written without one. */
   season: { id: string; name: string } | null;
+  /** Readings per plot IN THE SEASON, keyed by area id. Absent means none. */
+  nirCountByArea?: Record<string, number>;
 }
 
 // Module-level so the stacked forms' memos do not see a new identity on every
@@ -78,7 +80,6 @@ const NO_GROWERS: GrowerOption[] = [];
 const SORT_DEFAULT_DIRECTIONS: Partial<Record<PlotSortField, 'asc' | 'desc'>> = {
   name: 'asc',
   growerName: 'asc',
-  region: 'asc',
   category: 'asc',
 };
 
@@ -181,6 +182,7 @@ export function OlivePlotsContent({ initialSearch = null }: { initialSearch?: st
         plot,
         nir,
         nirSentToClientAt: latest?.detail?.sent_to_client_at ?? null,
+        nirCountInSeason: data.nirCountByArea?.[plot.id] ?? 0,
         category: classifyPlotCategory(nir, data.parameterRules || [], bands),
         harvested: harvested.has(plot.id),
         yieldEstimate: data.yieldEstimates?.[plot.id] ?? null,

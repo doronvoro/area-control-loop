@@ -7,7 +7,12 @@ import {
 import { handleApiError } from '@/lib/api-utils';
 import { getAccessibleAreaIds } from '@/lib/services/customer-area.service';
 import { getOlivePlots, getHarvestedAreaIds } from '@/lib/services/olive-plot.service';
-import { getLatestNirByArea, getNirSeasonCounts } from '@/lib/services/olive-nir.service';
+import {
+  getNirReports,
+  getNirSeasonCounts,
+  latestNirByArea,
+  nirCountByAreaInSeason,
+} from '@/lib/services/olive-nir.service';
 import { getYieldEstimatesBySeason } from '@/lib/services/olive-yield.service';
 import { getWeatherDays } from '@/lib/services/olive-weather.service';
 import {
@@ -89,7 +94,7 @@ export async function GET(request: Request) {
 
     const [
       plots,
-      latestNir,
+      nirReports,
       harvestedAreaIds,
       parameterRules,
       categoryThresholds,
@@ -99,7 +104,11 @@ export async function GET(request: Request) {
       season,
     ] = await Promise.all([
       getOlivePlots(ctx.supabase, areaIds),
-      getLatestNirByArea(ctx.supabase, areaIds),
+      // The rows, not the reduction: latestNir and the per-plot season count
+      // below are two readings of this one fetch. Unbounded, for the reason
+      // getNirReports documents — a season floor here would change what a plot
+      // whose last reading is older than the season classifies as.
+      getNirReports(ctx.supabase, areaIds),
       getHarvestedAreaIds(ctx.supabase, areaIds),
       getParameterRules(ctx.supabase),
       getCategoryThresholds(ctx.supabase),
@@ -108,6 +117,11 @@ export async function GET(request: Request) {
       getWeatherDays(ctx.supabase, fromDate),
       getActiveSeason(ctx.supabase),
     ]);
+
+    const latestNir = latestNirByArea(nirReports);
+    // Needs the season, so it waits for the batch above rather than joining it.
+    // No query of its own: it counts the rows already in hand.
+    const nirCountByArea = nirCountByAreaInSeason(nirReports, season);
 
     // Both need the resolved season, so they cannot join the batch above.
     const [yieldEstimates, nirCounts] = await Promise.all([
@@ -130,6 +144,7 @@ export async function GET(request: Request) {
       weatherThresholds,
       season,
       nirCounts,
+      nirCountByArea,
     });
   } catch (error) {
     return handleApiError(error);
