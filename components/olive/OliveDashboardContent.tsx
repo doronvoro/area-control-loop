@@ -3,12 +3,13 @@
 import { useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
-  AlarmClock,
+  CircleCheck,
   FlaskConical,
   Loader2,
   RotateCcw,
   Search,
-  Users,
+  Sprout,
+  TriangleAlert,
   X,
   type LucideIcon,
 } from 'lucide-react';
@@ -41,13 +42,7 @@ import {
 } from '@/lib/olive/adapt';
 import { forecastFreshness } from '@/lib/olive/weather-view';
 import { PLOT_CATEGORY_CARDS } from '@/lib/olive/constants';
-import {
-  PARAMETER_STATUS_CONFIG,
-  PLOT_TYPE_LABELS,
-  ParameterStatus,
-  PlotType,
-  type ParameterRule,
-} from '@/types/database';
+import { PLOT_TYPE_LABELS, ParameterStatus, PlotType, type ParameterRule } from '@/types/database';
 
 interface DashboardPayload {
   plots: ApiPlot[];
@@ -78,6 +73,18 @@ const EMPTY_COUNTS: Record<PlotCategory, number> = {
 };
 
 const LEVEL_ORDER: Record<UrgencyLevel, number> = { urgent: 0, plan: 1, ok: 2 };
+/**
+ * The category cards tell themselves apart by icon, not colour: red, amber and
+ * green on this page mean harvest urgency only (see the rows), and the cards
+ * measure something else — the latest NIR reading on its own.
+ */
+const CATEGORY_ICONS: Record<PlotCategory, LucideIcon> = {
+  testing: FlaskConical,
+  normal: CircleCheck,
+  anomaly: TriangleAlert,
+  ready: Sprout,
+};
+
 const URGENCY_OPTIONS: { level: UrgencyLevel; label: string }[] = [
   { level: 'urgent', label: 'דחוף' },
   { level: 'plan', label: 'מתוכנן' },
@@ -87,11 +94,10 @@ const URGENCY_OPTIONS: { level: UrgencyLevel; label: string }[] = [
 export function OliveDashboardContent() {
   const { data, loading, error, refetch } = useApiData<DashboardPayload>('/api/olive/dashboard');
   const [filter, setFilter] = useState<PlotCategory | null>(null);
-  // Each filter holds the options the reader has UNchecked, so "nothing
-  // hidden" — every box checked — is the empty default.
-  const [hiddenGrowers, setHiddenGrowers] = useState<Set<PlotType>>(new Set());
-  const [hiddenTested, setHiddenTested] = useState<Set<'with' | 'without'>>(new Set());
-  const [hiddenUrgency, setHiddenUrgency] = useState<Set<UrgencyLevel>>(new Set());
+  // Each filter holds the options the reader picked. Empty — nothing picked —
+  // means no narrowing, so every plot shows until a chip is chosen.
+  const [pickedGrowers, setPickedGrowers] = useState<Set<PlotType>>(new Set());
+  const [pickedUrgency, setPickedUrgency] = useState<Set<UrgencyLevel>>(new Set());
   const [search, setSearch] = useState('');
   /** The search box is an icon until asked for, and folds back when left empty. */
   const [searchOpen, setSearchOpen] = useState(false);
@@ -166,16 +172,11 @@ export function OliveDashboardContent() {
     (r) => !query || (r.plot.name ?? '').toLowerCase().includes(query)
   );
   const byGrower = searched.filter(
-    (r) => !hiddenGrowers.has(r.plot.details?.plot_type as PlotType)
+    (r) => pickedGrowers.size === 0 || pickedGrowers.has(r.plot.details?.plot_type as PlotType)
   );
-  // A report with no oil, water or dry figure (a pomace sample, say) has
-  // nothing to read on this screen, so it counts as untested here.
-  const hasReading = (r: (typeof byGrower)[number]) =>
-    !!r.nir && (r.nir.oil !== null || r.nir.water !== null || r.nir.dry !== null);
-  const byTested = byGrower.filter((r) => !hiddenTested.has(hasReading(r) ? 'with' : 'without'));
-  const singleGrower = GROWER_GROUPS.length - hiddenGrowers.size === 1;
-  const listed = byTested
-    .filter((r) => !hiddenUrgency.has(r.status.level))
+  const singleGrower = pickedGrowers.size === 1;
+  const listed = byGrower
+    .filter((r) => pickedUrgency.size === 0 || pickedUrgency.has(r.status.level))
     .sort((a, b) => LEVEL_ORDER[a.status.level] - LEVEL_ORDER[b.status.level]);
   const totalPlots = model ? model.rows.length + model.harvestedCount : 0;
 
@@ -280,41 +281,36 @@ export function OliveDashboardContent() {
 
           {/* Status cards — clicking one filters the list below */}
           <section className="grid grid-cols-2 gap-2 md:grid-cols-4">
-            {PLOT_CATEGORY_CARDS.map((card) => (
-              <Tooltip key={card.key}>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    aria-pressed={filter === card.key}
-                    onClick={() => setFilter(filter === card.key ? null : card.key)}
-                    className={`olive-status-card ${card.className}`}
-                  >
-                    <div className="olive-status-count">{model.counts[card.key]}</div>
-                    <div className="olive-status-label">{card.label}</div>
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-64 text-center">
-                  {categoryRule(card.key, model.bands, rules)}
-                </TooltipContent>
-              </Tooltip>
-            ))}
+            {PLOT_CATEGORY_CARDS.map((card) => {
+              const Icon = CATEGORY_ICONS[card.key];
+              return (
+                <Tooltip key={card.key}>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      aria-pressed={filter === card.key}
+                      onClick={() => setFilter(filter === card.key ? null : card.key)}
+                      className="olive-status-card olive-sc-neutral"
+                    >
+                      <div className="olive-status-count">{model.counts[card.key]}</div>
+                      <div className="olive-status-label flex items-center justify-center gap-1">
+                        <Icon className="size-3.5 opacity-60" aria-hidden />
+                        {card.label}
+                      </div>
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-64 text-center">
+                    {categoryRule(card.key, model.bands, rules)}
+                  </TooltipContent>
+                </Tooltip>
+              );
+            })}
           </section>
-
-          {filter && (
-            <div className="flex items-center gap-2 text-sm">
-              <span className="olive-muted">
-                מסונן: <b>{PLOT_CATEGORY_CARDS.find((c) => c.key === filter)?.label}</b>
-              </span>
-              <button type="button" onClick={() => setFilter(null)} className="underline">
-                נקה סינון
-              </button>
-            </div>
-          )}
 
           {/* Plot filters — one list, narrowed, instead of a column per grower. */}
           <section className="space-y-3">
-            {/* One toolbar line — search, grower, tests, urgency — wrapping only when narrow. */}
-            <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
+            {/* One toolbar line — search, grower, urgency — wrapping only when narrow. */}
+            <div className="flex flex-wrap items-center gap-2">
               {searchOpen || search ? (
                 <div className="relative w-full sm:w-44">
                   <Search className="text-muted-foreground pointer-events-none absolute top-1/2 right-2.5 size-3.5 -translate-y-1/2" />
@@ -363,9 +359,8 @@ export function OliveDashboardContent() {
 
               <FilterGroup
                 label="סוג מגדל"
-                icon={Users}
-                hidden={hiddenGrowers}
-                onChange={setHiddenGrowers}
+                picked={pickedGrowers}
+                onChange={setPickedGrowers}
                 options={GROWER_GROUPS.map((g) => ({
                   value: g.type,
                   label: g.label,
@@ -374,47 +369,43 @@ export function OliveDashboardContent() {
               />
 
               <FilterGroup
-                label="בדיקת NIR"
-                icon={FlaskConical}
-                hidden={hiddenTested}
-                onChange={setHiddenTested}
-                options={[
-                  { value: 'with', label: 'נבדקו', count: byGrower.filter(hasReading).length },
-                  {
-                    value: 'without',
-                    label: 'לא נבדקו',
-                    count: byGrower.filter((r) => !hasReading(r)).length,
-                  },
-                ]}
-              />
-
-              <FilterGroup
                 label="דחיפות מסיק"
-                icon={AlarmClock}
-                hidden={hiddenUrgency}
-                onChange={setHiddenUrgency}
+                picked={pickedUrgency}
+                onChange={setPickedUrgency}
                 options={URGENCY_OPTIONS.map((o) => ({
                   value: o.level,
                   label: o.label,
-                  count: byTested.filter((r) => r.status.level === o.level).length,
+                  count: byGrower.filter((r) => r.status.level === o.level).length,
                   dot: o.level,
+                  hint: urgencyRule(o.level, rules),
                 }))}
               />
 
-              {(search ||
-                hiddenGrowers.size > 0 ||
-                hiddenTested.size > 0 ||
-                hiddenUrgency.size > 0) && (
+              {/* The category card in force, on the same line as the other
+                  filters so every narrowing is read — and undone — in one place. */}
+              {filter && (
+                <button
+                  type="button"
+                  onClick={() => setFilter(null)}
+                  aria-label={`הסר סינון ${PLOT_CATEGORY_CARDS.find((c) => c.key === filter)?.label}`}
+                  className="bg-muted/70 hover:bg-muted flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold"
+                >
+                  {PLOT_CATEGORY_CARDS.find((c) => c.key === filter)?.label}
+                  <X className="text-muted-foreground size-3.5" />
+                </button>
+              )}
+
+              {(search || filter || pickedGrowers.size > 0 || pickedUrgency.size > 0) && (
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
                   onClick={() => {
+                    setFilter(null);
                     setSearch('');
                     setSearchOpen(false);
-                    setHiddenGrowers(new Set());
-                    setHiddenTested(new Set());
-                    setHiddenUrgency(new Set());
+                    setPickedGrowers(new Set());
+                    setPickedUrgency(new Set());
                   }}
                   className="text-muted-foreground hover:text-foreground h-8 gap-1 px-2 text-xs"
                 >
@@ -437,33 +428,33 @@ export function OliveDashboardContent() {
                     key={row.plot.id}
                     className={`olive-alert olive-alert-${row.status.level} flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:gap-6`}
                   >
-                    <div className="flex min-w-0 flex-1 items-start gap-2">
+                    {/* Fixed width, so the tiles sit right beside the name on
+                        every row — a flex-1 here pushed them to the far edge,
+                        a long look away from the plot they belong to. */}
+                    <div className="flex min-w-0 items-start gap-2 sm:w-80 sm:shrink-0 lg:w-96">
                       <span className={`olive-dot mt-1.5 olive-dot-${row.status.level}`} />
                       <div className="min-w-0 flex-1">
                         <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                           <span className="truncate text-sm font-bold">{row.plot.name}</span>
                           {/* Which grower, when the list is not already narrowed to one. */}
                           {!singleGrower && row.growerLabel && (
-                            <span className="olive-pill olive-pill-idle shrink-0">
-                              {row.growerLabel}
-                            </span>
-                          )}
-                          {row.status.oilMatch && (
-                            <span
-                              className={`olive-pill shrink-0 ${
-                                PARAMETER_STATUS_CONFIG[row.status.oilMatch.status].pillClass
-                              }`}
-                            >
-                              {row.status.oilMatch.message}
+                            <span className="olive-muted shrink-0 text-xs">
+                              · {row.growerLabel}
                             </span>
                           )}
                         </div>
+                        {/* The row's one sentence. The verdict pill that used to
+                            sit by the name said the same words in a colour of
+                            its own — urgency owns colour here, via the border. */}
                         <p className="olive-muted mt-0.5 text-xs">
-                          {row.nir && row.lastMeasured
-                            ? `נמדד ${row.lastMeasured}, ${row.status.headline}`
-                            : row.status.headline}
+                          {[
+                            row.nir && row.lastMeasured ? `נמדד ${row.lastMeasured}` : null,
+                            rowHeadline(row.status),
+                          ]
+                            .filter(Boolean)
+                            .join(', ')}
                         </p>
-                        {row.status.windowLine && (
+                        {row.status.windowLine && !windowInHeadline(row.status) && (
                           <p className="olive-muted text-xs">{row.status.windowLine}</p>
                         )}
                       </div>
@@ -471,7 +462,7 @@ export function OliveDashboardContent() {
 
                     {/* The three readings as figures; each opens its band chart on hover. */}
                     {row.nir ? (
-                      <div className="grid shrink-0 grid-cols-3 gap-1.5 sm:w-80">
+                      <div className="grid shrink-0 grid-cols-3 gap-1.5 sm:w-72">
                         <NirReading label="שמן" value={row.nir.oil} code="oil" rules={rules} />
                         <NirReading label="מים" value={row.nir.water} code="water" rules={rules} />
                         <NirReading
@@ -482,7 +473,7 @@ export function OliveDashboardContent() {
                         />
                       </div>
                     ) : (
-                      <p className="olive-muted shrink-0 text-xs sm:w-80 sm:text-center">
+                      <p className="olive-muted shrink-0 text-xs sm:w-72 sm:text-center">
                         טרם בוצעה בדיקת NIR
                       </p>
                     )}
@@ -506,70 +497,70 @@ interface FilterOption<T> {
   label: string;
   count: number;
   dot?: UrgencyLevel;
+  /** Tooltip saying what the option means. */
+  hint?: string;
 }
 
 /**
- * One filter dimension as a row of checkable chips, all checked by default.
- * A click toggles one option; the last checked option cannot be cleared, since
- * an empty group would hide every plot and look like missing data.
+ * One filter dimension as a row of chips that INCLUDE what is picked: none
+ * picked shows everything; pick one or more and only those show. A click
+ * toggles one chip in or out.
  */
 function FilterGroup<T extends string>({
   label,
-  icon: Icon,
-  hidden,
+  picked,
   onChange,
   options,
 }: {
+  /** Screen-reader name only — the chips speak for themselves on screen. */
   label: string;
-  icon: LucideIcon;
-  hidden: Set<T>;
-  onChange: (hidden: Set<T>) => void;
+  picked: Set<T>;
+  onChange: (picked: Set<T>) => void;
   options: FilterOption<T>[];
 }) {
   const toggle = (value: T) => {
-    const next = new Set(hidden);
+    const next = new Set(picked);
     if (next.has(value)) next.delete(value);
-    else if (options.some((o) => o.value !== value && !next.has(o.value))) next.add(value);
+    else next.add(value);
     onChange(next);
   };
 
   return (
-    <div role="group" aria-label={label} className="flex flex-col gap-1">
-      {/* The dimension's name as a caption over its track, so the track holds
-          only choices. */}
-      <span className="olive-muted flex items-center gap-1 ps-1 text-[11px] font-semibold">
-        <Icon className="size-3 opacity-70" aria-hidden />
-        {label}
-      </span>
-      <div className="bg-muted/70 flex h-8 items-center gap-0.5 rounded-lg p-0.5 whitespace-nowrap">
-        {options.map((option) => {
-          const checked = !hidden.has(option.value);
-          return (
-            <Button
-              key={option.value}
-              type="button"
-              size="sm"
-              variant="ghost"
-              aria-pressed={checked}
-              onClick={() => toggle(option.value)}
-              className={cn(
-                'h-7 gap-1 rounded-md px-2 text-xs font-medium',
-                checked
-                  ? 'text-foreground bg-white shadow-sm hover:bg-white'
-                  : 'text-muted-foreground/70 hover:text-foreground hover:bg-transparent'
-              )}
-            >
-              {option.dot && (
-                <span
-                  className={cn(`olive-dot olive-dot-${option.dot}`, !checked && 'opacity-40')}
-                />
-              )}
-              {option.label}
-              <span className="olive-ltr-num opacity-70">{option.count}</span>
-            </Button>
-          );
-        })}
-      </div>
+    <div
+      role="group"
+      aria-label={label}
+      className="bg-muted/70 flex h-8 items-center gap-0.5 rounded-lg p-0.5 whitespace-nowrap"
+    >
+      {options.map((option) => {
+        const checked = picked.has(option.value);
+        const chip = (
+          <Button
+            key={option.value}
+            type="button"
+            size="sm"
+            variant="ghost"
+            aria-pressed={checked}
+            onClick={() => toggle(option.value)}
+            className={cn(
+              'h-7 gap-1 rounded-md px-2 text-xs font-medium',
+              checked
+                ? 'text-foreground ring-foreground/20 bg-white font-semibold shadow-sm ring-1 hover:bg-white'
+                : 'text-foreground/80 hover:text-foreground hover:bg-white/60'
+            )}
+          >
+            {option.dot && <span className={`olive-dot olive-dot-${option.dot}`} />}
+            {option.label}
+            <span className="olive-ltr-num opacity-70">{option.count}</span>
+          </Button>
+        );
+        if (!option.hint) return chip;
+        return (
+          <Tooltip key={option.value}>
+            <TooltipTrigger asChild>{chip}</TooltipTrigger>
+            <TooltipContent className="max-w-64 text-center">{option.hint}</TooltipContent>
+          </Tooltip>
+        );
+      })}
     </div>
   );
 }
@@ -595,6 +586,8 @@ function NirReading({
   const [open, setOpen] = useState(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const match = value === null ? null : evaluateParameter(rules, code, value);
+  const flagged =
+    match?.status === ParameterStatus.PLAN || match?.status === ParameterStatus.URGENT;
 
   const show = () => {
     if (closeTimer.current) clearTimeout(closeTimer.current);
@@ -612,10 +605,13 @@ function NirReading({
           onMouseEnter={show}
           onMouseLeave={hide}
           className={`olive-kpi olive-kpi-reading olive-gauge-${match?.status ?? 'neutral'}`}
+          data-flagged={flagged || undefined}
           aria-label={`${label}: ${value === null ? 'אין ערך' : `${value}%`}${match ? `, ${match.message}` : ''}`}
         >
           <span className="olive-kpi-label">{label}</span>
-          <span className="olive-kpi-value olive-ltr-num">
+          <span className="olive-kpi-value olive-ltr-num inline-flex items-center gap-1">
+            {/* Neutral figure; a dot only when the reading needs attention. */}
+            {flagged && <span className={`olive-dot olive-dot-${match?.status}`} aria-hidden />}
             {value === null ? '—' : `${value}%`}
           </span>
         </button>
@@ -656,7 +652,7 @@ function categoryRule(
     case 'ready':
       return `שמן ${t.readyOilMin}–${t.readyOilMax}% ומים ${t.readyWaterMin}–${t.readyWaterMax}% בבדיקה האחרונה`;
     case 'anomaly': {
-      const dryUrgentFrom = dryUrgentLowerBound(rules);
+      const dryUrgentFrom = bandLowerBound(rules, 'dry', ParameterStatus.URGENT);
       const dry = dryUrgentFrom === null ? '' : `, או שמן בחו״י מעל ${dryUrgentFrom}%`;
       return `מים מתחת ל-${t.anomalyWaterLow}% או מעל ${t.anomalyWaterHigh}%${dry}`;
     }
@@ -667,13 +663,52 @@ function categoryRule(
   }
 }
 
-/** Where the dry-matter urgent band starts: the upper bound of the rule before it. */
-function dryUrgentLowerBound(rules: ParameterRule[]): number | null {
-  const dry = rules
-    .filter((r) => r.parameter_code === 'dry')
+/** Where a parameter's band of `status` starts: the upper bound of the rule before it. */
+function bandLowerBound(
+  rules: ParameterRule[],
+  code: string,
+  status: ParameterStatus
+): number | null {
+  const bands = rules
+    .filter((r) => r.parameter_code === code)
     .sort((a, b) => a.sort_order - b.sort_order);
-  const i = dry.findIndex((r) => r.status === ParameterStatus.URGENT);
-  if (i <= 0 || dry[i - 1].upper_bound == null) return null;
-  const bound = Number(dry[i - 1].upper_bound);
+  const i = bands.findIndex((r) => r.status === status);
+  if (i <= 0 || bands[i - 1].upper_bound == null) return null;
+  const bound = Number(bands[i - 1].upper_bound);
   return Number.isFinite(bound) ? bound : null;
+}
+
+/**
+ * What puts a plot at an urgency level — computePlotStatus's rules in words,
+ * with the live oil bounds. Only oil and the variety window move the level;
+ * the forecast only changes the wording.
+ */
+function urgencyRule(level: UrgencyLevel, rules: ParameterRule[]): string {
+  const urgentFrom = bandLowerBound(rules, 'oil', ParameterStatus.URGENT);
+  const planFrom = bandLowerBound(rules, 'oil', ParameterStatus.PLAN);
+  switch (level) {
+    case 'urgent':
+      return urgentFrom === null
+        ? 'השמן בבדיקה האחרונה בטווח המסיק'
+        : `שמן מעל ${urgentFrom}% בבדיקה האחרונה — למסוק עכשיו`;
+    case 'plan':
+      return planFrom === null || urgentFrom === null
+        ? 'השמן מתקרב לטווח המסיק, או שהחלקה בתוך חלון הקטיף של הזן'
+        : `שמן ${planFrom}–${urgentFrom}%, או שהחלקה בתוך חלון הקטיף של הזן — לתכנן מסיק`;
+    case 'ok':
+      return 'אין סיבה למהר: השמן עוד לא בטווח, או שאין בדיקה, ומחוץ לחלון הקטיף';
+  }
+}
+
+/**
+ * The seasonal-window headline is generic ("בתוך חלון הקטיף העונתי לזן"); the
+ * window line names the variety. When both say the plot is in its window, the
+ * row shows the named one once instead of the pair.
+ */
+function windowInHeadline(status: { headline: string; windowLine: string }): boolean {
+  return status.headline === 'בתוך חלון הקטיף העונתי לזן' && status.windowLine.startsWith('בתוך');
+}
+
+function rowHeadline(status: { headline: string; windowLine: string }): string {
+  return windowInHeadline(status) ? status.windowLine : status.headline;
 }

@@ -136,6 +136,20 @@
   color: oklch(0.40 0.06 125);
 }
 
+/* The /olive cards: neutral, told apart by icon. Red/amber/green on that page
+   mean harvest urgency only, and these cards measure the NIR category. The
+   coloured variants above stay for /olive/classic and the thresholds preview. */
+.olive-sc-neutral {
+  background: oklch(1 0 0);
+  border-color: oklch(0.90 0.015 88);
+  color: oklch(0.30 0.02 80);
+}
+
+.olive-sc-neutral[aria-pressed='true'] {
+  outline-color: oklch(0.30 0.02 80);
+  border-color: oklch(0.30 0.02 80);
+}
+
 /* --- Severity pills, keyed to ParameterStatus --- */
 .olive-pill {
   display: inline-block;
@@ -267,9 +281,9 @@
   color: oklch(0.30 0.02 80);
 }
 
-/* A KPI tile on a plot row (OliveDashboardContent's NirReading): the figure
-   takes its verdict colour from the olive-gauge-* class beside it, so the tile
-   and the chart it opens agree, and it lifts slightly to say it opens. */
+/* A KPI tile on a plot row (OliveDashboardContent's NirReading): a neutral
+   figure, with a dot only when the reading needs attention — urgency owns the
+   colour on that page. It lifts slightly to say it opens its chart. */
 .olive-kpi-reading {
   cursor: pointer;
   padding: 0.35rem 0.3rem;
@@ -280,19 +294,19 @@
 }
 
 .olive-kpi-reading .olive-kpi-value {
-  color: var(--gauge-c);
+  color: oklch(0.30 0.02 80);
   font-size: 0.95rem;
 }
 
 .olive-kpi-reading:hover,
 .olive-kpi-reading[data-state='open'] {
-  border-color: var(--gauge-c);
+  border-color: oklch(0.78 0.02 85);
   box-shadow: 0 2px 8px oklch(0 0 0 / 6%);
   transform: translateY(-1px);
 }
 
 .olive-kpi-reading:focus-visible {
-  outline: 2px solid var(--gauge-c);
+  outline: 2px solid oklch(0.30 0.02 80);
   outline-offset: 2px;
 }
 
