@@ -6,6 +6,8 @@ import {
   hasActivePlotFilters,
   countActivePlotFilters,
   plotTypeCounts,
+  categoryCounts,
+  urgencyCounts,
   summarisePlotRows,
   categoryLabel,
   categoryReadingText,
@@ -74,6 +76,7 @@ function row(overrides: Partial<PlotRow> = {}): PlotRow {
     size: null,
     taktCount: 0,
     category: 'testing',
+    urgency: null,
     harvested: false,
     daysSinceNir: null,
     nirCountInSeason: 0,
@@ -377,6 +380,50 @@ describe('plotTypeCounts', () => {
   });
 });
 
+describe('urgency', () => {
+  it('is dropped once the plot is harvested', () => {
+    expect(build({ urgency: 'urgent' }).urgency).toBe('urgent');
+    expect(build({ urgency: 'urgent', harvested: true }).urgency).toBeNull();
+    expect(build().urgency).toBeNull();
+  });
+
+  const rows = [
+    row({ id: 'a', urgency: 'urgent', category: 'ready' }),
+    row({ id: 'b', urgency: 'plan', category: 'normal' }),
+    row({ id: 'c', urgency: 'plan', category: 'ready' }),
+    // Harvested: no urgency, so no urgency chip admits it.
+    row({ id: 'd', urgency: null, harvested: true, category: 'ready' }),
+  ];
+
+  it('filters by level, and a harvested plot matches none', () => {
+    const ids = (urgency: string) =>
+      filterPlotRows(rows, { ...EMPTY_PLOT_FILTERS, urgency }).map((r) => r.id);
+    expect(ids('urgent')).toEqual(['a']);
+    expect(ids('plan')).toEqual(['b', 'c']);
+    expect(ids('ok')).toEqual([]);
+    expect(ids('all')).toEqual(['a', 'b', 'c', 'd']);
+  });
+
+  it('counts each level under the other filters, ignoring its own', () => {
+    const c = urgencyCounts(rows, { ...EMPTY_PLOT_FILTERS, category: 'ready' });
+    expect(c).toEqual({ all: 3, urgent: 1, plan: 1 });
+    expect(urgencyCounts(rows, { ...EMPTY_PLOT_FILTERS, urgency: 'urgent' })).toEqual(
+      urgencyCounts(rows, EMPTY_PLOT_FILTERS)
+    );
+  });
+
+  it('feeds the category tiles the same way', () => {
+    expect(categoryCounts(rows, { ...EMPTY_PLOT_FILTERS, urgency: 'plan' })).toEqual({
+      all: 2,
+      normal: 1,
+      ready: 1,
+    });
+    expect(categoryCounts(rows, { ...EMPTY_PLOT_FILTERS, category: 'ready' })).toEqual(
+      categoryCounts(rows, EMPTY_PLOT_FILTERS)
+    );
+  });
+});
+
 describe('hasActivePlotFilters', () => {
   it('is false for the empty set', () => {
     expect(hasActivePlotFilters(EMPTY_PLOT_FILTERS)).toBe(false);
@@ -416,6 +463,7 @@ describe('countActivePlotFilters', () => {
     expect(count({ category: 'ready' })).toBe(1);
     expect(count({ harvest: 'active' })).toBe(1);
     expect(count({ nir: 'never' })).toBe(1);
+    expect(count({ urgency: 'urgent' })).toBe(1);
   });
 
   it('does not count an unset grower under either spelling', () => {

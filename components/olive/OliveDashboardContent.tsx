@@ -2,17 +2,7 @@
 
 import { useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import {
-  CircleCheck,
-  FlaskConical,
-  Loader2,
-  RotateCcw,
-  Search,
-  Sprout,
-  TriangleAlert,
-  X,
-  type LucideIcon,
-} from 'lucide-react';
+import { Loader2, RotateCcw, Search, X } from 'lucide-react';
 import { useApiData } from '@/hooks/useApiData';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -41,7 +31,7 @@ import {
   type ApiPlot,
 } from '@/lib/olive/adapt';
 import { forecastFreshness } from '@/lib/olive/weather-view';
-import { PLOT_CATEGORY_CARDS } from '@/lib/olive/constants';
+import { PLOT_CATEGORY_CARDS, PLOT_CATEGORY_ICONS, URGENCY_OPTIONS } from '@/lib/olive/constants';
 import { PLOT_TYPE_LABELS, ParameterStatus, PlotType, type ParameterRule } from '@/types/database';
 
 interface DashboardPayload {
@@ -73,23 +63,6 @@ const EMPTY_COUNTS: Record<PlotCategory, number> = {
 };
 
 const LEVEL_ORDER: Record<UrgencyLevel, number> = { urgent: 0, plan: 1, ok: 2 };
-/**
- * The category cards tell themselves apart by icon, not colour: red, amber and
- * green on this page mean harvest urgency only (see the rows), and the cards
- * measure something else — the latest NIR reading on its own.
- */
-const CATEGORY_ICONS: Record<PlotCategory, LucideIcon> = {
-  testing: FlaskConical,
-  normal: CircleCheck,
-  anomaly: TriangleAlert,
-  ready: Sprout,
-};
-
-const URGENCY_OPTIONS: { level: UrgencyLevel; label: string }[] = [
-  { level: 'urgent', label: 'דחוף' },
-  { level: 'plan', label: 'מתוכנן' },
-  { level: 'ok', label: 'ללא דחיפות' },
-];
 
 export function OliveDashboardContent() {
   const { data, loading, error, refetch } = useApiData<DashboardPayload>('/api/olive/dashboard');
@@ -282,7 +255,7 @@ export function OliveDashboardContent() {
           {/* Status cards — clicking one filters the list below */}
           <section className="grid grid-cols-2 gap-2 md:grid-cols-4">
             {PLOT_CATEGORY_CARDS.map((card) => {
-              const Icon = CATEGORY_ICONS[card.key];
+              const Icon = PLOT_CATEGORY_ICONS[card.key];
               return (
                 <Tooltip key={card.key}>
                   <TooltipTrigger asChild>

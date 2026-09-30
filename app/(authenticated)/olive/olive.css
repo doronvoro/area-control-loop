@@ -246,7 +246,7 @@
 
 /* --- Season progress --- */
 .olive-progress-track {
-  background: oklch(0.93 0.03 90);
+  background: oklch(0.93 0.035 155);
   border-radius: 999px;
   height: 0.6rem;
   overflow: hidden;
@@ -255,7 +255,7 @@
 .olive-progress-fill {
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, oklch(0.57 0.06 125) 0%, oklch(0.40 0.06 125) 100%);
+  background: var(--sidebar-primary);
   transition: width 0.3s ease;
 }
 

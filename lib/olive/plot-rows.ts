@@ -18,6 +18,7 @@ import {
   yieldLoadInfo,
   type CategoryThresholds,
   type PlotCategory,
+  type UrgencyLevel,
   type YieldLoad,
 } from './logic';
 import { NONE } from '@/lib/forms/none-sentinel';
@@ -41,6 +42,12 @@ export interface PlotRow {
   size: number | null;
   taktCount: number;
   category: PlotCategory;
+  /**
+   * How soon to harvest — computePlotStatus's level, the dashboard's
+   * דחוף / מתוכנן / ללא דחיפות. Null once the plot is harvested: the question
+   * no longer applies, and the dashboard drops those plots for the same reason.
+   */
+  urgency: UrgencyLevel | null;
   harvested: boolean;
   /** Days since the last NIR reading; null when never measured. */
   daysSinceNir: number | null;
@@ -86,8 +93,10 @@ export interface PlotFilters {
    * NONE means "this plot has no grower", the same word the plot forms use.
    */
   growerId: string;
-  /** 'all' | a PlotCategory value. */
+  /** 'all' | a PlotCategory value. Driven by the category tiles. */
   category: string;
+  /** 'all' | an UrgencyLevel. Driven by the header's urgency chips. */
+  urgency: string;
   /** 'all' | 'harvested' | 'active'. */
   harvest: string;
   /** 'all' | 'measured' | 'never'. */
@@ -99,6 +108,7 @@ export const EMPTY_PLOT_FILTERS: PlotFilters = {
   plotType: 'all',
   growerId: '',
   category: 'all',
+  urgency: 'all',
   harvest: 'all',
   nir: 'all',
 };
@@ -118,6 +128,7 @@ export function countActivePlotFilters(f: PlotFilters): number {
   // this to a truthiness test would count 'all' as an active filter.
   if (f.growerId !== '' && f.growerId !== 'all') n += 1;
   if (f.category !== 'all') n += 1;
+  if (f.urgency !== 'all') n += 1;
   if (f.harvest !== 'all') n += 1;
   if (f.nir !== 'all') n += 1;
   return n;
@@ -217,6 +228,8 @@ interface ToPlotRowInput {
    */
   nirCountInSeason?: number;
   category: PlotCategory;
+  /** computePlotStatus's level. Optional, as the grower report has none to give. */
+  urgency?: UrgencyLevel | null;
   harvested: boolean;
   /** The yield estimate row for this plot, if the season has one. */
   yieldEstimate: { kg_per_dunam?: unknown } | null;
@@ -229,6 +242,7 @@ export function toPlotRow({
   nirSentToClientAt,
   nirCountInSeason = 0,
   category,
+  urgency = null,
   harvested,
   yieldEstimate,
   now,
@@ -250,6 +264,7 @@ export function toPlotRow({
     size: numeric(plot.size),
     taktCount: plot.takts?.length ?? numeric(details?.takt_count) ?? 0,
     category,
+    urgency: harvested ? null : urgency,
     harvested,
     daysSinceNir: daysSince(nir?.report_date ?? null, now),
     nirCountInSeason,
@@ -301,6 +316,8 @@ export function filterPlotRows(rows: PlotRow[], filters: PlotFilters): PlotRow[]
     }
 
     if (filters.category !== 'all' && row.category !== filters.category) return false;
+
+    if (filters.urgency !== 'all' && row.urgency !== filters.urgency) return false;
 
     if (filters.harvest !== 'all' && row.harvested !== (filters.harvest === 'harvested'))
       return false;
@@ -360,11 +377,35 @@ export function sortPlotRows(rows: PlotRow[], sort: SortState<PlotSortField>): P
  * הכל chip claims.
  */
 export function plotTypeCounts(rows: PlotRow[], filters: PlotFilters): Record<string, number> {
-  const base = filterPlotRows(rows, { ...filters, plotType: 'all' });
+  return facetCounts(rows, filters, 'plotType', (row) => row.plotType);
+}
+
+/** What each category tile shows. Same rule as plotTypeCounts: every other filter applies. */
+export function categoryCounts(rows: PlotRow[], filters: PlotFilters): Record<string, number> {
+  return facetCounts(rows, filters, 'category', (row) => row.category);
+}
+
+/**
+ * What each urgency chip shows. A harvested plot has no urgency, so it lands
+ * in `all` and in no chip — the same shape as a plot with no plot_type.
+ */
+export function urgencyCounts(rows: PlotRow[], filters: PlotFilters): Record<string, number> {
+  return facetCounts(rows, filters, 'urgency', (row) => row.urgency);
+}
+
+/** Counts per value of one filter, over the rows every OTHER filter lets through. */
+function facetCounts(
+  rows: PlotRow[],
+  filters: PlotFilters,
+  key: 'plotType' | 'category' | 'urgency',
+  valueOf: (row: PlotRow) => string | null
+): Record<string, number> {
+  const base = filterPlotRows(rows, { ...filters, [key]: 'all' });
   const counts: Record<string, number> = { all: base.length };
 
   for (const row of base) {
-    if (row.plotType) counts[row.plotType] = (counts[row.plotType] ?? 0) + 1;
+    const value = valueOf(row);
+    if (value) counts[value] = (counts[value] ?? 0) + 1;
   }
 
   return counts;

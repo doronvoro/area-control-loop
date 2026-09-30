@@ -160,6 +160,8 @@ export interface FilterChip {
   value: string;
   label: string;
   count: number;
+  /** An .olive-dot-* suffix ('urgent' | 'plan' | 'ok'), drawn before the label. */
+  dot?: string;
 }
 
 /**
@@ -210,6 +212,12 @@ export function FilterChips({
                 : 'text-muted-foreground hover:bg-accent/50'
             )}
           >
+            {chip.dot && (
+              <span
+                className={`olive-dot olive-dot-${chip.dot} me-1.5 inline-block align-middle`}
+                aria-hidden
+              />
+            )}
             {chip.label} ({chip.count})
           </button>
         );

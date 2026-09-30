@@ -16,10 +16,14 @@ import { useApiData } from '@/hooks/useApiData';
 import { usePagination } from '@/hooks/usePagination';
 import { useRowFlash } from '@/hooks/useRowFlash';
 import { useTableSort } from '@/hooks/useTableSort';
-import { classifyPlotCategory } from '@/lib/olive/logic';
+import { classifyPlotCategory, computePlotStatus, computeUpcomingWeather } from '@/lib/olive/logic';
 import {
   toNirLike,
+  toPlotLike,
   toCategoryThresholds,
+  toVarietyWindowLike,
+  toWeatherDayLike,
+  toWeatherThresholds,
   type ApiNirReport,
   type ApiPlot,
 } from '@/lib/olive/adapt';
@@ -27,6 +31,7 @@ import { toNirRow } from '@/lib/olive/nir-rows';
 import { showToast } from '@/lib/toast';
 import {
   EMPTY_PLOT_FILTERS,
+  categoryCounts,
   filterPlotRows,
   hasActivePlotFilters,
   nextOilWaterSort,
@@ -34,6 +39,7 @@ import {
   sortPlotRows,
   summarisePlotRows,
   toPlotRow,
+  urgencyCounts,
   type PlotFilters,
   type PlotRow,
   type PlotSortField,
@@ -65,6 +71,10 @@ interface DashboardPayload {
   harvestedAreaIds: string[];
   parameterRules: ParameterRule[];
   categoryThresholds: Record<string, unknown> | null;
+  /** The urgency filter reads these, through computePlotStatus. */
+  varietyWindows: Record<string, unknown>[];
+  weatherDays: Record<string, unknown>[];
+  weatherThresholds: Record<string, unknown> | null;
   /** The active season. A yield estimate cannot be written without one. */
   season: { id: string; name: string } | null;
   /** Readings per plot IN THE SEASON, keyed by area id. Absent means none. */
@@ -182,6 +192,16 @@ export function OlivePlotsContent({ initialSearch = null }: { initialSearch?: st
   const rows = useMemo(() => {
     if (!data) return [];
     const harvested = new Set(data.harvestedAreaIds || []);
+    const rules = data.parameterRules || [];
+    // The dashboard's urgency, computed the dashboard's way. The forecast only
+    // changes computePlotStatus's wording, not its level, but it is passed so
+    // the two screens cannot come to disagree if that ever changes.
+    const weather = computeUpcomingWeather(
+      (data.weatherDays || []).map(toWeatherDayLike),
+      now,
+      toWeatherThresholds(data.weatherThresholds)
+    );
+    const windows = (data.varietyWindows || []).map(toVarietyWindowLike);
 
     return (data.plots || []).map((plot) => {
       const latest = data.latestNir?.[plot.id] as ApiNirReport | undefined;
@@ -191,7 +211,8 @@ export function OlivePlotsContent({ initialSearch = null }: { initialSearch?: st
         nir,
         nirSentToClientAt: latest?.detail?.sent_to_client_at ?? null,
         nirCountInSeason: data.nirCountByArea?.[plot.id] ?? 0,
-        category: classifyPlotCategory(nir, data.parameterRules || [], bands),
+        category: classifyPlotCategory(nir, rules, bands),
+        urgency: computePlotStatus(toPlotLike(plot), nir, rules, weather, windows, now).level,
         harvested: harvested.has(plot.id),
         yieldEstimate: data.yieldEstimates?.[plot.id] ?? null,
         now,
@@ -312,6 +333,8 @@ export function OlivePlotsContent({ initialSearch = null }: { initialSearch?: st
   // keystroke, which is free, and it keeps the chips honest about the other
   // filters rather than quoting the unfiltered list.
   const typeCounts = useMemo(() => plotTypeCounts(rows, filters), [rows, filters]);
+  const tileCounts = useMemo(() => categoryCounts(rows, filters), [rows, filters]);
+  const levelCounts = useMemo(() => urgencyCounts(rows, filters), [rows, filters]);
 
   const pagination = usePagination(visibleRows, {
     pageSize: 50,
@@ -360,6 +383,9 @@ export function OlivePlotsContent({ initialSearch = null }: { initialSearch?: st
         onClear={() => setFilters(EMPTY_PLOT_FILTERS)}
         growerOptions={growerOptions}
         typeCounts={typeCounts}
+        categoryCounts={tileCounts}
+        urgencyCounts={levelCounts}
+        bands={bands}
         shown={visibleRows.length}
         total={rows.length}
         // Arriving from the growers screen lands a term in the search box; open
@@ -388,7 +414,6 @@ export function OlivePlotsContent({ initialSearch = null }: { initialSearch?: st
               onEdit={(row: PlotRow) => setSelectedId(row.id)}
               onCycleOilWater={cycleOilWater}
               onOpenNir={openLatestNir}
-              onAddNir={(row: PlotRow) => setNirEditor({ mode: 'create', areaId: row.id })}
               bands={bands}
               seasonId={seasonId}
               onYieldSave={handleYieldSave}
