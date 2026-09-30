@@ -267,6 +267,35 @@
   color: oklch(0.30 0.02 80);
 }
 
+/* A KPI tile on a plot row (OliveDashboardContent's NirReading): the figure
+   takes its verdict colour from the olive-gauge-* class beside it, so the tile
+   and the chart it opens agree, and it lifts slightly to say it opens. */
+.olive-kpi-reading {
+  cursor: pointer;
+  padding: 0.35rem 0.3rem;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
+}
+
+.olive-kpi-reading .olive-kpi-value {
+  color: var(--gauge-c);
+  font-size: 0.95rem;
+}
+
+.olive-kpi-reading:hover,
+.olive-kpi-reading[data-state='open'] {
+  border-color: var(--gauge-c);
+  box-shadow: 0 2px 8px oklch(0 0 0 / 6%);
+  transform: translateY(-1px);
+}
+
+.olive-kpi-reading:focus-visible {
+  outline: 2px solid var(--gauge-c);
+  outline-offset: 2px;
+}
+
 /* --- Forecast strip (always visible on /olive) ---
    A flagged day is GOLD, the plan hue, not terracotta. computePlotStatus is
    explicit that weather is an input to urgency and never urgency on its own —

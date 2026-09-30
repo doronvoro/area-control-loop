@@ -71,6 +71,9 @@ export function NirGauge({
   min = Math.floor(min);
   max = Math.ceil(max);
   const pct = (v: number) => ((v - min) / (max - min)) * 100;
+  // Tick labels closer than this (as % of the track) print on top of each other.
+  const crowdsBound = (edge: number) =>
+    bounds.some((b) => b > min && b < max && Math.abs(pct(b) - pct(edge)) < 7);
 
   // `range` is the rule's own span, not the clipped one drawn: the tooltip
   // says what the band means, and "7–17" would invent a floor the rule lacks.
@@ -183,7 +186,9 @@ export function NirGauge({
         <div
           className={`olive-muted relative h-3 text-[10px] tabular-nums ${bounds.length === 0 && value === null ? 'invisible' : ''}`}
         >
-          <span className="absolute left-0">{min}</span>
+          {/* An edge label crowding a band edge (37 beside 40) is dropped —
+              the band edge is the number worth reading. */}
+          {!crowdsBound(min) && <span className="absolute left-0">{min}</span>}
           {bounds
             .filter((b) => b > min && b < max)
             .map((b) => (
@@ -191,7 +196,7 @@ export function NirGauge({
                 {b}
               </span>
             ))}
-          <span className="absolute right-0">{max}</span>
+          {!crowdsBound(max) && <span className="absolute right-0">{max}</span>}
         </div>
       </div>
       {field && match && (
