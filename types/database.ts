@@ -380,6 +380,7 @@ export interface Database {
           geometry: Json | null;
           area_type: string | null;
           variety: string | null;
+          variety_id: string | null;
           planting_time: string | null;
           created_at: string;
           updated_at: string;
@@ -394,6 +395,7 @@ export interface Database {
           geometry?: Json | null;
           area_type?: string | null;
           variety?: string | null;
+          variety_id?: string | null;
           planting_time?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -408,6 +410,7 @@ export interface Database {
           geometry?: Json | null;
           area_type?: string | null;
           variety?: string | null;
+          variety_id?: string | null;
           planting_time?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -1468,10 +1471,59 @@ export interface Database {
           updated_at?: string;
         };
       };
+      varieties: {
+        // זנים — one row per variety of a crop. areas.variety / variety_windows.variety
+        // stay as the display name; the resolve triggers keep variety_id in step.
+        Row: {
+          id: string;
+          crop_id: string | null;
+          name: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          crop_id?: string | null;
+          name: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          crop_id?: string | null;
+          name?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      variety_aliases: {
+        // Other spellings folded into a variety, e.g. "ארבקינה צעיר" -> ארבקינה.
+        // crop_id is derived from the variety by trigger; never send it.
+        Row: {
+          id: string;
+          variety_id: string;
+          crop_id: string | null;
+          alias: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          variety_id: string;
+          alias: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          variety_id?: string;
+          alias?: string;
+          created_at?: string;
+        };
+      };
       variety_windows: {
         Row: {
           id: string;
           variety: string;
+          variety_id: string | null;
           start_dm: string; // 'DD/MM'
           end_dm: string; // 'DD/MM', may wrap the year end
           created_at: string;
@@ -1480,6 +1532,7 @@ export interface Database {
         Insert: {
           id?: string;
           variety: string;
+          variety_id?: string | null;
           start_dm: string;
           end_dm: string;
           created_at?: string;
@@ -1488,6 +1541,7 @@ export interface Database {
         Update: {
           id?: string;
           variety?: string;
+          variety_id?: string | null;
           start_dm?: string;
           end_dm?: string;
           created_at?: string;

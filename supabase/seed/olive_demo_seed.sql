@@ -48,6 +48,11 @@ DELETE FROM public.areas        WHERE id::text LIKE 'a8ff%';
 DELETE FROM public.variety_windows WHERE variety IN ('ארבקינה', 'קורנייקי', 'ברנע');
 DELETE FROM public.weather_days WHERE entry_date >= CURRENT_DATE - 1;
 
+-- The olive crop comes from reset_and_seed_full.sql, which runs after the
+-- migrations — so 20261001100000 found no crop to attach the age aliases
+-- ("ארבקינה צעיר" -> ארבקינה) to. Idempotent; a no-op once they exist.
+SELECT public.seed_olive_variety_aliases();
+
 -- -----------------------------------------------------------------------------
 -- Plots — six olive areas, all crop = זית so the nav feature gate switches on
 -- -----------------------------------------------------------------------------

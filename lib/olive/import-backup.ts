@@ -344,6 +344,32 @@ function isRealDate(year: number, month: number, day: number): boolean {
   return date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 }
 
+/**
+ * Same normalisation as variety_normalize() in 20261001100000: NFC, trimmed,
+ * inner whitespace collapsed. The alias map is keyed by it, so a file spelling
+ * that differs only by a trailing space or a geresh encoding still matches.
+ */
+export function normalizeVarietyName(raw: unknown): string {
+  return String(raw ?? '')
+    .normalize('NFC')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+export type VarietyCheck = { kind: 'missing' } | { kind: 'alias'; from: string; to: string } | null;
+
+/**
+ * What the import should report about one plot's variety. Reporting only —
+ * trg_areas_resolve_variety is what applies the alias on write, for the same
+ * reason the grower alias is left to its trigger: one rule, one place.
+ */
+export function checkVariety(raw: unknown, aliases: ReadonlyMap<string, string>): VarietyCheck {
+  const name = normalizeVarietyName(raw);
+  if (!name) return { kind: 'missing' };
+  const to = aliases.get(name);
+  return to ? { kind: 'alias', from: name, to } : null;
+}
+
 // --- Dirty-data reporting ---
 
 /**
@@ -543,6 +569,24 @@ export async function importBackup(
     }
   }
 
+  // --- variety aliases ---
+  // Global, per crop (20261001100000). Like the grower map above it drives the
+  // REPORT only: trg_areas_resolve_variety folds "ארבקינה צעיר" into ארבקינה on
+  // write. Missing table degrades to no aliases for the same rollout reason.
+  const varietyAliases = new Map<string, string>();
+  {
+    const { data: aliasRows, error: aliasError } = await supabase
+      .from('variety_aliases')
+      .select('alias, varieties(name)')
+      .eq('crop_id', cropId);
+    if (aliasError && !isMissingTableError(aliasError)) throw aliasError;
+    type AliasRow = { alias: string; varieties: { name: string } | null };
+    for (const row of (aliasRows || []) as unknown as AliasRow[]) {
+      if (row.varieties?.name)
+        varietyAliases.set(normalizeVarietyName(row.alias), row.varieties.name);
+    }
+  }
+
   // --- season ---
   // Yield estimates are keyed by season, and every screen that shows one reads
   // it through getActiveSeason(). A season that is not the active one is a
@@ -732,6 +776,16 @@ export async function importBackup(
       flag(
         'growerAlias',
         `${where}: שם המגדל "${growerName}" אוחד במערכת למגדל "${mergedInto}" — החלקה שויכה אליו`
+      );
+    }
+
+    const varietyCheck = checkVariety(plot.variety, varietyAliases);
+    if (varietyCheck?.kind === 'missing') {
+      flag('varietyMissing', `${where}: לא נרשם זן — החלקה יובאה ללא זן`);
+    } else if (varietyCheck?.kind === 'alias') {
+      flag(
+        'varietyAlias',
+        `${where}: הזן "${varietyCheck.from}" אוחד לזן "${varietyCheck.to}" — החלקה שויכה אליו`
       );
     }
 

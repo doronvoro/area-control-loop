@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
+  checkVariety,
+  normalizeVarietyName,
   parseBackup,
   parsePlantingDate,
   validateDefaultTaktCount,
@@ -197,5 +199,51 @@ describe('validateDefaultTaktCount', () => {
 
   it('rejects NaN, which is what Number("") and Number("abc") produce', () => {
     expect(() => validateDefaultTaktCount(Number('abc'))).toThrow(/בין 1 ל-10/);
+  });
+});
+
+/**
+ * The report side of variety folding. The write side is
+ * trg_areas_resolve_variety (20261001100000); these only decide what the
+ * operator is told, so a folded or missing variety is never silent.
+ */
+describe('checkVariety', () => {
+  const aliases = new Map([
+    ['ארבקינה צעיר', 'ארבקינה'],
+    ['ארבקינה בוגר', 'ארבקינה'],
+  ]);
+
+  it('says nothing about a plain variety', () => {
+    expect(checkVariety('ארבקינה', aliases)).toBeNull();
+    expect(checkVariety("לצ'ינו", aliases)).toBeNull();
+  });
+
+  it('reports an age variant being folded into its base variety', () => {
+    expect(checkVariety('ארבקינה בוגר', aliases)).toEqual({
+      kind: 'alias',
+      from: 'ארבקינה בוגר',
+      to: 'ארבקינה',
+    });
+  });
+
+  it('matches an alias through stray whitespace, as the trigger will', () => {
+    expect(checkVariety('  ארבקינה   צעיר ', aliases)).toEqual({
+      kind: 'alias',
+      from: 'ארבקינה צעיר',
+      to: 'ארבקינה',
+    });
+  });
+
+  it('reports a missing variety — the "זית מיצר" occasional plots have none', () => {
+    expect(checkVariety('', aliases)).toEqual({ kind: 'missing' });
+    expect(checkVariety(undefined, aliases)).toEqual({ kind: 'missing' });
+    expect(checkVariety('   ', aliases)).toEqual({ kind: 'missing' });
+  });
+});
+
+describe('normalizeVarietyName', () => {
+  it('composes to NFC so one spelling is one key', () => {
+    const decomposed = 'e\u0301';
+    expect(normalizeVarietyName(decomposed)).toBe('\u00e9');
   });
 });
