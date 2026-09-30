@@ -12,7 +12,7 @@
  * that silently omits a third of the estate is a different thing from a report
  * that says those plots have not been sampled, and the second is the honest one.
  *
- * Pure, like lib/olive/report/chart-scale.ts — computePlotStatus decides the
+ * Pure, like lib/olive/report/recommendation.ts — computePlotStatus decides the
  * level, this only orders the result.
  */
 
