@@ -37,6 +37,7 @@ import {
 } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { showToast } from '@/lib/toast';
+import { NirGauge } from './NirGauge';
 import { NONE, fromFormValue, toFormValue } from '@/lib/forms/none-sentinel';
 import {
   GrowerPicker,
@@ -473,64 +474,94 @@ function PlotDetailBody({
             <p className="olive-muted text-sm">טרם בוצעה בדיקה בחלקה זו</p>
           ) : (
             <>
-              <ul className="divide-y text-sm">
-                {nirRows.slice(0, HISTORY_LIMIT).map((r) => {
-                  // Fruit only — pomace oil is extraction loss and has no verdict.
-                  const match =
-                    r.sampleType === 'fruit' ? evaluateParameter(rules, 'oil', r.oil) : null;
-                  return (
-                    <li key={r.id}>
-                      {/* text-start is load-bearing: a button centres its text. */}
-                      <button
-                        type="button"
-                        onClick={() => onEditNir(r)}
-                        aria-label={`ערוך בדיקה מתאריך ${r.reportDate ?? ''}`}
-                        className="hover:bg-muted/50 flex w-full flex-wrap items-center gap-x-3 gap-y-1 rounded-md px-2 py-2 text-start transition-colors focus-visible:ring-2 focus-visible:outline-none"
-                      >
-                        <span className="tabular-nums">{r.reportDate ?? '—'}</span>
-                        <span className="olive-muted text-xs">
-                          {daysSinceLabel(r.reportDate, now) ?? ''}
+              {/* The latest reading on its scales; the rest as one-line
+                  history. Gauges on every row turned five readings into a
+                  wall — the question here is "where is it now". */}
+              {(() => {
+                const r = nirRows[0];
+                const fruit = r.sampleType === 'fruit';
+                // Fruit only — pomace oil is extraction loss and has no verdict.
+                const match = fruit ? evaluateParameter(rules, 'oil', r.oil) : null;
+                return (
+                  <button
+                    type="button"
+                    onClick={() => onEditNir(r)}
+                    aria-label={`ערוך בדיקה מתאריך ${r.reportDate ?? ''}`}
+                    className="hover:bg-muted/40 -mx-2 block w-[calc(100%+1rem)] rounded-lg px-2 py-1 text-start transition-colors focus-visible:ring-2 focus-visible:outline-none"
+                  >
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+                      <span className="font-semibold tabular-nums">{r.reportDate ?? '—'}</span>
+                      <span className="olive-muted text-xs">
+                        {daysSinceLabel(r.reportDate, now) ?? ''}
+                      </span>
+                      <NirRowMarks r={r} />
+                      {match && (
+                        <span
+                          className={`olive-pill mr-auto ${PARAMETER_STATUS_CONFIG[match.status].pillClass}`}
+                        >
+                          {match.message}
                         </span>
-                        {/* This list has its own markup, so it does not inherit
-                            the log's נשלח column. Without the glyph, marking a
-                            reading sent in the log and then opening the plot
-                            would look like it had not taken. */}
-                        {r.sentToClientAt && (
-                          <span
-                            className="inline-flex"
-                            title={`נשלח ללקוח ב-${r.sentToClientAt}`}
-                            aria-label="נשלח ללקוח"
-                          >
-                            <MailCheck className="text-primary size-3.5" />
-                          </span>
-                        )}
-                        {r.sampleType === 'pomace' && (
-                          <span className="olive-pill olive-pill-sample">
-                            {NIR_SAMPLE_TYPE_LABELS.pomace}
-                          </span>
-                        )}
-                        <span className="mr-auto flex items-center gap-3 tabular-nums">
-                          <span>
-                            <span className="olive-muted text-xs">שמן </span>
-                            {num(r.oil, 1)}
-                          </span>
-                          <span>
-                            <span className="olive-muted text-xs">מים </span>
-                            {num(r.water, 1)}
-                          </span>
-                          {match && (
-                            <span
-                              className={`olive-pill ${PARAMETER_STATUS_CONFIG[match.status].pillClass}`}
-                            >
-                              {match.message}
+                      )}
+                    </div>
+                    <div className="mt-2 grid gap-x-6 sm:grid-cols-2">
+                      <NirGauge
+                        label="שמן"
+                        value={r.oil}
+                        rules={rules}
+                        parameterCode="oil"
+                        neutral={!fruit}
+                      />
+                      <NirGauge
+                        label="מים"
+                        value={r.water}
+                        rules={rules}
+                        parameterCode="water"
+                        neutral={!fruit}
+                      />
+                    </div>
+                  </button>
+                );
+              })()}
+
+              {nirRows.length > 1 && (
+                <ul className="mt-2 divide-y border-t text-sm">
+                  {nirRows.slice(1, HISTORY_LIMIT).map((r) => {
+                    const match =
+                      r.sampleType === 'fruit' ? evaluateParameter(rules, 'oil', r.oil) : null;
+                    return (
+                      <li key={r.id}>
+                        {/* text-start is load-bearing: a button centres its text. */}
+                        <button
+                          type="button"
+                          onClick={() => onEditNir(r)}
+                          aria-label={`ערוך בדיקה מתאריך ${r.reportDate ?? ''}`}
+                          className="hover:bg-muted/50 flex w-full flex-wrap items-center gap-x-3 gap-y-1 rounded-md px-2 py-2 text-start transition-colors focus-visible:ring-2 focus-visible:outline-none"
+                        >
+                          <span className="olive-muted tabular-nums">{r.reportDate ?? '—'}</span>
+                          <NirRowMarks r={r} />
+                          <span className="mr-auto flex items-center gap-3 tabular-nums">
+                            <span>
+                              <span className="olive-muted text-xs">שמן </span>
+                              {num(r.oil, 1)}
                             </span>
-                          )}
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
+                            <span>
+                              <span className="olive-muted text-xs">מים </span>
+                              {num(r.water, 1)}
+                            </span>
+                            {match && (
+                              <span
+                                className={`inline-block size-2 rounded-full olive-gauge-${match.status} bg-[var(--gauge-c)]`}
+                                title={match.message}
+                                aria-label={match.message}
+                              />
+                            )}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
               {nirRows.length > HISTORY_LIMIT && (
                 <Link
                   href={`/olive/nir?areaId=${row.id}`}
@@ -798,6 +829,31 @@ function PlotDetailBody({
           </button>
         </div>
       </div>
+    </>
+  );
+}
+
+/**
+ * The sent glyph and the pomace tag, shared by the latest-reading card and the
+ * history rows. This list has its own markup, so it does not inherit the log's
+ * נשלח column; without the glyph, marking a reading sent in the log and then
+ * opening the plot would look like it had not taken.
+ */
+function NirRowMarks({ r }: { r: NirRow }) {
+  return (
+    <>
+      {r.sentToClientAt && (
+        <span
+          className="inline-flex"
+          title={`נשלח ללקוח ב-${r.sentToClientAt}`}
+          aria-label="נשלח ללקוח"
+        >
+          <MailCheck className="text-primary size-3.5" />
+        </span>
+      )}
+      {r.sampleType === 'pomace' && (
+        <span className="olive-pill olive-pill-sample">{NIR_SAMPLE_TYPE_LABELS.pomace}</span>
+      )}
     </>
   );
 }

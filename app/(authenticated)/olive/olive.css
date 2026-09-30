@@ -814,3 +814,83 @@ tfoot.olive-table-summary {
 tfoot.olive-table-summary .olive-muted {
   color: oklch(0.47 0.025 85);
 }
+
+/* --- NIR gauge ---
+   A reading on its rule bands (components/olive/NirGauge.tsx). Band fills are
+   a step deeper than the matching .olive-pill-* backgrounds so the track reads
+   on white; the marker and the figure take the pill's text colour, so they and
+   the status pill beside the gauge are visibly the same verdict. */
+.olive-gauge-track {
+  display: flex;
+  height: 1.25rem;
+}
+/* Low to high, left to right. Needs the [dir] prefix to out-rank globals.css's
+   `[dir="rtl"] * { direction: rtl }` — same fix as .olive-ltr-num above. */
+[dir='rtl'] .olive-gauge-track {
+  direction: ltr;
+}
+/* Full-height hover target around each band; see NirGauge. */
+.olive-gauge-slot {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  cursor: help;
+}
+.olive-gauge-band {
+  width: 100%;
+  height: 0.6rem;
+  transition: filter 0.15s;
+}
+.olive-gauge-slot:hover .olive-gauge-band {
+  filter: brightness(0.94);
+}
+.olive-gauge-slot:first-child .olive-gauge-band {
+  border-radius: 999px 0 0 999px;
+}
+.olive-gauge-slot:last-child .olive-gauge-band {
+  border-radius: 0 999px 999px 0;
+}
+.olive-gauge-slot:only-child .olive-gauge-band {
+  border-radius: 999px;
+}
+.olive-gauge-slot + .olive-gauge-slot .olive-gauge-band {
+  border-left: 2px solid oklch(1 0 0);
+}
+.olive-gauge-band-idle {
+  background: oklch(0.88 0.03 90);
+}
+.olive-gauge-band-ok {
+  background: oklch(0.84 0.07 128);
+}
+.olive-gauge-band-plan {
+  background: oklch(0.88 0.09 88);
+}
+.olive-gauge-band-urgent {
+  background: oklch(0.82 0.08 40);
+}
+.olive-gauge-band-neutral {
+  background: oklch(0.91 0.01 90);
+}
+
+.olive-gauge-idle {
+  --gauge-c: oklch(0.48 0.02 85);
+}
+.olive-gauge-ok {
+  --gauge-c: oklch(0.4 0.06 125);
+}
+.olive-gauge-plan {
+  --gauge-c: oklch(0.5 0.11 80);
+}
+.olive-gauge-urgent {
+  --gauge-c: oklch(0.5 0.13 38);
+}
+.olive-gauge-neutral {
+  --gauge-c: oklch(0.4 0.02 85);
+}
+
+.olive-gauge-pointer {
+  width: 0;
+  height: 0;
+  border-inline: 5px solid transparent;
+  border-top: 6px solid var(--gauge-c);
+}
