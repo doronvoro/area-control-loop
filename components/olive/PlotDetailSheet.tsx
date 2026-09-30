@@ -7,9 +7,10 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import {
   AlertTriangle,
-  ExternalLink,
+  ChartLine,
   FileText,
   FlaskConical,
+  List,
   Loader2,
   MailCheck,
   MapPin,
@@ -61,6 +62,8 @@ import { toHarvestRow, type HarvestRow } from '@/lib/olive/harvest-rows';
 import type { PlotRow } from '@/lib/olive/plot-rows';
 import { NirFormSheet, type NirEditorState } from './NirFormSheet';
 import { HarvestFormSheet, type HarvestEditorState } from './HarvestFormSheet';
+import { PlotReportDialog } from './report/PlotReportDialog';
+import { NirTrendChart } from './report/NirTrendChart';
 
 /**
  * Everything about one plot.
@@ -144,6 +147,7 @@ export function PlotDetailSheet({
 }: PlotDetailSheetProps) {
   const [nirEditor, setNirEditor] = useState<NirEditorState | null>(null);
   const [harvestEditor, setHarvestEditor] = useState<HarvestEditorState | null>(null);
+  const [report, setReport] = useState<{ id: string; name: string } | null>(null);
   // Bumped after a stacked save so the history lists below re-pull. The plots
   // table behind refreshes through onSaved instead.
   const [historyNonce, setHistoryNonce] = useState(0);
@@ -191,6 +195,7 @@ export function PlotDetailSheet({
               onEditNir={(r) => setNirEditor({ mode: 'edit', row: r })}
               onNewHarvest={() => setHarvestEditor({ mode: 'create', areaId: row.id })}
               onEditHarvest={(r) => setHarvestEditor({ mode: 'edit', row: r })}
+              onOpenReport={() => setReport({ id: row.id, name: row.name || row.region || '' })}
             />
           )}
         </SheetContent>
@@ -220,6 +225,11 @@ export function PlotDetailSheet({
         stacked
         lockPlot
       />
+      <PlotReportDialog
+        plotId={report?.id ?? null}
+        plotName={report?.name ?? ''}
+        onClose={() => setReport(null)}
+      />
     </>
   );
 }
@@ -236,6 +246,7 @@ function PlotDetailBody({
   onEditNir,
   onNewHarvest,
   onEditHarvest,
+  onOpenReport,
 }: {
   row: PlotRow;
   rules: ParameterRule[];
@@ -248,6 +259,7 @@ function PlotDetailBody({
   onEditNir: (r: NirRow) => void;
   onNewHarvest: () => void;
   onEditHarvest: (r: HarvestRow) => void;
+  onOpenReport: () => void;
 }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -259,6 +271,13 @@ function PlotDetailBody({
   );
 
   const [nirRows, setNirRows] = useState<NirRow[] | null>(null);
+  const [nirView, setNirView] = useState<'list' | 'chart'>('list');
+  // The report's trend: fruit only (pomace oil is extraction loss, not the
+  // plot's oil), oldest first as NirTrendChart expects.
+  const nirTrend = useMemo(
+    () => (nirRows ?? []).filter((r) => r.sampleType === 'fruit').reverse(),
+    [nirRows]
+  );
   const [harvestRows, setHarvestRows] = useState<HarvestRow[] | null>(null);
 
   const now = useMemo(() => new Date(), []);
@@ -422,20 +441,19 @@ function PlotDetailBody({
               tooltip never shows on touch, and on desktop it read as broken. */}
           <button
             type="button"
-            aria-label="הפק דוח חלקה (נפתח בלשונית חדשה)"
+            aria-label="הפק דוח חלקה"
             aria-disabled={form.formState.isDirty}
             onClick={() => {
               if (form.formState.isDirty) {
                 showToast.info('שמור את השינויים כדי שייכללו בדוח');
                 return;
               }
-              window.open(`/olive/report/plot/${row.id}`, '_blank', 'noopener');
+              onOpenReport();
             }}
             className="group inline-flex h-9 items-center gap-2 rounded-full border border-[oklch(0.83_0.09_88/55%)] bg-[oklch(0.83_0.09_88/14%)] ps-3.5 pe-3 text-sm font-semibold text-[oklch(0.93_0.06_88)] shadow-sm transition-all hover:border-[oklch(0.83_0.09_88/85%)] hover:bg-[oklch(0.83_0.09_88/24%)] hover:text-white focus-visible:ring-2 focus-visible:ring-[oklch(0.83_0.09_88)] focus-visible:outline-none active:scale-[0.97] aria-disabled:opacity-50 aria-disabled:hover:bg-[oklch(0.83_0.09_88/14%)]"
           >
             <FileText className="size-4" />
             <span className="hidden sm:inline">הפק דוח</span>
-            <ExternalLink className="size-3.5 opacity-60 transition-opacity group-hover:opacity-100" />
           </button>
           <button
             type="button"
@@ -456,11 +474,28 @@ function PlotDetailBody({
               <FlaskConical className="size-4" />
             </div>
             <h3 className="text-base font-bold">בדיקות NIR</h3>
+            {nirRows !== null && nirRows.length > 0 && (
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="mr-auto size-7"
+                onClick={() => setNirView((v) => (v === 'list' ? 'chart' : 'list'))}
+                aria-label={nirView === 'list' ? 'הצג כגרף' : 'הצג כרשימה'}
+                title={nirView === 'list' ? 'הצג כגרף' : 'הצג כרשימה'}
+              >
+                {nirView === 'list' ? (
+                  <ChartLine className="size-4" />
+                ) : (
+                  <List className="size-4" />
+                )}
+              </Button>
+            )}
             <Button
               type="button"
               size="sm"
               variant="ghost"
-              className="mr-auto h-7 text-xs"
+              className={`h-7 text-xs ${nirRows !== null && nirRows.length > 0 ? '' : 'mr-auto'}`}
               onClick={onNewNir}
             >
               <Plus className="ml-1 size-3.5" />
@@ -472,6 +507,12 @@ function PlotDetailBody({
             <Skeleton />
           ) : nirRows.length === 0 ? (
             <p className="olive-muted text-sm">טרם בוצעה בדיקה בחלקה זו</p>
+          ) : nirView === 'chart' ? (
+            nirTrend.length < 2 ? (
+              <p className="olive-muted text-sm">נדרשות לפחות 2 בדיקות פרי כדי להציג גרף מגמה</p>
+            ) : (
+              <NirTrendChart rows={nirTrend} />
+            )
           ) : (
             <>
               {/* The latest reading on its scales; the rest as one-line
