@@ -21,6 +21,7 @@ import {
   Building2,
   MapPinned,
   BookOpen,
+  SlidersHorizontal,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -100,6 +101,7 @@ export const oliveGroup: NavGroup = {
     { href: '/olive/yield', label: 'הערכת יבול', icon: Scale },
     { href: '/olive/weather', label: 'מזג אוויר', icon: CloudSun },
     { href: '/olive/seasons', label: 'עונות', icon: CalendarRange },
+    { href: '/olive/thresholds', label: 'ספים', icon: SlidersHorizontal },
     // Last in the group, and the only external item: a static document rather
     // than a screen. It is served from public/ as a single self-contained HTML
     // file, so the same URL is both what the link opens and what the download

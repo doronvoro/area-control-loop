@@ -2,15 +2,22 @@
 
 import { useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Loader2, Search, Settings2, Sprout } from 'lucide-react';
+import {
+  AlarmClock,
+  FlaskConical,
+  Loader2,
+  RotateCcw,
+  Search,
+  Users,
+  X,
+  type LucideIcon,
+} from 'lucide-react';
 import { useApiData } from '@/hooks/useApiData';
-import { useUser } from '@/components/providers/UserProvider';
-import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import { OliveThresholdsDialog } from './OliveThresholdsDialog';
 import { WeatherStrip } from './WeatherStrip';
 import { NirGauge } from './NirGauge';
 import {
@@ -19,6 +26,7 @@ import {
   computePlotStatus,
   classifyPlotCategory,
   daysSinceLabel,
+  type CategoryThresholds,
   type PlotCategory,
   type UrgencyLevel,
 } from '@/lib/olive/logic';
@@ -36,6 +44,7 @@ import { PLOT_CATEGORY_CARDS } from '@/lib/olive/constants';
 import {
   PARAMETER_STATUS_CONFIG,
   PLOT_TYPE_LABELS,
+  ParameterStatus,
   PlotType,
   type ParameterRule,
 } from '@/types/database';
@@ -77,19 +86,15 @@ const URGENCY_OPTIONS: { level: UrgencyLevel; label: string }[] = [
 
 export function OliveDashboardContent() {
   const { data, loading, error, refetch } = useApiData<DashboardPayload>('/api/olive/dashboard');
-  const { user } = useUser();
   const [filter, setFilter] = useState<PlotCategory | null>(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  /** Grower type narrowing the plot list; null is every grower. */
-  const [grower, setGrower] = useState<PlotType | null>(null);
-  const [urgency, setUrgency] = useState<UrgencyLevel | null>(null);
+  // Each filter holds the options the reader has UNchecked, so "nothing
+  // hidden" — every box checked — is the empty default.
+  const [hiddenGrowers, setHiddenGrowers] = useState<Set<PlotType>>(new Set());
+  const [hiddenTested, setHiddenTested] = useState<Set<'with' | 'without'>>(new Set());
+  const [hiddenUrgency, setHiddenUrgency] = useState<Set<UrgencyLevel>>(new Set());
   const [search, setSearch] = useState('');
-
-  // Matches the RLS on plot_category_thresholds and parameter_rules, and the
-  // requireAdminOrCustomerOwner guard both PUT routes run. A plain worker gets
-  // no gear at all rather than a disabled one — nothing hints the settings are
-  // there, because for them they are not.
-  const canManageThresholds = !!user && (user.isAdmin || user.isCustomerOwner);
+  /** The search box is an icon until asked for, and folds back when left empty. */
+  const [searchOpen, setSearchOpen] = useState(false);
 
   // `now` is fixed for the render so every plot is judged against one instant.
   const now = useMemo(() => new Date(), []);
@@ -132,18 +137,16 @@ export function OliveDashboardContent() {
       rows,
       counts,
       weather,
+      bands,
       weatherBands,
       weatherFreshness,
       harvestedCount: harvested.size,
     };
   }, [data, now]);
 
-  /** The settings preview's only input. Memoised so typing in it does not rebuild the list. */
-  const previewNirs = useMemo(() => (model?.rows ?? []).map((r) => r.nir), [model]);
-
-  // The FIRST load only. refetch() flips `loading` back on, and returning the
-  // spinner then would unmount the settings dialog the save came from — the
-  // same reason NirPageContent guards its spinner with `&& !payload`.
+  // The FIRST load only. refetch() flips `loading` back on, and swapping the
+  // whole page for a spinner then would throw away the reader's filters and
+  // scroll — the list dims instead (aria-busy below).
   if (loading && !data) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -162,44 +165,22 @@ export function OliveDashboardContent() {
   const searched = (visible ?? []).filter(
     (r) => !query || (r.plot.name ?? '').toLowerCase().includes(query)
   );
-  const byGrower = searched.filter((r) => !grower || r.plot.details?.plot_type === grower);
-  const listed = byGrower
-    .filter((r) => !urgency || r.status.level === urgency)
+  const byGrower = searched.filter(
+    (r) => !hiddenGrowers.has(r.plot.details?.plot_type as PlotType)
+  );
+  // A report with no oil, water or dry figure (a pomace sample, say) has
+  // nothing to read on this screen, so it counts as untested here.
+  const hasReading = (r: (typeof byGrower)[number]) =>
+    !!r.nir && (r.nir.oil !== null || r.nir.water !== null || r.nir.dry !== null);
+  const byTested = byGrower.filter((r) => !hiddenTested.has(hasReading(r) ? 'with' : 'without'));
+  const singleGrower = GROWER_GROUPS.length - hiddenGrowers.size === 1;
+  const listed = byTested
+    .filter((r) => !hiddenUrgency.has(r.status.level))
     .sort((a, b) => LEVEL_ORDER[a.status.level] - LEVEL_ORDER[b.status.level]);
   const totalPlots = model ? model.rows.length + model.harvestedCount : 0;
 
   return (
     <div className="space-y-5">
-      <PageHeader icon={Sprout} title="מסיק" description="סטטוס הבשלה ודחיפות מסיק לכל החלקות">
-        {canManageThresholds && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            disabled={!data}
-            onClick={() => setSettingsOpen(true)}
-            aria-label="הגדרת ספי מסיק"
-            title="הגדרת ספי מסיק"
-          >
-            <Settings2 className="size-4" />
-          </Button>
-        )}
-      </PageHeader>
-
-      {canManageThresholds && data && (
-        <OliveThresholdsDialog
-          open={settingsOpen}
-          onOpenChange={setSettingsOpen}
-          categoryThresholds={data.categoryThresholds}
-          weatherThresholds={data.weatherThresholds}
-          rules={data.parameterRules || []}
-          nirs={previewNirs}
-          weatherDays={data.weatherDays || []}
-          currentCounts={model?.counts ?? EMPTY_COUNTS}
-          onSaved={refetch}
-        />
-      )}
-
       {error && (
         <div className="py-12 text-center text-destructive">
           <p>{error}</p>
@@ -223,17 +204,6 @@ export function OliveDashboardContent() {
           aria-busy={loading}
           className={`space-y-5 ${loading ? 'opacity-60 transition-opacity' : ''}`}
         >
-          {/* First on the page, and collapsed — the header alone carries the warning count.
-              The forecast, unconditionally — including when it is calm or absent.
-              Not filtered with the list below it: weather is context for the whole
-              grove, where the list below is what the filters narrow. */}
-          <WeatherStrip
-            weather={model.weather}
-            thresholds={model.weatherBands}
-            freshness={model.weatherFreshness}
-            now={now}
-          />
-
           {/* Season + harvest progress */}
           {data?.season && (
             <section className="olive-card p-4">
@@ -296,19 +266,37 @@ export function OliveDashboardContent() {
             </section>
           )}
 
+          {/* Under the season card, and collapsed — the header alone carries the warning count.
+              The forecast, unconditionally — including when it is calm or absent.
+              Not filtered with the list below it: weather is context for the whole
+              grove, where the list below is what the filters narrow. */}
+          <WeatherStrip
+            weather={model.weather}
+            thresholds={model.weatherBands}
+            freshness={model.weatherFreshness}
+            now={now}
+            onRefreshed={refetch}
+          />
+
           {/* Status cards — clicking one filters the list below */}
           <section className="grid grid-cols-2 gap-2 md:grid-cols-4">
             {PLOT_CATEGORY_CARDS.map((card) => (
-              <button
-                key={card.key}
-                type="button"
-                aria-pressed={filter === card.key}
-                onClick={() => setFilter(filter === card.key ? null : card.key)}
-                className={`olive-status-card ${card.className}`}
-              >
-                <div className="olive-status-count">{model.counts[card.key]}</div>
-                <div className="olive-status-label">{card.label}</div>
-              </button>
+              <Tooltip key={card.key}>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    aria-pressed={filter === card.key}
+                    onClick={() => setFilter(filter === card.key ? null : card.key)}
+                    className={`olive-status-card ${card.className}`}
+                  >
+                    <div className="olive-status-count">{model.counts[card.key]}</div>
+                    <div className="olive-status-label">{card.label}</div>
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-64 text-center">
+                  {categoryRule(card.key, model.bands, rules)}
+                </TooltipContent>
+              </Tooltip>
             ))}
           </section>
 
@@ -325,48 +313,115 @@ export function OliveDashboardContent() {
 
           {/* Plot filters — one list, narrowed, instead of a column per grower. */}
           <section className="space-y-3">
-            {/* One toolbar line — search, grower, urgency — wrapping only when narrow. */}
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="relative w-full sm:w-56">
-                <Search className="text-muted-foreground pointer-events-none absolute top-1/2 right-2.5 size-4 -translate-y-1/2" />
-                <Input
-                  type="search"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="חיפוש חלקה"
+            {/* One toolbar line — search, grower, tests, urgency — wrapping only when narrow. */}
+            <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
+              {searchOpen || search ? (
+                <div className="relative w-full sm:w-44">
+                  <Search className="text-muted-foreground pointer-events-none absolute top-1/2 right-2.5 size-3.5 -translate-y-1/2" />
+                  <Input
+                    autoFocus
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    onBlur={() => !search && setSearchOpen(false)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') {
+                        setSearch('');
+                        setSearchOpen(false);
+                      }
+                    }}
+                    placeholder="חיפוש חלקה"
+                    aria-label="חיפוש חלקה"
+                    className="h-8 pr-8 pl-7 text-sm"
+                  />
+                  {search && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearch('');
+                        setSearchOpen(false);
+                      }}
+                      aria-label="נקה חיפוש"
+                      className="text-muted-foreground hover:text-foreground absolute top-1/2 left-2 -translate-y-1/2"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setSearchOpen(true)}
                   aria-label="חיפוש חלקה"
-                  className="pr-8"
-                />
-              </div>
+                  title="חיפוש חלקה"
+                  className="bg-muted/70 hover:bg-muted size-8 rounded-lg"
+                >
+                  <Search className="size-4" />
+                </Button>
+              )}
 
               <FilterGroup
-                label="מגדל"
-                value={grower}
-                onChange={setGrower}
+                label="סוג מגדל"
+                icon={Users}
+                hidden={hiddenGrowers}
+                onChange={setHiddenGrowers}
+                options={GROWER_GROUPS.map((g) => ({
+                  value: g.type,
+                  label: g.label,
+                  count: searched.filter((r) => r.plot.details?.plot_type === g.type).length,
+                }))}
+              />
+
+              <FilterGroup
+                label="בדיקת NIR"
+                icon={FlaskConical}
+                hidden={hiddenTested}
+                onChange={setHiddenTested}
                 options={[
-                  { value: null, label: 'הכל', count: searched.length },
-                  ...GROWER_GROUPS.map((g) => ({
-                    value: g.type,
-                    label: g.label,
-                    count: searched.filter((r) => r.plot.details?.plot_type === g.type).length,
-                  })),
+                  { value: 'with', label: 'נבדקו', count: byGrower.filter(hasReading).length },
+                  {
+                    value: 'without',
+                    label: 'לא נבדקו',
+                    count: byGrower.filter((r) => !hasReading(r)).length,
+                  },
                 ]}
               />
 
               <FilterGroup
-                label="דחיפות"
-                value={urgency}
-                onChange={setUrgency}
-                options={[
-                  { value: null, label: 'הכל', count: byGrower.length },
-                  ...URGENCY_OPTIONS.map((o) => ({
-                    value: o.level,
-                    label: o.label,
-                    count: byGrower.filter((r) => r.status.level === o.level).length,
-                    dot: o.level,
-                  })),
-                ]}
+                label="דחיפות מסיק"
+                icon={AlarmClock}
+                hidden={hiddenUrgency}
+                onChange={setHiddenUrgency}
+                options={URGENCY_OPTIONS.map((o) => ({
+                  value: o.level,
+                  label: o.label,
+                  count: byTested.filter((r) => r.status.level === o.level).length,
+                  dot: o.level,
+                }))}
               />
+
+              {(search ||
+                hiddenGrowers.size > 0 ||
+                hiddenTested.size > 0 ||
+                hiddenUrgency.size > 0) && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setSearch('');
+                    setSearchOpen(false);
+                    setHiddenGrowers(new Set());
+                    setHiddenTested(new Set());
+                    setHiddenUrgency(new Set());
+                  }}
+                  className="text-muted-foreground hover:text-foreground h-8 gap-1 px-2 text-xs"
+                >
+                  <RotateCcw className="size-3.5" />
+                  איפוס
+                </Button>
+              )}
             </div>
 
             {/* Sorted דחוף → מתוכנן → ללא דחיפות מיוחדת */}
@@ -388,7 +443,7 @@ export function OliveDashboardContent() {
                         <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                           <span className="truncate text-sm font-bold">{row.plot.name}</span>
                           {/* Which grower, when the list is not already narrowed to one. */}
-                          {!grower && row.growerLabel && (
+                          {!singleGrower && row.growerLabel && (
                             <span className="olive-pill olive-pill-idle shrink-0">
                               {row.growerLabel}
                             </span>
@@ -447,58 +502,74 @@ export function OliveDashboardContent() {
 }
 
 interface FilterOption<T> {
-  value: T | null;
+  value: T;
   label: string;
   count: number;
   dot?: UrgencyLevel;
 }
 
 /**
- * One filter dimension as a labelled segmented control. Each group owns its
- * "הכל", so which dimension a button narrows — and how to undo it — is on
- * screen rather than implied by a toggle-off click.
+ * One filter dimension as a row of checkable chips, all checked by default.
+ * A click toggles one option; the last checked option cannot be cleared, since
+ * an empty group would hide every plot and look like missing data.
  */
 function FilterGroup<T extends string>({
   label,
-  value,
+  icon: Icon,
+  hidden,
   onChange,
   options,
 }: {
   label: string;
-  value: T | null;
-  onChange: (value: T | null) => void;
+  icon: LucideIcon;
+  hidden: Set<T>;
+  onChange: (hidden: Set<T>) => void;
   options: FilterOption<T>[];
 }) {
+  const toggle = (value: T) => {
+    const next = new Set(hidden);
+    if (next.has(value)) next.delete(value);
+    else if (options.some((o) => o.value !== value && !next.has(o.value))) next.add(value);
+    onChange(next);
+  };
+
   return (
-    <div
-      role="group"
-      aria-label={label}
-      className="bg-muted/70 flex flex-wrap items-center gap-0.5 rounded-lg p-1"
-    >
-      <span className="olive-muted px-2 text-xs font-semibold">{label}</span>
-      {options.map((option) => {
-        const active = value === option.value;
-        return (
-          <Button
-            key={option.value ?? 'all'}
-            type="button"
-            size="sm"
-            variant="ghost"
-            aria-pressed={active}
-            onClick={() => onChange(option.value)}
-            className={cn(
-              'h-7 gap-1.5 rounded-md px-2.5 font-medium',
-              active
-                ? 'text-foreground bg-white font-semibold shadow-sm hover:bg-white'
-                : 'text-muted-foreground hover:text-foreground hover:bg-transparent'
-            )}
-          >
-            {option.dot && <span className={`olive-dot olive-dot-${option.dot}`} />}
-            {option.label}
-            <span className="olive-ltr-num opacity-70">{option.count}</span>
-          </Button>
-        );
-      })}
+    <div role="group" aria-label={label} className="flex flex-col gap-1">
+      {/* The dimension's name as a caption over its track, so the track holds
+          only choices. */}
+      <span className="olive-muted flex items-center gap-1 ps-1 text-[11px] font-semibold">
+        <Icon className="size-3 opacity-70" aria-hidden />
+        {label}
+      </span>
+      <div className="bg-muted/70 flex h-8 items-center gap-0.5 rounded-lg p-0.5 whitespace-nowrap">
+        {options.map((option) => {
+          const checked = !hidden.has(option.value);
+          return (
+            <Button
+              key={option.value}
+              type="button"
+              size="sm"
+              variant="ghost"
+              aria-pressed={checked}
+              onClick={() => toggle(option.value)}
+              className={cn(
+                'h-7 gap-1 rounded-md px-2 text-xs font-medium',
+                checked
+                  ? 'text-foreground bg-white shadow-sm hover:bg-white'
+                  : 'text-muted-foreground/70 hover:text-foreground hover:bg-transparent'
+              )}
+            >
+              {option.dot && (
+                <span
+                  className={cn(`olive-dot olive-dot-${option.dot}`, !checked && 'opacity-40')}
+                />
+              )}
+              {option.label}
+              <span className="olive-ltr-num opacity-70">{option.count}</span>
+            </Button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -569,4 +640,40 @@ function NirReading({
       </PopoverContent>
     </Popover>
   );
+}
+
+/**
+ * What puts a plot in a category, in the live thresholds — the same checks,
+ * in the same order, as classifyPlotCategory. Built from the settings rather
+ * than written out, so tuning a threshold changes the tooltip with the counts.
+ */
+function categoryRule(
+  category: PlotCategory,
+  t: CategoryThresholds,
+  rules: ParameterRule[]
+): string {
+  switch (category) {
+    case 'ready':
+      return `שמן ${t.readyOilMin}–${t.readyOilMax}% ומים ${t.readyWaterMin}–${t.readyWaterMax}% בבדיקה האחרונה`;
+    case 'anomaly': {
+      const dryUrgentFrom = dryUrgentLowerBound(rules);
+      const dry = dryUrgentFrom === null ? '' : `, או שמן בחו״י מעל ${dryUrgentFrom}%`;
+      return `מים מתחת ל-${t.anomalyWaterLow}% או מעל ${t.anomalyWaterHigh}%${dry}`;
+    }
+    case 'normal':
+      return `שמן עד ${t.normalOilMax}% ומים עד ${t.normalWaterMax}% — עדיין לא בשל`;
+    case 'testing':
+      return 'אין עדיין בדיקת NIR, או שהבדיקה האחרונה לא נופלת באף קטגוריה אחרת';
+  }
+}
+
+/** Where the dry-matter urgent band starts: the upper bound of the rule before it. */
+function dryUrgentLowerBound(rules: ParameterRule[]): number | null {
+  const dry = rules
+    .filter((r) => r.parameter_code === 'dry')
+    .sort((a, b) => a.sort_order - b.sort_order);
+  const i = dry.findIndex((r) => r.status === ParameterStatus.URGENT);
+  if (i <= 0 || dry[i - 1].upper_bound == null) return null;
+  const bound = Number(dry[i - 1].upper_bound);
+  return Number.isFinite(bound) ? bound : null;
 }

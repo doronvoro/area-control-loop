@@ -289,6 +289,7 @@ export function OliveDashboardClassicContent() {
             thresholds={model.weatherBands}
             freshness={model.weatherFreshness}
             now={now}
+            onRefreshed={refetch}
           />
 
           {/* מבט על — always visible, no clicking required */}

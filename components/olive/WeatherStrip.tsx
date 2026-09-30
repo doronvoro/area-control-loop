@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
-import { ChevronDown, CloudSun, Droplets, Wind } from 'lucide-react';
+import { ChevronDown, CloudSun, Droplets, Loader2, RefreshCw, Wind } from 'lucide-react';
+import { showToast } from '@/lib/toast';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
@@ -20,7 +20,8 @@ import { formatForecastDay, type ForecastFreshness } from '@/lib/olive/weather-v
  * Do not make this conditional again. It is collapsible, starting closed, but
  * the header — title and warning count — always renders.
  *
- * Presentational only. Every number here comes from computeUpcomingWeather, and
+ * Presentational apart from the refresh button, which pulls a new forecast and
+ * hands the reload to the page. Every number here comes from computeUpcomingWeather, and
  * the flags are the ones it set while building weatherLines, so the days this
  * marks are by construction the days those lines name.
  */
@@ -34,13 +35,51 @@ interface WeatherStripProps {
   freshness: ForecastFreshness | null;
   /** The dashboard's memoised instant, so every chip is judged against one time. */
   now: Date;
+  /** Reload the page's data once a pull has landed, so the strip shows it. */
+  onRefreshed: () => Promise<void>;
 }
 
-export function WeatherStrip({ weather, thresholds, freshness, now }: WeatherStripProps) {
+/**
+ * Pull a fresh forecast from Open-Meteo — the same route as the weather
+ * screen's "רענן תחזית" — then have the page reload what it shows.
+ */
+function useForecastRefresh(onRefreshed: () => Promise<void>) {
+  const [refreshing, setRefreshing] = useState(false);
+
+  const refresh = async (): Promise<boolean> => {
+    setRefreshing(true);
+    try {
+      const res = await fetch('/api/olive/weather/refresh', { method: 'POST' });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || 'שגיאה ברענון התחזית');
+      }
+      await onRefreshed();
+      showToast.success('התחזית עודכנה');
+      return true;
+    } catch (err) {
+      showToast.error(err instanceof Error ? err.message : 'שגיאה ברענון התחזית');
+      return false;
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  return { refreshing, refresh };
+}
+
+export function WeatherStrip({
+  weather,
+  thresholds,
+  freshness,
+  now,
+  onRefreshed,
+}: WeatherStripProps) {
   const { upcoming, weatherLines } = weather;
   const [open, setOpen] = useState(false);
+  const { refreshing, refresh } = useForecastRefresh(onRefreshed);
 
-  if (upcoming.length === 0) return <EmptyForecast />;
+  if (upcoming.length === 0) return <EmptyForecast refreshing={refreshing} onRefresh={refresh} />;
 
   const days = upcoming.slice(0, FORECAST_DAYS_SHOWN);
   const warnings = weatherLines.length;
@@ -90,9 +129,25 @@ export function WeatherStrip({ weather, thresholds, freshness, now }: WeatherStr
               </Button>
             </CollapsibleTrigger>
           </h2>
-          <Link href="/olive/weather" className="olive-muted text-xs underline">
-            למסך מזג אוויר
-          </Link>
+          {/* Pulls, then opens the section — the point of refreshing is to look. */}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            disabled={refreshing}
+            onClick={async () => {
+              if (await refresh()) setOpen(true);
+            }}
+            aria-label="רענן תחזית"
+            title="רענן תחזית"
+            className="text-muted-foreground hover:text-foreground"
+          >
+            {refreshing ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <RefreshCw className="size-4" />
+            )}
+          </Button>
         </div>
 
         <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
@@ -183,7 +238,13 @@ export function WeatherStrip({ weather, thresholds, freshness, now }: WeatherStr
  * Says what the absence costs rather than leaving the space blank, which is the
  * whole reason this component stopped being conditional.
  */
-function EmptyForecast() {
+function EmptyForecast({
+  refreshing,
+  onRefresh,
+}: {
+  refreshing: boolean;
+  onRefresh: () => Promise<boolean>;
+}) {
   return (
     <section className="olive-weather-empty flex flex-col items-center gap-1 p-6 text-center">
       <CloudSun className="text-muted-foreground/40 size-7" />
@@ -192,9 +253,14 @@ function EmptyForecast() {
         דחיפות המסיק מחושבת כרגע ללא מזג אוויר. התחזית מתרעננת אוטומטית מדי בוקר, וניתן לרענן גם
         ידנית.
       </p>
-      <Link href="/olive/weather" className="mt-1 text-sm underline">
-        מעבר למסך מזג אוויר לרענון התחזית
-      </Link>
+      <Button type="button" size="sm" className="mt-2" disabled={refreshing} onClick={onRefresh}>
+        {refreshing ? (
+          <Loader2 className="ml-2 size-4 animate-spin" />
+        ) : (
+          <RefreshCw className="ml-2 size-4" />
+        )}
+        רענן תחזית
+      </Button>
     </section>
   );
 }
