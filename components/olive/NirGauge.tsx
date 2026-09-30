@@ -64,7 +64,10 @@ export function NirGauge({
     min = (value ?? 0) - 5;
     max = (value ?? 0) + 5;
   }
-  if (value !== null) {
+  // Field: the scale stays put while typing — rescaling on every keystroke
+  // made the bands jump — and an out-of-range value pins the pointer to the
+  // edge instead. The readout shows a settled value, so it can afford to widen.
+  if (value !== null && !field) {
     min = Math.min(min, value - 1);
     max = Math.max(max, value + 1);
   }
@@ -99,7 +102,12 @@ export function NirGauge({
   }
 
   const match = neutral ? null : evaluateParameter(rules, parameterCode, value);
-  const position = value === null ? null : pct(value);
+  // A field with no bands (pomace) has no scale to place the value on — its
+  // "scale" would just be value±5, so the pointer would sit dead centre always.
+  const position =
+    value === null || (field && bounds.length === 0)
+      ? null
+      : Math.min(100, Math.max(0, pct(value)));
 
   return (
     <div
@@ -184,7 +192,7 @@ export function NirGauge({
         {/* No bands and no value (an empty pomace field) leaves nothing to
             scale against — the -5..5 it would print is noise. */}
         <div
-          className={`olive-muted relative h-3 text-[10px] tabular-nums ${bounds.length === 0 && value === null ? 'invisible' : ''}`}
+          className={`olive-muted relative h-3 text-[10px] tabular-nums ${bounds.length === 0 && (value === null || field) ? 'invisible' : ''}`}
         >
           {/* An edge label crowding a band edge (37 beside 40) is dropped —
               the band edge is the number worth reading. */}
@@ -199,11 +207,13 @@ export function NirGauge({
           {!crowdsBound(max) && <span className="absolute right-0">{max}</span>}
         </div>
       </div>
-      {field && match && (
+      {/* Always rendered in a field, empty until there is a verdict, so the
+          row below does not jump down on the first keystroke. */}
+      {field && (
         <p
-          className={`olive-gauge-${match.status} px-2 text-xs font-semibold text-[var(--gauge-c)]`}
+          className={`olive-gauge-${match?.status ?? 'neutral'} h-4 px-2 text-xs leading-4 font-semibold text-[var(--gauge-c)]`}
         >
-          {match.message}
+          {match?.message}
         </p>
       )}
     </div>

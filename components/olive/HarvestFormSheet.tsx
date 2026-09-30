@@ -190,8 +190,7 @@ export function HarvestFormSheet({
         {editor && (
           <HarvestFormBody
             // Identity key instead of a reset effect: defaultValues are computed
-            // once per mount. Stable across a create-save, which is what lets
-            // the plot and date survive it.
+            // once per mount.
             key={editor.mode === 'edit' ? `edit:${editor.row.id}` : `create:${editor.areaId ?? ''}`}
             editor={editor}
             plots={plots}
@@ -226,7 +225,6 @@ function HarvestFormBody({
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
   const [justCompleted, setJustCompleted] = useState<Set<number>>(new Set());
   const prevStep = useRef(isEdit ? 2 : 0);
 
@@ -312,7 +310,6 @@ function HarvestFormBody({
     try {
       setSaving(true);
       setError(null);
-      setSuccess(null);
 
       const response = await fetch('/api/olive/harvest', {
         method: editingId ? 'PUT' : 'POST',
@@ -336,29 +333,25 @@ function HarvestFormBody({
         throw new Error(body.error || 'שגיאה בשמירת דוח המסיק');
       }
 
-      const saved = await response.json().catch(() => ({}));
-      showToast.success(editingId ? 'הדוח עודכן' : 'דוח המסיק נשמר');
-      onSaved();
-
       if (editingId) {
-        onClose();
-        return;
+        showToast.success('הדוח עודכן');
+      } else {
+        // The pass number comes back from the server, which is the only place
+        // that knows it — the old page guessed from the loaded list.
+        const saved = await response.json().catch(() => ({}));
+        const plotName = selectedPlot?.name ?? '';
+        const pass = saved?.detail?.pass_number;
+        const passLabel = pass ? `מעבר ${pass}` : 'המעבר';
+        showToast.success(
+          values.is_final
+            ? `${passLabel} נשמר — ${plotName} סומנה כנמסקה`
+            : `${passLabel} נשמר — ${plotName}`
+        );
       }
 
-      // The pass number comes back from the server, which is the only place
-      // that knows it — the old page guessed from the loaded list.
-      const plotName = selectedPlot?.name ?? '';
-      const pass = saved?.detail?.pass_number;
-      const passLabel = pass ? `מעבר ${pass}` : 'המעבר';
-      setSuccess(
-        values.is_final
-          ? `${passLabel} נשמר — ${plotName} סומנה כנמסקה`
-          : `${passLabel} נשמר — ${plotName}`
-      );
-
-      // Stay open and keep the plot and date: several passes get logged in a row.
-      form.reset({ ...form.getValues(), ...EMPTY_FORM, report_date: values.report_date });
-      prevStep.current = 1;
+      // Close on save, create or edit, like the plot drawer.
+      onSaved();
+      onClose();
     } catch (err) {
       setError(err instanceof Error && err.message ? err.message : 'שגיאה בשמירה');
     } finally {
@@ -438,12 +431,6 @@ function HarvestFormBody({
               <div className="olive-error-banner flex items-center gap-3 p-4">
                 <AlertTriangle className="size-5 shrink-0" />
                 <p className="text-sm font-medium">{error}</p>
-              </div>
-            )}
-            {success && (
-              <div className="olive-success-banner flex items-center gap-3 p-4">
-                <Check className="size-5 shrink-0" />
-                <p className="text-sm font-bold">{success}</p>
               </div>
             )}
 

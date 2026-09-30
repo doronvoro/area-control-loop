@@ -1,10 +1,22 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { AlertTriangle, Check, FlaskConical, Layers, Loader2, MapPin, Send, X } from 'lucide-react';
+import {
+  AlertTriangle,
+  Check,
+  FlaskConical,
+  Info,
+  Layers,
+  Loader2,
+  MapPin,
+  Plus,
+  Send,
+  X,
+} from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -98,15 +110,10 @@ const nirSchema = z.object({
 
 type NirFormData = z.infer<typeof nirSchema>;
 
-const STEPS = [
-  { label: 'חלקה', icon: MapPin },
-  { label: 'מדידות', icon: FlaskConical },
-];
-
 const MEASUREMENTS: { name: keyof NirFormData; label: string; step: string }[] = [
-  { name: 'oil', label: 'אחוז שמן %', step: '0.1' },
-  { name: 'water', label: 'אחוז מים %', step: '0.1' },
-  { name: 'green', label: 'אחוז צבע ירוק %', step: '1' },
+  { name: 'oil', label: 'שמן %', step: '0.1' },
+  { name: 'water', label: 'מים %', step: '0.1' },
+  { name: 'green', label: 'צבע ירוק %', step: '1' },
   { name: 'acid', label: 'חומציות %', step: '0.01' },
   { name: 'maturity', label: 'אינדקס הבשלה', step: '0.1' },
   { name: 'irrig_amount', label: 'השקיה (קוב/דונם/יום)', step: '0.25' },
@@ -289,8 +296,10 @@ function NirFormBody({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [justCompleted, setJustCompleted] = useState<Set<number>>(new Set());
-  const prevStep = useRef(isEdit ? 1 : 0);
+  // Set by שמור והוסף עוד just before it submits, read once by onSubmit. A ref:
+  // written and read within the same submit, with no render in between.
+  const addAnotherRef = useRef(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const form = useForm<NirFormData>({
     resolver: zodResolver(nirSchema),
@@ -318,24 +327,6 @@ function NirFormBody({
 
   const hasMeasurement = measurements.some((v) => !!v && String(v).trim() !== '');
 
-  // The sample-location step (takt, direction) is gone from the drawer; a stored
-  // reading keeps its values, which defaultsFor() loads and onSubmit posts back
-  // untouched.
-  const currentStep = !areaId ? 0 : 1;
-
-  // Pulse a step circle the moment it is satisfied.
-  useEffect(() => {
-    if (currentStep > prevStep.current) {
-      const newly = new Set<number>();
-      for (let i = prevStep.current; i < currentStep; i++) newly.add(i);
-      setJustCompleted(newly);
-      const timer = setTimeout(() => setJustCompleted(new Set()), 600);
-      prevStep.current = currentStep;
-      return () => clearTimeout(timer);
-    }
-    prevStep.current = currentStep;
-  }, [currentStep]);
-
   /**
    * Live verdict for what has been typed. dry mirrors the DB's generated column.
    * Fruit only: parameter_rules score ripeness, and pomace oil is extraction
@@ -358,6 +349,9 @@ function NirFormBody({
   }, [oil, water, rules, isPomace]);
 
   const onSubmit = async (values: NirFormData) => {
+    const addAnother = addAnotherRef.current;
+    addAnotherRef.current = false;
+
     // Compared against the stored value rather than read from
     // form.formState.dirtyFields: that object is a Proxy which only tracks
     // fields subscribed during RENDER, so reading it here — inside a callback —
@@ -426,13 +420,15 @@ function NirFormBody({
       showToast.success(editingId ? 'הבדיקה עודכנה' : 'הבדיקה נשמרה');
       onSaved();
 
-      if (editingId) {
+      // Saving closes, create and edit alike — staying open and clearing the
+      // fields by default read as "the save wiped my values".
+      if (editingId || !addAnother) {
         onClose();
         return;
       }
 
-      // Stay open and keep the plot and date: a sampler records several
-      // readings in a row, and reselecting the plot each time is the slow part.
+      // שמור והוסף עוד: stay open and keep the plot and date — a sampler
+      // recording a run of readings should not reselect the plot each time.
       const plotName = plots.find((p) => p.id === values.area_id)?.name ?? '';
       setSuccess(`הבדיקה נשמרה — ${plotName}`);
       // The type carries over too: a run of samples is usually all fruit from
@@ -444,7 +440,9 @@ function NirFormBody({
         sample_type: values.sample_type,
         crushing_type: values.crushing_type,
       });
-      prevStep.current = 1;
+      // Back to the top, where the banner is, so the cleared fields read as
+      // "next reading" rather than lost ones.
+      scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
       setError(err instanceof Error && err.message ? err.message : 'שגיאה בשמירת הבדיקה');
     } finally {
@@ -475,52 +473,12 @@ function NirFormBody({
         </button>
       </div>
 
-      {/* Progress — only while creating. Over a saved record it is just noise,
-          and on a phone it is noise that costs a section of screen. */}
-      {!isEdit && (
-        <div className="olive-steps shrink-0">
-          {STEPS.map((step, i) => (
-            <div key={step.label} className="olive-step">
-              <div className="flex flex-col items-center gap-1">
-                <div
-                  className={`olive-step-circle ${
-                    i < currentStep
-                      ? 'olive-step-complete'
-                      : i === currentStep
-                        ? 'olive-step-active'
-                        : 'olive-step-pending'
-                  } ${justCompleted.has(i) ? 'olive-step-just-completed' : ''}`}
-                >
-                  {i < currentStep ? (
-                    <Check className="size-3.5" />
-                  ) : (
-                    <step.icon className="size-3.5" />
-                  )}
-                </div>
-                <span
-                  className={`olive-step-label ${i === currentStep ? 'olive-step-label-active' : ''}`}
-                >
-                  {step.label}
-                </span>
-              </div>
-              {i < STEPS.length - 1 && (
-                <div
-                  className={`olive-step-connector ${
-                    i < currentStep ? 'olive-step-connector-complete' : ''
-                  }`}
-                />
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col">
           {/* min-h-0 is load-bearing: a flex item defaults to min-height:auto,
               so without it overflow-y-auto never shrinks and the footer below
               gets pushed off a phone screen. */}
-          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4 md:p-6">
+          <div ref={scrollRef} className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4 md:p-6">
             {error && (
               <div className="olive-error-banner flex items-center gap-3 p-4">
                 <AlertTriangle className="size-5 shrink-0" />
@@ -538,193 +496,144 @@ function NirFormBody({
                 Two buttons rather than a Select: there are only two, and both
                 should be visible at a glance. The section header is the label,
                 so the radiogroup takes its name from it. */}
-            <section className="olive-section olive-section-type px-5 py-4">
-              <div className="olive-section-header">
+            <section className="olive-section olive-section-type px-5 py-3">
+              {/* One row: two options do not need a body under a divider. The !
+                  is needed because olive.css is unlayered and outranks
+                  Tailwind's utilities layer. */}
+              <div className="olive-section-header mb-0! flex-wrap border-b-0! pb-0!">
                 <div className="olive-section-icon olive-icon-type">
                   <Layers className="size-4" />
                 </div>
                 <h3 id="nir-sample-type-heading" className="text-base font-bold">
                   סוג בדיקה
                 </h3>
-              </div>
 
-              <FormField
-                control={form.control}
-                name="sample_type"
-                render={({ field }) => (
-                  <FormItem>
-                    <div
-                      role="radiogroup"
-                      aria-labelledby="nir-sample-type-heading"
-                      className="grid grid-cols-2 gap-2"
-                    >
-                      {NIR_SAMPLE_TYPES.map((type) => {
-                        const selected = field.value === type;
-                        return (
-                          <button
-                            key={type}
-                            type="button"
-                            role="radio"
-                            aria-checked={selected}
-                            onClick={() => field.onChange(type)}
-                            className={cn(
-                              'h-10 rounded-lg border text-sm font-semibold transition-colors',
-                              selected
-                                ? 'border-primary bg-primary text-primary-foreground'
-                                : 'bg-background hover:bg-muted'
-                            )}
-                          >
-                            {NIR_SAMPLE_TYPE_LABELS[type]}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                <FormField
+                  control={form.control}
+                  name="sample_type"
+                  render={({ field }) => (
+                    <FormItem className="mr-auto">
+                      <div
+                        role="radiogroup"
+                        aria-labelledby="nir-sample-type-heading"
+                        className="bg-muted inline-flex rounded-lg p-1"
+                      >
+                        {NIR_SAMPLE_TYPES.map((type) => {
+                          const selected = field.value === type;
+                          return (
+                            <button
+                              key={type}
+                              type="button"
+                              role="radio"
+                              aria-checked={selected}
+                              onClick={() => field.onChange(type)}
+                              className={cn(
+                                'h-8 min-w-20 rounded-md px-4 text-sm font-semibold transition-colors focus-visible:ring-2 focus-visible:outline-none',
+                                // Pomace in the brown of its .olive-pill-sample tag,
+                                // so a mill sample is recognisable at a glance and
+                                // matches how it is tagged in the lists.
+                                selected
+                                  ? type === 'pomace'
+                                    ? 'bg-[oklch(0.45_0.05_60)] text-white shadow-sm'
+                                    : 'bg-primary text-primary-foreground shadow-sm'
+                                  : 'text-muted-foreground hover:text-foreground'
+                              )}
+                            >
+                              {NIR_SAMPLE_TYPE_LABELS[type]}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
             </section>
 
-            {/* Sending to the client. A mark, not an action — nothing in the
-                app sends anything yet, and the caption has to say so or the
-                checkbox reads as "send it now". */}
-            <section className="olive-section olive-section-send px-5 py-4">
-              <div className="olive-section-header">
+            {/* Sending to the client, on one row. A mark, not an action —
+                nothing in the app sends anything yet. The caption saying so
+                moved into the info tooltip beside the checkbox; it still has
+                to exist, or the checkbox reads as "send it now". */}
+            <section className="olive-section olive-section-send px-5 py-3">
+              <div className="olive-section-header mb-0! flex-wrap border-b-0! pb-0!">
                 <div className="olive-section-icon olive-icon-send">
                   <Send className="size-4" />
                 </div>
                 <h3 className="text-base font-bold">שליחה ללקוח</h3>
-                {sentToClient && (
-                  <span className="olive-field-check">
-                    <Check className="size-2.5" />
-                  </span>
-                )}
-              </div>
 
-              <FormField
-                control={form.control}
-                name="sent_to_client"
-                render={({ field }) => (
-                  <FormItem>
-                    <div className="flex items-start gap-2 space-y-0">
-                      <FormControl>
-                        <Checkbox
-                          className="mt-0.5"
-                          checked={!!field.value}
-                          onCheckedChange={(checked) => {
-                            field.onChange(checked === true);
-                            // Default the date on the way in rather than
-                            // validating on the way out: an empty string reaching
-                            // PostgREST as a timestamptz is a 400.
-                            if (checked === true && !form.getValues('sent_to_client_at')) {
-                              form.setValue('sent_to_client_at', todayString(), {
-                                shouldDirty: true,
-                              });
-                            }
-                          }}
-                        />
-                      </FormControl>
-                      <div className="flex-1">
-                        <FormLabel className="!mt-0 font-semibold">נשלח ללקוח</FormLabel>
-                        <p className="olive-muted mt-0.5 text-xs">
-                          סימון ידני — המערכת אינה שולחת את הדוח בעצמה.
-                        </p>
-                      </div>
-                    </div>
-
-                    {field.value && (
-                      <div className="mt-3 grid gap-4 md:grid-cols-2">
-                        <FormField
-                          control={form.control}
-                          name="sent_to_client_at"
-                          render={({ field: dateField }) => (
-                            <FormItem>
-                              <FormLabel className="text-sm font-semibold">תאריך השליחה</FormLabel>
-                              <FormControl>
-                                <Input
-                                  type="date"
-                                  className="h-9"
-                                  {...dateField}
-                                  value={dateField.value ?? ''}
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        {editor.mode === 'edit' && editor.row.sentToClientBy && (
-                          <p className="olive-muted self-end pb-2 text-xs">
-                            נשלח ע״י {editor.row.sentToClientBy}
-                          </p>
-                        )}
-                      </div>
+                <div className="mr-auto flex flex-wrap items-center gap-3">
+                  <FormField
+                    control={form.control}
+                    name="sent_to_client"
+                    render={({ field }) => (
+                      <FormItem className="flex items-center gap-2">
+                        <FormControl>
+                          {/* Unchecked, the default border is too faint to
+                              find on this row; tint it the section's blue. */}
+                          <Checkbox
+                            className="data-[state=unchecked]:border-[oklch(0.55_0.07_230/75%)]"
+                            checked={!!field.value}
+                            onCheckedChange={(checked) => {
+                              field.onChange(checked === true);
+                              // Default the date on the way in rather than
+                              // validating on the way out: an empty string
+                              // reaching PostgREST as a timestamptz is a 400.
+                              if (checked === true && !form.getValues('sent_to_client_at')) {
+                                form.setValue('sent_to_client_at', todayString(), {
+                                  shouldDirty: true,
+                                });
+                              }
+                            }}
+                          />
+                        </FormControl>
+                        <FormLabel className="font-semibold">נשלח</FormLabel>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              aria-label="מידע על סימון השליחה"
+                              className="olive-muted hover:text-foreground rounded-full"
+                            >
+                              <Info className="size-3.5" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            סימון ידני — המערכת אינה שולחת את הדוח בעצמה.
+                            {editor.mode === 'edit' && editor.row.sentToClientBy && (
+                              <> סומן ע״י {editor.row.sentToClientBy}.</>
+                            )}
+                          </TooltipContent>
+                        </Tooltip>
+                      </FormItem>
                     )}
-                  </FormItem>
-                )}
-              />
-            </section>
+                  />
 
-            {/* 1 — plot and date */}
-            <section
-              className={`olive-section olive-section-plot px-5 py-4 ${
-                currentStep > 0 ? 'olive-section-completed' : ''
-              }`}
-            >
-              <div className="olive-section-header">
-                <div className="olive-section-icon olive-icon-plot">
-                  <MapPin className="size-4" />
+                  {sentToClient && (
+                    <FormField
+                      control={form.control}
+                      name="sent_to_client_at"
+                      render={({ field: dateField }) => (
+                        <FormItem>
+                          <FormControl>
+                            <Input
+                              type="date"
+                              aria-label="תאריך השליחה"
+                              className="h-8 w-40"
+                              {...dateField}
+                              value={dateField.value ?? ''}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
                 </div>
-                <h3 className="text-base font-bold">חלקה ותאריך</h3>
-                {areaId && (
-                  <span className="olive-field-check">
-                    <Check className="size-2.5" />
-                  </span>
-                )}
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <FormField
-                  control={form.control}
-                  name="area_id"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-semibold">חלקה *</FormLabel>
-                      <FormControl>
-                        <SearchableSelect
-                          options={plotOptions}
-                          value={field.value}
-                          onValueChange={field.onChange}
-                          placeholder="בחר חלקה"
-                          searchPlaceholder="חיפוש בדיקה לפי חלקה..."
-                          // Two independent reasons to fix it: once saved,
-                          // moving a reading to another plot would make it a
-                          // different reading; and opened from a plot's own
-                          // drawer, the plot is what you opened.
-                          disabled={isEdit || lockPlot}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="report_date"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-semibold">תאריך *</FormLabel>
-                      <FormControl>
-                        <Input type="date" className="h-9" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
               </div>
             </section>
 
-            {/* 2 — the readings */}
+            {/* The readings */}
             <section className="olive-section olive-section-values px-5 py-4">
               <div className="olive-section-header">
                 <div className="olive-section-icon olive-icon-values">
@@ -738,38 +647,47 @@ function NirFormBody({
                 )}
               </div>
 
-              {/* Oil and water get a row of their own with the gauge under the
-                  input: they are the two the verdict is read from, and a
-                  gauge needs the width. Typing moves the pointer, so a slip
-                  like 80 for 8.0 shows up as a pinned, wrong-coloured marker
-                  before it is saved. */}
-              <div className="grid items-start gap-4 sm:grid-cols-2">
+              {/* Oil and water: one row each — label, a narrow input, and the
+                  gauge taking the rest. They are the two the verdict is read
+                  from, and a gauge needs the width, so they stack rather than
+                  share a line. Typing moves the pointer, so a slip like 80 for
+                  8.0 shows up as a pinned, wrong-coloured marker before it is
+                  saved. */}
+              <div className="space-y-2">
                 {GAUGED_MEASUREMENTS.map((m) => (
                   <FormField
                     key={m.name}
                     control={form.control}
                     name={m.name}
                     render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-sm font-semibold">{m.label}</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="number"
-                            step={m.step}
-                            inputMode="decimal"
-                            className="h-9"
-                            {...field}
-                            value={(field.value as string) ?? ''}
-                          />
-                        </FormControl>
-                        <NirGauge
-                          variant="field"
-                          label={m.label}
-                          value={optionalNumber(field.value as string | undefined)}
-                          rules={rules}
-                          parameterCode={m.name}
-                          neutral={isPomace}
-                        />
+                      <FormItem className="gap-1">
+                        <div className="flex items-start gap-3">
+                          <FormLabel className="w-12 shrink-0 text-sm leading-9 font-semibold">
+                            {m.label}
+                          </FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              step={m.step}
+                              inputMode="decimal"
+                              className="h-9 w-24 shrink-0 text-center tabular-nums"
+                              {...field}
+                              value={(field.value as string) ?? ''}
+                            />
+                          </FormControl>
+                          {/* pt-2 against the gauge's own -mt-1 puts the track
+                              on the input's centre line. */}
+                          <div className="min-w-0 flex-1 pt-2">
+                            <NirGauge
+                              variant="field"
+                              label={m.label}
+                              value={optionalNumber(field.value as string | undefined)}
+                              rules={rules}
+                              parameterCode={m.name}
+                              neutral={isPomace}
+                            />
+                          </div>
+                        </div>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -903,16 +821,96 @@ function NirFormBody({
                 )}
               />
             </section>
+
+            {/* Plot and date — after the readings, which are what the form is for */}
+            <section
+              className={`olive-section olive-section-plot px-5 py-4 ${
+                areaId ? 'olive-section-completed' : ''
+              }`}
+            >
+              <div className="olive-section-header">
+                <div className="olive-section-icon olive-icon-plot">
+                  <MapPin className="size-4" />
+                </div>
+                <h3 className="text-base font-bold">חלקה ותאריך</h3>
+                {areaId && (
+                  <span className="olive-field-check">
+                    <Check className="size-2.5" />
+                  </span>
+                )}
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="area_id"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-sm font-semibold">חלקה *</FormLabel>
+                      <FormControl>
+                        <SearchableSelect
+                          options={plotOptions}
+                          value={field.value}
+                          onValueChange={field.onChange}
+                          placeholder="בחר חלקה"
+                          searchPlaceholder="חיפוש בדיקה לפי חלקה..."
+                          // Two independent reasons to fix it: once saved,
+                          // moving a reading to another plot would make it a
+                          // different reading; and opened from a plot's own
+                          // drawer, the plot is what you opened.
+                          disabled={isEdit || lockPlot}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="report_date"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-sm font-semibold">תאריך *</FormLabel>
+                      <FormControl>
+                        <Input type="date" className="h-9" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </section>
           </div>
 
           {/* Submit. --flush drops the sticky positioning and negative margins,
               which only made sense when this sat in the page flow. */}
           <div className="olive-sticky-footer olive-sticky-footer--flush shrink-0">
-            <div className="flex items-center justify-end gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
               <Button type="button" variant="ghost" onClick={onClose}>
                 <X className="ml-1 size-4" />
                 {isEdit ? 'בטל עריכה' : 'סגור'}
               </Button>
+              {/* Create only: the batch path, opt-in. Runs the same zod
+                  validation; a failed one clears the flag so the next plain
+                  save still closes. */}
+              {!isEdit && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={saving}
+                  aria-label="שמור והוסף עוד"
+                  onClick={() => {
+                    addAnotherRef.current = true;
+                    void form.handleSubmit(onSubmit, () => {
+                      addAnotherRef.current = false;
+                    })();
+                  }}
+                >
+                  <Plus className="size-4 sm:ml-1" />
+                  <span className="hidden sm:inline">שמור והוסף עוד</span>
+                </Button>
+              )}
               <button type="submit" className="olive-submit px-6 py-2.5" disabled={saving}>
                 {saving && <Loader2 className="ml-2 inline size-4 animate-spin" />}
                 {isEdit ? 'עדכן בדיקה' : 'שמור בדיקה'}
