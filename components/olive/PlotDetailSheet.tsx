@@ -7,12 +7,14 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import {
   AlertTriangle,
+  ExternalLink,
   FileText,
   FlaskConical,
   Loader2,
   MailCheck,
   MapPin,
   Plus,
+  Sprout,
   Tractor,
   X,
 } from 'lucide-react';
@@ -55,7 +57,7 @@ import { daysSinceLabel, evaluateParameter, yieldLoadInfo } from '@/lib/olive/lo
 import type { ApiPlot } from '@/lib/olive/adapt';
 import { toNirRow, type NirRow } from '@/lib/olive/nir-rows';
 import { toHarvestRow, type HarvestRow } from '@/lib/olive/harvest-rows';
-import { categoryLabel, type PlotRow } from '@/lib/olive/plot-rows';
+import type { PlotRow } from '@/lib/olive/plot-rows';
 import { NirFormSheet, type NirEditorState } from './NirFormSheet';
 import { HarvestFormSheet, type HarvestEditorState } from './HarvestFormSheet';
 
@@ -392,40 +394,53 @@ function PlotDetailBody({
     }
   };
 
+  const harvestEmpty = harvestRows?.length === 0;
+
   return (
     <>
       {/* Identity */}
-      <div className="olive-form-hero shrink-0 px-6 py-5">
+      <div className="olive-form-hero flex shrink-0 items-start gap-4 px-6 py-5">
         <div className="olive-hero-pattern" />
-        <div className="relative z-10">
+        <div className="relative z-10 min-w-0 flex-1">
+          {/* Name, falling back to the gush (region) for an unnamed plot. */}
           <SheetTitle className="olive-hero-title text-xl tracking-tight md:text-2xl">
-            {row.name || '—'}
+            {[row.name || row.region, row.plantYear, row.variety].filter(Boolean).join(' - ') ||
+              '—'}
           </SheetTitle>
-          <p className="relative z-10 mt-1 text-sm text-white/75">
-            {[row.variety, row.growerName, row.region].filter(Boolean).join(' · ') || ' '}
-          </p>
+          {row.growerName && <p className="mt-1 text-xs text-white/70">{row.growerName}</p>}
         </div>
-        <div className="absolute top-4 left-4 z-10 flex items-center gap-2">
+        {/* In the flow rather than absolutely placed, so a long title wraps
+            before it reaches the buttons instead of running under them. */}
+        <div className="relative z-10 flex shrink-0 items-center gap-1.5">
           {/* Up here rather than in the footer: the report is about the plot as
               a whole, not about the attributes form the footer saves, and the
               footer put it next to שמור פרטים where it read as part of saving.
-              Still disabled while the form is dirty — the report renders the
-              saved row, so unsaved edits would silently not appear on it. */}
+              While the form is dirty it does not open — the report renders the
+              saved row, so unsaved edits would silently not appear on it. It
+              stays clickable and says so in a toast: a disabled button's
+              tooltip never shows on touch, and on desktop it read as broken. */}
           <button
             type="button"
-            disabled={form.formState.isDirty}
-            title={form.formState.isDirty ? 'שמור תחילה כדי לכלול את השינויים' : undefined}
-            onClick={() => window.open(`/olive/report/plot/${row.id}`, '_blank', 'noopener')}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-white/25 bg-white/10 px-2.5 py-1.5 text-xs font-semibold text-white/90 transition-colors hover:bg-white/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/10"
+            aria-label="הפק דוח חלקה (נפתח בלשונית חדשה)"
+            aria-disabled={form.formState.isDirty}
+            onClick={() => {
+              if (form.formState.isDirty) {
+                showToast.info('שמור את השינויים כדי שייכללו בדוח');
+                return;
+              }
+              window.open(`/olive/report/plot/${row.id}`, '_blank', 'noopener');
+            }}
+            className="group inline-flex h-9 items-center gap-2 rounded-full border border-[oklch(0.83_0.09_88/55%)] bg-[oklch(0.83_0.09_88/14%)] ps-3.5 pe-3 text-sm font-semibold text-[oklch(0.93_0.06_88)] shadow-sm transition-all hover:border-[oklch(0.83_0.09_88/85%)] hover:bg-[oklch(0.83_0.09_88/24%)] hover:text-white focus-visible:ring-2 focus-visible:ring-[oklch(0.83_0.09_88)] focus-visible:outline-none active:scale-[0.97] aria-disabled:opacity-50 aria-disabled:hover:bg-[oklch(0.83_0.09_88/14%)]"
           >
-            <FileText className="size-3.5" />
-            הפק דוח
+            <FileText className="size-4" />
+            <span className="hidden sm:inline">הפק דוח</span>
+            <ExternalLink className="size-3.5 opacity-60 transition-opacity group-hover:opacity-100" />
           </button>
           <button
             type="button"
             onClick={onClose}
             aria-label="סגור"
-            className="rounded-lg p-1.5 text-white/80 transition-colors hover:bg-white/15 hover:text-white"
+            className="flex size-9 items-center justify-center rounded-full text-white/75 transition-colors hover:bg-white/15 hover:text-white focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none"
           >
             <X className="size-5" />
           </button>
@@ -433,40 +448,13 @@ function PlotDetailBody({
       </div>
 
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4 md:p-6">
-        {/* Stats. Three across rather than four, to give the yield band room. */}
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <Stat label="גודל (דונם)" value={num(row.size, 1)} />
-          <Stat label="טאקטים" value={String(row.taktCount)} />
-          {/* The season's planned figure, not an actual — it is what the
-              harvest form scores each pass against. */}
-          <Stat
-            label="יבול צפוי (ק״ג/דונם)"
-            value={num(row.yieldKgPerDunam)}
-            pill={
-              row.yieldLoad
-                ? {
-                    label: row.yieldLoad.label,
-                    className: PARAMETER_STATUS_CONFIG[row.yieldLoad.status].pillClass,
-                  }
-                : undefined
-            }
-          />
-          <Stat label="בדיקה אחרונה" value={row.lastMeasuredLabel ?? 'טרם נבדקה'} small />
-          <Stat
-            label="קטגוריה"
-            value={categoryLabel(row.category)}
-            small
-            hint={row.harvested ? 'נמסק' : undefined}
-          />
-        </div>
-
         {/* NIR history */}
         <section className="olive-section olive-section-values px-5 py-4">
           <div className="olive-section-header">
             <div className="olive-section-icon olive-icon-values">
               <FlaskConical className="size-4" />
             </div>
-            <h3 className="text-base font-bold">בדיקות NIR אחרונות</h3>
+            <h3 className="text-base font-bold">בדיקות NIR</h3>
             <Button
               type="button"
               size="sm"
@@ -475,7 +463,7 @@ function PlotDetailBody({
               onClick={onNewNir}
             >
               <Plus className="ml-1 size-3.5" />
-              בדיקה חדשה
+              בדיקה
             </Button>
           </div>
 
@@ -556,12 +544,18 @@ function PlotDetailBody({
         </section>
 
         {/* Harvest history */}
-        <section className="olive-section olive-section-sample px-5 py-4">
-          <div className="olive-section-header">
+        <section
+          className={`olive-section olive-section-sample px-5 ${harvestEmpty ? 'py-3' : 'py-4'}`}
+        >
+          {/* Empty: one row, the note beside the title, no divider — there is
+              nothing below for it to separate. The ! is needed because
+              olive.css is unlayered and outranks Tailwind's utilities layer. */}
+          <div className={`olive-section-header ${harvestEmpty ? 'mb-0! border-b-0! pb-0!' : ''}`}>
             <div className="olive-section-icon olive-icon-sample">
               <Tractor className="size-4" />
             </div>
             <h3 className="text-base font-bold">מעברי מסיק</h3>
+            {harvestEmpty && <span className="olive-muted text-sm">טרם נרשם מסיק</span>}
             <Button
               type="button"
               size="sm"
@@ -570,15 +564,13 @@ function PlotDetailBody({
               onClick={onNewHarvest}
             >
               <Plus className="ml-1 size-3.5" />
-              מעבר חדש
+              מעבר
             </Button>
           </div>
 
           {harvestRows === null ? (
             <Skeleton />
-          ) : harvestRows.length === 0 ? (
-            <p className="olive-muted text-sm">טרם נרשם מסיק בחלקה זו</p>
-          ) : (
+          ) : harvestEmpty ? null : (
             <ul className="divide-y text-sm">
               {harvestRows.slice(0, HISTORY_LIMIT).map((r) => (
                 <li key={r.id}>
@@ -610,7 +602,60 @@ function PlotDetailBody({
 
         {/* Attributes */}
         <Form {...form}>
-          <form id="plot-details-form" onSubmit={form.handleSubmit(onSubmit)}>
+          <form id="plot-details-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+            {/* One row, no body: a single figure does not need the header /
+                divider / label stack the list sections use. */}
+            <section className="olive-section olive-section-type px-5 py-3">
+              {/* Not an olive_plot_details column — it lives in
+                  yield_estimates, keyed by season, and is saved by a second
+                  request from the same submit. */}
+              <FormField
+                control={form.control}
+                name="yield_kg_per_dunam"
+                render={({ field }) => (
+                  <FormItem className="gap-1">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                      <div className="olive-section-icon olive-icon-type">
+                        <Sprout className="size-4" />
+                      </div>
+                      <FormLabel className="text-base font-bold">יבול צפוי</FormLabel>
+                      {seasonId ? (
+                        yieldLoad && (
+                          <span
+                            className={`olive-pill ${PARAMETER_STATUS_CONFIG[yieldLoad.status].pillClass}`}
+                          >
+                            {yieldLoad.label}
+                          </span>
+                        )
+                      ) : (
+                        <span className="olive-muted text-xs">אין עונה פעילה</span>
+                      )}
+                      <div className="mr-auto flex items-center gap-2">
+                        <FormControl>
+                          <Input
+                            className="h-9 w-24 text-center tabular-nums"
+                            type="number"
+                            // step="any" and no min on purpose. Native constraint
+                            // validation blocks submit BEFORE react-hook-form
+                            // runs, silently and with an unstyled English
+                            // tooltip — a step of 10 would have rejected 1234.
+                            // The zod refine owns this, so the message is ours.
+                            step="any"
+                            inputMode="decimal"
+                            disabled={!seasonId}
+                            {...field}
+                            value={field.value ?? ''}
+                          />
+                        </FormControl>
+                        <span className="olive-muted text-xs whitespace-nowrap">ק״ג/דונם</span>
+                      </div>
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </section>
+
             <section className="olive-section olive-section-plot px-5 py-4">
               <div className="olive-section-header">
                 <div className="olive-section-icon olive-icon-plot">
@@ -722,47 +767,6 @@ function PlotDetailBody({
                     </FormItem>
                   )}
                 />
-
-                {/* Not an olive_plot_details column — it lives in
-                    yield_estimates, keyed by season, and is saved by a second
-                    request from the same submit. */}
-                <FormField
-                  control={form.control}
-                  name="yield_kg_per_dunam"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-semibold">יבול צפוי (ק״ג/דונם)</FormLabel>
-                      <FormControl>
-                        <Input
-                          className="h-9"
-                          type="number"
-                          // step="any" and no min on purpose. Native constraint
-                          // validation blocks submit BEFORE react-hook-form
-                          // runs, silently and with an unstyled English
-                          // tooltip — a step of 10 would have rejected 1234.
-                          // The zod refine owns this, so the message is ours.
-                          step="any"
-                          inputMode="decimal"
-                          disabled={!seasonId}
-                          {...field}
-                          value={field.value ?? ''}
-                        />
-                      </FormControl>
-                      {seasonId ? (
-                        yieldLoad && (
-                          <span
-                            className={`olive-pill ${PARAMETER_STATUS_CONFIG[yieldLoad.status].pillClass} mt-1`}
-                          >
-                            {yieldLoad.label}
-                          </span>
-                        )
-                      ) : (
-                        <p className="olive-muted text-xs">אין עונה פעילה</p>
-                      )}
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
               </div>
 
               {/* The split of ownership is deliberate and documented on the
@@ -795,30 +799,6 @@ function PlotDetailBody({
         </div>
       </div>
     </>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  hint,
-  pill,
-  small,
-}: {
-  label: string;
-  value: string;
-  hint?: string;
-  /** A tinted band under the figure, e.g. the yield load. */
-  pill?: { label: string; className: string };
-  small?: boolean;
-}) {
-  return (
-    <div className="olive-card p-3">
-      <div className="olive-muted text-xs font-semibold">{label}</div>
-      <div className={small ? 'text-sm font-bold' : 'text-lg font-bold tabular-nums'}>{value}</div>
-      {pill && <span className={`olive-pill mt-1 ${pill.className}`}>{pill.label}</span>}
-      {hint && <div className="text-primary text-xs font-semibold">{hint}</div>}
-    </div>
   );
 }
 
