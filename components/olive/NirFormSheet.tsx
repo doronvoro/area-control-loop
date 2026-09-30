@@ -38,6 +38,7 @@ import {
 import { evaluateParameter } from '@/lib/olive/logic';
 import type { ApiPlot } from '@/lib/olive/adapt';
 import type { NirRow } from '@/lib/olive/nir-rows';
+import { NirGauge } from './NirGauge';
 
 /**
  * NIR entry, in a drawer.
@@ -112,6 +113,11 @@ const MEASUREMENTS: { name: keyof NirFormData; label: string; step: string }[] =
 ];
 
 const MEASUREMENT_NAMES = MEASUREMENTS.map((m) => m.name);
+
+/** The two with parameter_rules bands — drawn with a gauge under the input. */
+const GAUGED = new Set<keyof NirFormData>(['oil', 'water']);
+const GAUGED_MEASUREMENTS = MEASUREMENTS.filter((m) => GAUGED.has(m.name));
+const OTHER_MEASUREMENTS = MEASUREMENTS.filter((m) => !GAUGED.has(m.name));
 
 /** The mill settings behind a pomace sample, shown only for sample_type 'pomace'. */
 const POMACE_MEASUREMENTS: { name: keyof NirFormData; label: string; step: string }[] = [
@@ -344,9 +350,9 @@ function NirFormBody({
         ? Math.round((oilNum / (100 - waterNum)) * 100 * 100) / 100
         : null;
 
+    // Oil and water have their own gauges under the inputs now; only the
+    // derived figure, which has no input to hang one on, is read out here.
     return [
-      { label: 'שמן', value: oilNum, match: evaluateParameter(rules, 'oil', oilNum) },
-      { label: 'מים', value: waterNum, match: evaluateParameter(rules, 'water', waterNum) },
       { label: 'שמן בחו״י', value: dryNum, match: evaluateParameter(rules, 'dry', dryNum) },
     ].filter((row) => row.value !== null);
   }, [oil, water, rules, isPomace]);
@@ -732,8 +738,47 @@ function NirFormBody({
                 )}
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {MEASUREMENTS.map((m) => (
+              {/* Oil and water get a row of their own with the gauge under the
+                  input: they are the two the verdict is read from, and a
+                  gauge needs the width. Typing moves the pointer, so a slip
+                  like 80 for 8.0 shows up as a pinned, wrong-coloured marker
+                  before it is saved. */}
+              <div className="grid items-start gap-4 sm:grid-cols-2">
+                {GAUGED_MEASUREMENTS.map((m) => (
+                  <FormField
+                    key={m.name}
+                    control={form.control}
+                    name={m.name}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-sm font-semibold">{m.label}</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            step={m.step}
+                            inputMode="decimal"
+                            className="h-9"
+                            {...field}
+                            value={(field.value as string) ?? ''}
+                          />
+                        </FormControl>
+                        <NirGauge
+                          variant="field"
+                          label={m.label}
+                          value={optionalNumber(field.value as string | undefined)}
+                          rules={rules}
+                          parameterCode={m.name}
+                          neutral={isPomace}
+                        />
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                ))}
+              </div>
+
+              <div className="mt-4 grid gap-4 border-t pt-4 sm:grid-cols-2 lg:grid-cols-3">
+                {OTHER_MEASUREMENTS.map((m) => (
                   <FormField
                     key={m.name}
                     control={form.control}

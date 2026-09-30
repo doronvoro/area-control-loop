@@ -14,6 +14,11 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
  *
  * `rules` empty (or `neutral`) draws a plain track: a pomace reading has no
  * verdict, and inventing bands for it would suggest one.
+ *
+ * `variant="field"` is for under an input: the input already shows the
+ * figure and its label, so the label column goes and the verdict is printed
+ * under the scale instead. With no value it still draws the bands — the
+ * thresholds are worth seeing before typing.
  */
 export function NirGauge({
   label,
@@ -21,13 +26,20 @@ export function NirGauge({
   rules,
   parameterCode,
   neutral = false,
+  variant = 'readout',
 }: {
   label: string;
   value: number | null;
   rules: ParameterRule[];
   parameterCode: string;
   neutral?: boolean;
+  variant?: 'readout' | 'field';
 }) {
+  const field = variant === 'field';
+  // Readout: the label column sits on the right, so the right pad is tight.
+  // Field: nothing beside it, so it pads evenly for the pointer at either end.
+  const padStart = field ? 0.5 : 1;
+  const padTotal = field ? 1 : 1.25;
   const applicable = neutral
     ? []
     : rules
@@ -96,13 +108,17 @@ export function NirGauge({
       aria-valuetext={
         value === null ? 'אין ערך' : `${value.toFixed(1)}%${match ? `, ${match.message}` : ''}`
       }
-      className="flex items-start gap-2"
+      // Field: pulled up into the FormItem's row gap so it reads as part of the
+      // input above, not a separate block.
+      className={field ? '-mt-1 block' : 'flex items-start gap-2'}
     >
       {/* The figure lives here, beside the track, in its verdict's colour —
           a badge over the track covered the bands it was meant to be read
           against. Padded down by the pointer's headroom so it sits on the
           track's line rather than the block's centre. */}
-      <div className="flex shrink-0 items-baseline gap-1.5 pt-2 leading-5 whitespace-nowrap">
+      <div
+        className={`${field ? 'hidden' : 'flex'} shrink-0 items-baseline gap-1.5 pt-2 leading-5 whitespace-nowrap`}
+      >
         <span className="olive-muted text-xs font-semibold">{label}</span>
         {value === null ? (
           <span className="olive-muted text-sm">—</span>
@@ -123,11 +139,16 @@ export function NirGauge({
           The dir attribute alone loses to globals.css's `[dir="rtl"] *`, so
           the track also sets it in CSS — without that the bands drew
           reversed against the tick labels. */}
-      <div dir="ltr" className="relative min-w-0 flex-1 pt-2 pr-1 pb-4 pl-4">
+      <div
+        dir="ltr"
+        className={`relative min-w-0 flex-1 ${field ? 'px-2 pt-1 pb-3.5' : 'pt-2 pr-1 pb-4 pl-4'}`}
+      >
         {position !== null && value !== null && (
           <div
-            className="absolute top-[7px] flex -translate-x-1/2 flex-col items-center"
-            style={{ left: `calc(1rem + (100% - 1.25rem) * ${position / 100})` }}
+            className={`absolute ${field ? 'top-[3px]' : 'top-[7px]'} flex -translate-x-1/2 flex-col items-center`}
+            style={{
+              left: `calc(${padStart}rem + (100% - ${padTotal}rem) * ${position / 100})`,
+            }}
           >
             <span className={`olive-gauge-pointer olive-gauge-${match?.status ?? 'neutral'}`} />
           </div>
@@ -157,7 +178,11 @@ export function NirGauge({
             </span>
           )}
         </div>
-        <div className="olive-muted relative h-3 text-[10px] tabular-nums">
+        {/* No bands and no value (an empty pomace field) leaves nothing to
+            scale against — the -5..5 it would print is noise. */}
+        <div
+          className={`olive-muted relative h-3 text-[10px] tabular-nums ${bounds.length === 0 && value === null ? 'invisible' : ''}`}
+        >
           <span className="absolute left-0">{min}</span>
           {bounds
             .filter((b) => b > min && b < max)
@@ -169,6 +194,13 @@ export function NirGauge({
           <span className="absolute right-0">{max}</span>
         </div>
       </div>
+      {field && match && (
+        <p
+          className={`olive-gauge-${match.status} px-2 text-xs font-semibold text-[var(--gauge-c)]`}
+        >
+          {match.message}
+        </p>
+      )}
     </div>
   );
 }
