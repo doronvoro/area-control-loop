@@ -208,6 +208,19 @@ export const NIR_DIRECTIONS = [
 
 export type NirDirection = (typeof NIR_DIRECTIONS)[number];
 
+// What a NIR reading was taken from. Stored in English, shown in Hebrew.
+export const NIR_SAMPLE_TYPES = ['fruit', 'pomace'] as const;
+
+export type NirSampleType = (typeof NIR_SAMPLE_TYPES)[number];
+
+export const NIR_SAMPLE_TYPE_LABELS: Record<NirSampleType, string> = {
+  fruit: 'פרי',
+  pomace: 'גפת',
+};
+
+// Crusher used at the mill — pomace readings only (סוג ריסוק)
+export const NIR_CRUSHING_TYPES = ['פטישים', 'סכינים'] as const;
+
 export type Json =
   | string
   | number
@@ -1528,6 +1541,13 @@ export interface Database {
           maturity: number | null;
           irrig_amount: number | null;
           direction: string | null;
+          /** 'fruit' | 'pomace'. Only fruit feeds ripeness classification. */
+          sample_type: NirSampleType;
+          /** Pomace only — the mill settings that produced the sample. */
+          crushing_type: string | null;
+          decanter_differential: number | null;
+          monopump_speed: number | null;
+          malaxation_temp: number | null;
           /** When it was sent to the client. NULL = not sent. An instant, not a day. */
           sent_to_client_at: string | null;
           /** auth.users.id of whoever marked it sent — NOT workers.id. */
@@ -1545,6 +1565,11 @@ export interface Database {
           maturity?: number | null;
           irrig_amount?: number | null;
           direction?: string | null;
+          sample_type?: NirSampleType;
+          crushing_type?: string | null;
+          decanter_differential?: number | null;
+          monopump_speed?: number | null;
+          malaxation_temp?: number | null;
           sent_to_client_at?: string | null;
           sent_to_client_by?: string | null;
           created_at?: string;
@@ -1560,6 +1585,11 @@ export interface Database {
           maturity?: number | null;
           irrig_amount?: number | null;
           direction?: string | null;
+          sample_type?: NirSampleType;
+          crushing_type?: string | null;
+          decanter_differential?: number | null;
+          monopump_speed?: number | null;
+          malaxation_temp?: number | null;
           sent_to_client_at?: string | null;
           sent_to_client_by?: string | null;
           created_at?: string;

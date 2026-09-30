@@ -11,7 +11,13 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/searchable-select';
-import { NIR_DIRECTIONS, ParameterStatus, type Season } from '@/types/database';
+import {
+  NIR_DIRECTIONS,
+  NIR_SAMPLE_TYPE_LABELS,
+  NIR_SAMPLE_TYPES,
+  ParameterStatus,
+  type Season,
+} from '@/types/database';
 import { countActiveNirFilters, type NirFilters } from '@/lib/olive/nir-rows';
 import { FilterField, OliveFilterPanel } from './OliveFilterPanel';
 
@@ -131,6 +137,22 @@ export function NirLogToolbar({
             {STATUS_OPTIONS.map((option) => (
               <SelectItem key={option.value} value={option.value}>
                 {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </FilterField>
+
+      <FilterField label="סוג בדיקה" htmlFor="nir-filter-sample-type">
+        <Select value={filters.sampleType} onValueChange={(value) => set('sampleType', value)}>
+          <SelectTrigger id="nir-filter-sample-type" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent position="popper" sideOffset={4}>
+            <SelectItem value="all">כל הסוגים</SelectItem>
+            {NIR_SAMPLE_TYPES.map((type) => (
+              <SelectItem key={type} value={type}>
+                {NIR_SAMPLE_TYPE_LABELS[type]}
               </SelectItem>
             ))}
           </SelectContent>

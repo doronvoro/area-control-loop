@@ -11,7 +11,11 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { SortableTableHead, type SortState } from '@/components/ui/sortable-table-head';
-import { PARAMETER_STATUS_CONFIG, type ParameterRule } from '@/types/database';
+import {
+  NIR_SAMPLE_TYPE_LABELS,
+  PARAMETER_STATUS_CONFIG,
+  type ParameterRule,
+} from '@/types/database';
 import { daysSinceLabel, evaluateParameter } from '@/lib/olive/logic';
 import type { NirRow, NirSortField } from '@/lib/olive/nir-rows';
 import { cn } from '@/lib/utils';
@@ -143,7 +147,9 @@ export function NirLogTable({
 
       <TableBody>
         {rows.map((row) => {
-          const oilMatch = evaluateParameter(rules, 'oil', row.oil);
+          // Fruit only — pomace oil is extraction loss and has no verdict.
+          const oilMatch =
+            row.sampleType === 'fruit' ? evaluateParameter(rules, 'oil', row.oil) : null;
           const sampleLocation = [row.subAreaName, row.direction].filter(Boolean).join(' · ');
 
           return (
@@ -167,6 +173,15 @@ export function NirLogTable({
               <TableCell>
                 <span className="font-medium">{row.areaName || '—'}</span>
                 {row.variety && <span className="olive-muted block text-xs">{row.variety}</span>}
+                {/* Fruit is the default and goes unmarked; pomace is the
+                    exception the eye needs to catch, since its oil column
+                    means something else and it carries no status. */}
+                {row.sampleType === 'pomace' && (
+                  <span className="olive-pill olive-pill-sample mt-1">
+                    {NIR_SAMPLE_TYPE_LABELS.pomace}
+                    {row.crushingType ? ` · ${row.crushingType}` : ''}
+                  </span>
+                )}
               </TableCell>
               <TableCell className="olive-muted hidden text-xs md:table-cell">
                 {sampleLocation || '—'}

@@ -45,6 +45,7 @@ import {
 } from './GrowerPicker';
 import {
   HARVESTER_OPTIONS,
+  NIR_SAMPLE_TYPE_LABELS,
   PARAMETER_STATUS_CONFIG,
   PLOT_TYPE_OPTIONS,
   WATER_TYPE_OPTIONS,
@@ -486,7 +487,9 @@ function PlotDetailBody({
             <>
               <ul className="divide-y text-sm">
                 {nirRows.slice(0, HISTORY_LIMIT).map((r) => {
-                  const match = evaluateParameter(rules, 'oil', r.oil);
+                  // Fruit only — pomace oil is extraction loss and has no verdict.
+                  const match =
+                    r.sampleType === 'fruit' ? evaluateParameter(rules, 'oil', r.oil) : null;
                   return (
                     <li key={r.id}>
                       {/* text-start is load-bearing: a button centres its text. */}
@@ -511,6 +514,11 @@ function PlotDetailBody({
                             aria-label="נשלח ללקוח"
                           >
                             <MailCheck className="text-primary size-3.5" />
+                          </span>
+                        )}
+                        {r.sampleType === 'pomace' && (
+                          <span className="olive-pill olive-pill-sample">
+                            {NIR_SAMPLE_TYPE_LABELS.pomace}
                           </span>
                         )}
                         <span className="mr-auto flex items-center gap-3 tabular-nums">

@@ -53,6 +53,12 @@ export interface ApiNirReport {
     maturity: number | null;
     irrig_amount: number | null;
     direction: string | null;
+    /** Absent on rows fetched before the column existed — read as 'fruit'. */
+    sample_type?: string | null;
+    crushing_type?: string | null;
+    decanter_differential?: number | null;
+    monopump_speed?: number | null;
+    malaxation_temp?: number | null;
     /** An ISO instant, not a calendar day. NULL = not sent. */
     sent_to_client_at: string | null;
     /** auth.users.id — resolve it through `sent_by_name`, not by embedding. */

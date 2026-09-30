@@ -16,7 +16,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { getOlivePlots } from '@/lib/services/olive-plot.service';
-import { getNirReports, NIR_ROW_CAP } from '@/lib/services/olive-nir.service';
+import { getNirReports, isFruitReading, NIR_ROW_CAP } from '@/lib/services/olive-nir.service';
 import { getHarvestReports } from '@/lib/services/olive-harvest.service';
 import { getYieldEstimatesBySeason } from '@/lib/services/olive-yield.service';
 import { getWeatherDays } from '@/lib/services/olive-weather.service';
@@ -233,7 +233,10 @@ export async function fetchGrowerReport(
   const latestByArea = new Map<string, ApiNirReport>();
   for (const report of nirReports as ApiNirReport[]) {
     const areaId = (report.area as { id?: string } | null)?.id;
-    if (areaId && !latestByArea.has(areaId)) latestByArea.set(areaId, report);
+    // Fruit only — a pomace reading says nothing about ripeness.
+    if (areaId && !latestByArea.has(areaId) && isFruitReading(report)) {
+      latestByArea.set(areaId, report);
+    }
   }
 
   // --- per plot ---

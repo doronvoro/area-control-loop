@@ -20,7 +20,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { getOlivePlot } from '@/lib/services/olive-plot.service';
-import { getNirReports } from '@/lib/services/olive-nir.service';
+import { getNirReports, isFruitReading } from '@/lib/services/olive-nir.service';
 import { getHarvestReports } from '@/lib/services/olive-harvest.service';
 import { getYieldEstimatesBySeason } from '@/lib/services/olive-yield.service';
 import { getWeatherDays } from '@/lib/services/olive-weather.service';
@@ -225,10 +225,15 @@ export async function fetchPlotReport(
 
   const taktNameById = new Map<string, string>((plot.takts ?? []).map((t) => [t.id, t.name]));
 
+  // Fruit only: this report is about ripeness, and pomace oil is extraction
+  // loss on a different scale — it would put a spike in the trend and could
+  // become the "latest" verdict. See isFruitReading.
+  const fruitReports = (nirReports as ApiNirReport[]).filter(isFruitReading);
+
   // getNirReports returns newest first; the chart and the history table both
   // read oldest first.
-  const history = (nirReports as ApiNirReport[]).map((r) => toNirRow(r, taktNameById)).reverse();
-  const latestReport = (nirReports as ApiNirReport[])[0] ?? null;
+  const history = fruitReports.map((r) => toNirRow(r, taktNameById)).reverse();
+  const latestReport = fruitReports[0] ?? null;
   const latest = history.length > 0 ? history[history.length - 1] : null;
 
   const weather = computeUpcomingWeather(

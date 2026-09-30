@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { findOrCreateReportArea } from '@/lib/api/utils';
-import { AreaTypeId, type Season } from '@/types/database';
+import { AreaTypeId, type NirSampleType, type Season } from '@/types/database';
 
 /**
  * NIR ripeness measurements.
@@ -21,6 +21,12 @@ export interface NirValuesInput {
   maturity?: number | null;
   irrig_amount?: number | null;
   direction?: string | null;
+  sample_type?: NirSampleType;
+  /** Pomace only — see the 20260930100000 migration. */
+  crushing_type?: string | null;
+  decanter_differential?: number | null;
+  monopump_speed?: number | null;
+  malaxation_temp?: number | null;
   /**
    * When the reading went to the client, as an ISO instant. `null` clears it.
    *
@@ -59,6 +65,11 @@ function nirRow(values: NirValuesInput): Record<string, unknown> {
     'maturity',
     'irrig_amount',
     'direction',
+    'sample_type',
+    'crushing_type',
+    'decanter_differential',
+    'monopump_speed',
+    'malaxation_temp',
     'sent_to_client_at',
   ];
   for (const key of keys) {
@@ -307,10 +318,21 @@ function dayAfter(day: string): string {
 interface NirRowLike {
   area?: { id?: string | null } | null;
   report_date?: string | null;
+  detail?: { sample_type?: string | null } | null;
 }
 
 /**
- * The most recent measurement per area, keyed by area id.
+ * Whether a reading speaks to the fruit's ripeness. Pomace oil is what the mill
+ * left behind, so scoring it against parameter_rules would misclassify the plot.
+ * A missing sample_type is a row from before the column existed — fruit.
+ */
+export function isFruitReading(report: NirRowLike): boolean {
+  return (report.detail?.sample_type ?? 'fruit') === 'fruit';
+}
+
+/**
+ * The most recent FRUIT measurement per area, keyed by area id. Pomace
+ * readings are skipped — see isFruitReading.
  *
  * PostgREST has no DISTINCT ON, so this reduces the ordered list in memory.
  * At ~45 plots sampled through one season that is a few hundred rows.
@@ -331,7 +353,7 @@ export function latestNirByArea<T extends NirRowLike>(reports: T[]): Record<stri
 
   for (const report of reports) {
     const areaId = report.area?.id;
-    if (areaId && !latest[areaId]) latest[areaId] = report;
+    if (areaId && !latest[areaId] && isFruitReading(report)) latest[areaId] = report;
   }
 
   return latest;
