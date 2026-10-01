@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -36,7 +36,7 @@ import { plotDisplayNameOf } from '@/lib/olive/plot-name';
 /**
  * Harvest pass entry, in a drawer.
  *
- * The form is unchanged from when it owned the whole page — hero, steps,
+ * The form is unchanged from when it owned the whole page — hero,
  * sectioned cards, sticky submit, and the live readout comparing what this pass
  * actually achieved against the per-dunam figure the season was planned on.
  *
@@ -82,12 +82,6 @@ const harvestSchema = z.object({
 });
 
 type HarvestFormData = z.infer<typeof harvestSchema>;
-
-const STEPS = [
-  { label: 'חלקה', icon: MapPin },
-  { label: 'תוצאות', icon: Scale },
-  { label: 'ציוד', icon: Tractor },
-];
 
 const RESULTS: { name: keyof HarvestFormData; label: string; step: string }[] = [
   { name: 'area_done_dunam', label: 'שטח שנמסק (דונם)', step: '0.1' },
@@ -226,8 +220,6 @@ function HarvestFormBody({
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [justCompleted, setJustCompleted] = useState<Set<number>>(new Set());
-  const prevStep = useRef(isEdit ? 2 : 0);
 
   const form = useForm<HarvestFormData>({
     resolver: zodResolver(harvestSchema),
@@ -260,18 +252,6 @@ function HarvestFormBody({
   const hasResult = results.some((v) => !!v && String(v).trim() !== '');
 
   const currentStep = !areaId ? 0 : !hasResult ? 1 : 2;
-
-  useEffect(() => {
-    if (currentStep > prevStep.current) {
-      const newly = new Set<number>();
-      for (let i = prevStep.current; i < currentStep; i++) newly.add(i);
-      setJustCompleted(newly);
-      const timer = setTimeout(() => setJustCompleted(new Set()), 600);
-      prevStep.current = currentStep;
-      return () => clearTimeout(timer);
-    }
-    prevStep.current = currentStep;
-  }, [currentStep]);
 
   /**
    * Live readout: what this pass actually achieved, against what was expected.
@@ -382,45 +362,6 @@ function HarvestFormBody({
           <X className="size-5" />
         </button>
       </div>
-
-      {/* Progress — only while creating. Over a saved pass it is just noise. */}
-      {!isEdit && (
-        <div className="olive-steps shrink-0">
-          {STEPS.map((step, i) => (
-            <div key={step.label} className="olive-step">
-              <div className="flex flex-col items-center gap-1">
-                <div
-                  className={`olive-step-circle ${
-                    i < currentStep
-                      ? 'olive-step-complete'
-                      : i === currentStep
-                        ? 'olive-step-active'
-                        : 'olive-step-pending'
-                  } ${justCompleted.has(i) ? 'olive-step-just-completed' : ''}`}
-                >
-                  {i < currentStep ? (
-                    <Check className="size-3.5" />
-                  ) : (
-                    <step.icon className="size-3.5" />
-                  )}
-                </div>
-                <span
-                  className={`olive-step-label ${i === currentStep ? 'olive-step-label-active' : ''}`}
-                >
-                  {step.label}
-                </span>
-              </div>
-              {i < STEPS.length - 1 && (
-                <div
-                  className={`olive-step-connector ${
-                    i < currentStep ? 'olive-step-connector-complete' : ''
-                  }`}
-                />
-              )}
-            </div>
-          ))}
-        </div>
-      )}
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col">

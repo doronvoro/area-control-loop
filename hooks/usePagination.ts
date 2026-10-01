@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useSyncExternalStore } from 'react';
 
 interface UsePaginationOptions {
   /** Rows per page to start with. Default 25. */
@@ -11,6 +11,26 @@ interface UsePaginationOptions {
    * just re-filtered or re-ordered is disorienting.
    */
   resetKey?: string;
+  /**
+   * localStorage key under which the user's chosen page size is remembered.
+   * Omit it and the size resets to `pageSize` on every visit.
+   */
+  storageKey?: string;
+}
+
+// Only the tab that changes the size needs to see it, and it already holds the
+// choice in state — no cross-tab sync, so nothing to subscribe to.
+const noopSubscribe = () => () => {};
+
+function readSavedSize(storageKey: string | undefined): number | null {
+  if (!storageKey) return null;
+  try {
+    const saved = Number(localStorage.getItem(storageKey));
+    return Number.isInteger(saved) && saved > 0 ? saved : null;
+  } catch {
+    // Storage blocked (private mode, disabled site data) — use the default.
+    return null;
+  }
 }
 
 /**
@@ -25,7 +45,17 @@ interface UsePaginationOptions {
  *   than in `useEffect`, for the same reason.
  */
 export function usePagination<T>(items: T[], options?: UsePaginationOptions) {
-  const [pageSize, setPageSize] = useState(options?.pageSize ?? 25);
+  const storageKey = options?.storageKey;
+  // A size picked during this visit wins; otherwise the remembered one; otherwise
+  // the default. useSyncExternalStore gives the server render (no localStorage)
+  // its own snapshot, so restoring the saved size is not a hydration mismatch.
+  const [chosenSize, setChosenSize] = useState<number | null>(null);
+  const savedSize = useSyncExternalStore(
+    noopSubscribe,
+    () => readSavedSize(storageKey),
+    () => null
+  );
+  const pageSize = chosenSize ?? savedSize ?? options?.pageSize ?? 25;
   const [rawPage, setRawPage] = useState(1);
 
   const resetKey = options?.resetKey;
@@ -56,8 +86,15 @@ export function usePagination<T>(items: T[], options?: UsePaginationOptions) {
     pageItems,
     setPage: setRawPage,
     setPageSize: (size: number) => {
-      setPageSize(size);
+      setChosenSize(size);
       setRawPage(1);
+      if (storageKey) {
+        try {
+          localStorage.setItem(storageKey, String(size));
+        } catch {
+          // Not remembered this time; the choice still applies to this visit.
+        }
+      }
     },
   };
 }

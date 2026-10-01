@@ -372,7 +372,8 @@ export function OlivePlotsContent({
   const levelCounts = useMemo(() => urgencyCounts(rows, filters), [rows, filters]);
 
   const pagination = usePagination(visibleRows, {
-    pageSize: 50,
+    pageSize: 10,
+    storageKey: 'olive-plots-page-size',
     // The whole filter object, not a hand-listed subset: that list was a second
     // place to remember every time a filter was added, and forgetting it leaves
     // you on a page that no longer exists, staring at an empty table.
@@ -525,7 +526,7 @@ export function OlivePlotsContent({
 
 function PlotsHeader({ canCreate, onCreate }: { canCreate: boolean; onCreate: () => void }) {
   return (
-    <PageHeader icon={MapPin} title="חלקות זית" description="פרטי חלקות, זנים ועומס יבול">
+    <PageHeader icon={MapPin} title="חלקות זית">
       <Button
         type="button"
         onClick={onCreate}

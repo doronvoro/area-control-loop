@@ -861,7 +861,7 @@ function PlotDetailBody({
                     visible, so a mistyped part shows up before saving. */}
                 <div>
                   <label className="text-sm font-semibold" htmlFor="plot-detail-composed-name">
-                    שם מלא
+                    שם מלא (שם-שנת נטיעה-זן)
                   </label>
                   <Input
                     id="plot-detail-composed-name"

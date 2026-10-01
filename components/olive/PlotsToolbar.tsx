@@ -10,7 +10,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/searchable-select';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { PLOT_TYPE_OPTIONS } from '@/types/database';
 import { PLOT_CATEGORY_CARDS, PLOT_CATEGORY_ICONS, URGENCY_OPTIONS } from '@/lib/olive/constants';
 import type { CategoryThresholds } from '@/lib/olive/logic';
@@ -57,37 +56,6 @@ export function PlotsToolbar({
 
   return (
     <>
-      {/* The dashboard's four category cards, as the category filter. They
-          replace the קטגוריה dropdown rather than sit beside it: one control per
-          filter, and this one also reads as the page's summary. A click toggles. */}
-      <section aria-label="סינון לפי קטגוריה" className="grid grid-cols-2 gap-2 md:grid-cols-4">
-        {PLOT_CATEGORY_CARDS.map((card) => {
-          const Icon = PLOT_CATEGORY_ICONS[card.key];
-          const active = filters.category === card.key;
-          return (
-            <Tooltip key={card.key}>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  aria-pressed={active}
-                  onClick={() => set('category', active ? 'all' : card.key)}
-                  className="olive-status-card olive-sc-neutral"
-                >
-                  <div className="olive-status-count">{categoryCounts[card.key] ?? 0}</div>
-                  <div className="olive-status-label flex items-center justify-center gap-1">
-                    <Icon className="size-3.5 opacity-60" aria-hidden />
-                    {card.label}
-                  </div>
-                </button>
-              </TooltipTrigger>
-              <TooltipContent className="max-w-64 text-center">
-                {categoryRuleText(card.key, bands)}
-              </TooltipContent>
-            </Tooltip>
-          );
-        })}
-      </section>
-
       <OliveFilterPanel
         activeCount={countActivePlotFilters(filters)}
         shown={shown}
@@ -95,11 +63,36 @@ export function PlotsToolbar({
         itemLabel="חלקות"
         onClear={onClear}
         defaultExpanded={defaultExpanded}
+        // Five fields, so five columns: the default four would strand בדיקת NIR
+        // alone on a second row.
+        gridClassName="grid-cols-1 sm:grid-cols-2 lg:grid-cols-5"
         chips={
-          // The two axes a reader narrows by most live in the header rather
+          // The three axes a reader narrows by most live in the header rather
           // than the grid: they stay readable and clickable while the panel is
           // collapsed, which is how the page opens.
           <>
+            {/* The dashboard's four categories, as the category filter. They
+                replace the קטגוריה dropdown rather than sit beside it: one control
+                per filter, and this one also reads as the page's summary.
+
+                The same segmented control as the urgency and grower-type chips
+                beside it, not a row of tiles: three count filters on one panel that
+                look like three different kinds of control read as three unrelated
+                things. Told apart by icon rather than colour, because red/amber/
+                green on these pages mean harvest urgency and these count the
+                latest NIR reading. A click toggles. */}
+            <FilterChips
+              ariaLabel="סינון לפי קטגוריה"
+              value={filters.category}
+              onChange={(value) => set('category', value === filters.category ? 'all' : value)}
+              chips={PLOT_CATEGORY_CARDS.map((card) => ({
+                value: card.key,
+                label: card.label,
+                count: categoryCounts[card.key] ?? 0,
+                icon: PLOT_CATEGORY_ICONS[card.key],
+                tooltip: categoryRuleText(card.key, bands),
+              }))}
+            />
             {/* No "הכל" chip: none picked is all, and clicking the picked one
                 again lets go — the dashboard's urgency chips work the same way. */}
             <FilterChips

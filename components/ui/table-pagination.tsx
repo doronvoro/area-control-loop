@@ -42,7 +42,7 @@ export function TablePagination({
   from,
   to,
   pageSize,
-  pageSizeOptions = [25, 50, 100],
+  pageSizeOptions = [10, 25, 50, 100],
   onPageChange,
   onPageSizeChange,
   itemLabel = 'רשומות',

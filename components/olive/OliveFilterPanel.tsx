@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
-import { ChevronDown, Filter, X } from 'lucide-react';
+import { ChevronDown, Filter, X, type LucideIcon } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
 /**
@@ -101,6 +102,23 @@ export function OliveFilterPanel({
               />
             </Button>
           </CollapsibleTrigger>
+          {/* The footer's clear button lives inside the collapsed region, so a
+              reader who set a header chip would otherwise have to open the
+              panel to let go of it. Closed-only, so the open panel does not
+              offer the same action twice. After the chevron, so the chevron
+              does not shift when this appears. */}
+          {!open && activeCount > 0 && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="xs"
+              onClick={onClear}
+              className="text-muted-foreground"
+            >
+              <X aria-hidden="true" />
+              נקה
+            </Button>
+          )}
 
           {(scope || chips) && (
             <div className="ms-auto flex flex-wrap items-center gap-3">
@@ -162,6 +180,17 @@ export interface FilterChip {
   count: number;
   /** An .olive-dot-* suffix ('urgent' | 'plan' | 'ok'), drawn before the label. */
   dot?: string;
+  /**
+   * Drawn before the label instead of a dot, for a group whose members are told
+   * apart by shape rather than colour — the plot categories, where red/amber/
+   * green are already spoken for by harvest urgency.
+   *
+   * `dot` wins if both are set, so a group cannot quietly grow two leading
+   * marks on one chip.
+   */
+  icon?: LucideIcon;
+  /** Shown on hover and focus. The category chips put their band rule here. */
+  tooltip?: ReactNode;
 }
 
 /**
@@ -195,7 +224,8 @@ export function FilterChips({
     >
       {chips.map((chip, i) => {
         const active = chip.value === value;
-        return (
+        const Icon = chip.icon;
+        const button = (
           <button
             key={chip.value}
             type="button"
@@ -212,14 +242,28 @@ export function FilterChips({
                 : 'text-muted-foreground hover:bg-accent/50'
             )}
           >
-            {chip.dot && (
+            {chip.dot ? (
               <span
                 className={`olive-dot olive-dot-${chip.dot} me-1.5 inline-block align-middle`}
                 aria-hidden
               />
+            ) : (
+              Icon && <Icon className="me-1.5 inline-block size-3.5 align-middle" aria-hidden />
             )}
             {chip.label} ({chip.count})
           </button>
+        );
+
+        // asChild, so the tooltip hangs off the button itself and the group
+        // keeps its unbroken row of siblings — a wrapper element here would
+        // put a gap where the divider border is.
+        return chip.tooltip ? (
+          <Tooltip key={chip.value}>
+            <TooltipTrigger asChild>{button}</TooltipTrigger>
+            <TooltipContent className="max-w-64 text-center">{chip.tooltip}</TooltipContent>
+          </Tooltip>
+        ) : (
+          button
         );
       })}
     </div>
