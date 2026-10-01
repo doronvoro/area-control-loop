@@ -46,7 +46,7 @@ export interface CreateNirParams extends NirValuesInput {
 
 const NIR_SELECT = `
   id, name, description, status, report_number, report_date, created_at, area_type_id,
-  area:areas(id, name, variety),
+  area:areas(id, name, variety, planting_time, details:olive_plot_details(region, plant_year_label)),
   worker:workers(id, name),
   detail:nir_report(*)
 `;

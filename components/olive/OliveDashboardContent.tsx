@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Loader2, RotateCcw, Search, X } from 'lucide-react';
 import { useApiData } from '@/hooks/useApiData';
@@ -11,6 +11,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils';
 import { WeatherStrip } from './WeatherStrip';
 import { NirGauge } from './NirGauge';
+import { PlotDetailSheet } from './PlotDetailSheet';
+import type { GrowerOption } from './GrowerPicker';
+import type { VarietyOption } from './VarietyPicker';
 import {
   computeUpcomingWeather,
   evaluateParameter,
@@ -28,11 +31,14 @@ import {
   toVarietyWindowLike,
   toCategoryThresholds,
   toWeatherThresholds,
+  type ApiNirReport,
   type ApiPlot,
 } from '@/lib/olive/adapt';
+import { toPlotRow } from '@/lib/olive/plot-rows';
 import { forecastFreshness } from '@/lib/olive/weather-view';
 import { PLOT_CATEGORY_CARDS, PLOT_CATEGORY_ICONS, URGENCY_OPTIONS } from '@/lib/olive/constants';
 import { PLOT_TYPE_LABELS, ParameterStatus, PlotType, type ParameterRule } from '@/types/database';
+import { plotDisplayNameOf } from '@/lib/olive/plot-name';
 
 interface DashboardPayload {
   plots: ApiPlot[];
@@ -47,7 +53,14 @@ interface DashboardPayload {
   season: { id: string; name: string; year_type: string | null } | null;
   /** Readings in the season, and how many have not reached the client. */
   nirCounts?: { total: number; unsent: number };
+  /** Readings per plot IN THE SEASON, keyed by area id. Absent means none. */
+  nirCountByArea?: Record<string, number>;
 }
+
+// Module-level so the drawer's memos do not see a new identity on every render.
+const NO_RULES: ParameterRule[] = [];
+const NO_PLOTS: ApiPlot[] = [];
+const NO_ESTIMATES: Record<string, { kg_per_dunam?: unknown }> = {};
 
 const GROWER_GROUPS: { type: PlotType; label: string }[] = [
   { type: PlotType.OWNER, label: PLOT_TYPE_LABELS[PlotType.OWNER] },
@@ -74,6 +87,19 @@ export function OliveDashboardContent() {
   const [search, setSearch] = useState('');
   /** The search box is an icon until asked for, and folds back when left empty. */
   const [searchOpen, setSearchOpen] = useState(false);
+  /** The plot whose drawer is open — the same drawer the plots page opens. */
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Only the drawer's pickers need these; fetched alongside, as the plots page does.
+  const { data: growerData } = useApiData<{ id: string; name: string }[]>('/api/growers');
+  const { data: varietyData } = useApiData<{ id: string; name: string }[]>('/api/varieties');
+  const growers = useMemo<GrowerOption[]>(
+    () => (growerData ?? []).map((g) => ({ id: g.id, name: g.name })),
+    [growerData]
+  );
+  const varieties = useMemo<VarietyOption[]>(
+    () => (varietyData ?? []).map((v) => ({ id: v.id, name: v.name })),
+    [varietyData]
+  );
 
   // `now` is fixed for the render so every plot is judged against one instant.
   const now = useMemo(() => new Date(), []);
@@ -123,6 +149,35 @@ export function OliveDashboardContent() {
     };
   }, [data, now]);
 
+  /**
+   * The open plot as the drawer's PlotRow, built the plots page's way. Derived
+   * from `data`, not snapshotted, so a reading saved from the drawer moves the
+   * stat cards inside it. Looked up among ALL plots, harvested included: a
+   * harvest logged from the drawer drops the plot from this list, and the
+   * drawer must not vanish under the reader's hands when it does.
+   */
+  const selected = useMemo(() => {
+    if (!data || !model || !selectedId) return null;
+    const plot = data.plots?.find((p) => p.id === selectedId);
+    if (!plot) return null;
+    const latest = data.latestNir?.[plot.id] as ApiNirReport | undefined;
+    const nir = toNirLike(latest);
+    const listed = model.rows.find((r) => r.plot.id === plot.id);
+    return toPlotRow({
+      plot,
+      nir,
+      nirSentToClientAt: latest?.detail?.sent_to_client_at ?? null,
+      nirCountInSeason: data.nirCountByArea?.[plot.id] ?? 0,
+      category: classifyPlotCategory(nir, data.parameterRules || [], model.bands),
+      urgency: listed?.status.level ?? null,
+      harvested: (data.harvestedAreaIds || []).includes(plot.id),
+      yieldEstimate: data.yieldEstimates?.[plot.id] ?? null,
+      now,
+    });
+  }, [data, model, selectedId, now]);
+
+  const handleSaved = useCallback(() => refetch(), [refetch]);
+
   // The FIRST load only. refetch() flips `loading` back on, and swapping the
   // whole page for a spinner then would throw away the reader's filters and
   // scroll — the list dims instead (aria-busy below).
@@ -142,7 +197,7 @@ export function OliveDashboardContent() {
   // button is always what clicking it would show.
   const query = search.trim().toLowerCase();
   const searched = (visible ?? []).filter(
-    (r) => !query || (r.plot.name ?? '').toLowerCase().includes(query)
+    (r) => !query || plotDisplayNameOf(r.plot).toLowerCase().includes(query)
   );
   const byGrower = searched.filter(
     (r) => pickedGrowers.size === 0 || pickedGrowers.has(r.plot.details?.plot_type as PlotType)
@@ -397,9 +452,23 @@ export function OliveDashboardContent() {
                   // One line per plot: who and what on the right, the three
                   // readings on their bands beside it. Nothing to expand — the
                   // row already holds everything the old details panel did.
+                  // The whole row opens the plot's drawer. A div with a button
+                  // role rather than a <button>: the readings inside are
+                  // buttons of their own, and buttons cannot nest.
                   <div
                     key={row.plot.id}
-                    className={`olive-alert olive-alert-${row.status.level} flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:gap-6`}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`פתח את חלקה ${plotDisplayNameOf(row.plot)}`}
+                    onClick={() => setSelectedId(row.plot.id)}
+                    onKeyDown={(e) => {
+                      if (e.target !== e.currentTarget) return;
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setSelectedId(row.plot.id);
+                      }
+                    }}
+                    className={`olive-alert olive-alert-${row.status.level} focus-visible:ring-ring flex cursor-pointer flex-col gap-3 p-3 transition-shadow outline-none hover:shadow-md focus-visible:ring-2 sm:flex-row sm:items-center sm:gap-6`}
                   >
                     {/* Fixed width, so the tiles sit right beside the name on
                         every row — a flex-1 here pushed them to the far edge,
@@ -408,7 +477,9 @@ export function OliveDashboardContent() {
                       <span className={`olive-dot mt-1.5 olive-dot-${row.status.level}`} />
                       <div className="min-w-0 flex-1">
                         <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                          <span className="truncate text-sm font-bold">{row.plot.name}</span>
+                          <span className="truncate text-sm font-bold">
+                            {plotDisplayNameOf(row.plot)}
+                          </span>
                           {/* Which grower, when the list is not already narrowed to one. */}
                           {!singleGrower && row.growerLabel && (
                             <span className="olive-muted shrink-0 text-xs">
@@ -435,7 +506,12 @@ export function OliveDashboardContent() {
 
                     {/* The three readings as figures; each opens its band chart on hover. */}
                     {row.nir ? (
-                      <div className="grid shrink-0 grid-cols-3 gap-1.5 sm:w-72">
+                      // A reading opens its band chart, not the drawer.
+                      <div
+                        className="grid shrink-0 grid-cols-3 gap-1.5 sm:w-72"
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => e.stopPropagation()}
+                      >
                         <NirReading label="שמן" value={row.nir.oil} code="oil" rules={rules} />
                         <NirReading label="מים" value={row.nir.water} code="water" rules={rules} />
                         <NirReading
@@ -461,6 +537,18 @@ export function OliveDashboardContent() {
           </Link>
         </div>
       )}
+
+      <PlotDetailSheet
+        row={selected}
+        onOpenChange={(open) => !open && setSelectedId(null)}
+        rules={data?.parameterRules ?? NO_RULES}
+        plots={data?.plots ?? NO_PLOTS}
+        estimates={data?.yieldEstimates ?? NO_ESTIMATES}
+        seasonId={data?.season?.id ?? null}
+        growers={growers}
+        varieties={varieties}
+        onSaved={handleSaved}
+      />
     </div>
   );
 }

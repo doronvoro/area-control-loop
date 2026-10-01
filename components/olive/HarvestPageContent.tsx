@@ -25,6 +25,7 @@ import {
 import { HarvestFormSheet, type HarvestEditorState } from './HarvestFormSheet';
 import { HarvestLogToolbar } from './HarvestLogToolbar';
 import { HarvestLogTable } from './HarvestLogTable';
+import { plotDisplayNameOf } from '@/lib/olive/plot-name';
 
 /**
  * The harvest log.
@@ -139,7 +140,8 @@ export function HarvestPageContent({ initialAreaId }: { initialAreaId: string | 
     () =>
       (plots ?? []).map((p) => ({
         value: p.id,
-        label: [p.name, p.variety].filter(Boolean).join(' · '),
+        // The variety is the last part of the name, so it is not appended again.
+        label: plotDisplayNameOf(p),
       })),
     [plots]
   );

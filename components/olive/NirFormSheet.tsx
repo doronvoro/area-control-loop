@@ -51,6 +51,7 @@ import { evaluateParameter } from '@/lib/olive/logic';
 import type { ApiPlot } from '@/lib/olive/adapt';
 import type { NirRow } from '@/lib/olive/nir-rows';
 import { NirGauge } from './NirGauge';
+import { plotDisplayNameOf } from '@/lib/olive/plot-name';
 
 /**
  * NIR entry, in a drawer.
@@ -320,7 +321,8 @@ function NirFormBody({
     () =>
       plots.map((p) => ({
         value: p.id,
-        label: [p.name, p.variety].filter(Boolean).join(' · '),
+        // The variety is the last part of the name, so it is not appended again.
+        label: plotDisplayNameOf(p),
       })),
     [plots]
   );

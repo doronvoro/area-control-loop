@@ -23,6 +23,7 @@ import {
 } from './logic';
 import { NONE } from '@/lib/forms/none-sentinel';
 import type { ApiPlot } from './adapt';
+import { plotDisplayNameOf } from './plot-name';
 import type { SortState } from '@/components/ui/sortable-table-head';
 
 /** A plot flattened for display, with every numeric already coerced. */
@@ -261,7 +262,9 @@ export function toPlotRow({
 
   return {
     id: plot.id,
-    name: plot.name ?? '',
+    // The client's "{שם} — {שנה} — {זן}" convention, computed for display. The
+    // stored areas.name is still on row.plot for anything that must match it.
+    name: plotDisplayNameOf(plot),
     variety: plot.variety,
     varietyId: plot.variety_id ?? null,
     growerId: details?.grower_id ?? null,

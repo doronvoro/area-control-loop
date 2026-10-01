@@ -55,6 +55,7 @@ import {
   type ParameterRule,
   type PlotType,
 } from '@/types/database';
+import { plotDisplayNameOf } from '@/lib/olive/plot-name';
 
 // --- Types ---
 
@@ -288,7 +289,8 @@ export async function fetchPlotReport(
       minute: '2-digit',
     })}`,
 
-    plotName: plot.name ?? '',
+    // "{שם} — {שנה} — {זן}" — the name every olive screen shows.
+    plotName: plotDisplayNameOf(plot),
     growerName: details?.grower_name ?? '—',
     variety: plot.variety,
     region: details?.region ?? null,

@@ -65,8 +65,6 @@ export function PlotReportDocument({ data, logoSrc }: PlotReportDocumentProps) {
     plotName,
     growerName,
     variety,
-    region,
-    plantYear,
     maturityLabel,
     sizeDunam,
     inspectorName,
@@ -119,9 +117,10 @@ export function PlotReportDocument({ data, logoSrc }: PlotReportDocumentProps) {
           </div>
 
           <div className="rpt-subline">
-            {plotName ? `כינוי: ${plotName} · ` : ''}
-            {region ? `גוש ${region} · ` : ''}
-            {`${text(plantYear)} (${maturityLabel}) · ${num(sizeDunam)} דונם`}
+            {/* plotName already carries block, year and variety
+                ("{שם} — {שנה} — {זן}"), so they are not repeated here. */}
+            {plotName ? `${plotName} · ` : ''}
+            {`${maturityLabel} · ${num(sizeDunam)} דונם`}
           </div>
           <div className="rpt-inspector">
             {inspectorName ? `נבדק על ידי: ${inspectorName}` : ''}

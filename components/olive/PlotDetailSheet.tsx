@@ -56,7 +56,7 @@ import {
   type VarietyOption,
   type VarietySelection,
 } from './VarietyPicker';
-import { composePlotName, plantYearForName } from '@/lib/olive/plot-name';
+import { plantYearForName, plotDisplayName } from '@/lib/olive/plot-name';
 import {
   NIR_SAMPLE_TYPE_LABELS,
   PARAMETER_STATUS_CONFIG,
@@ -393,12 +393,23 @@ function PlotDetailBody({
       variety.varietyId === NEW_VARIETY
         ? variety.varietyName
         : (varieties.find((v) => v.id === variety.varietyId)?.name ?? '');
-    return composePlotName(
-      nameDraft,
-      plantYearForName(plantingDraft, initialPlantingTime, plantYearLabel),
-      varietyName
-    );
-  }, [nameDraft, plantingDraft, initialPlantingTime, plantYearLabel, variety, varieties]);
+    // Same rule as every other olive screen (plotDisplayName): with "שם" empty,
+    // the plot's own stored name stands in for it.
+    return plotDisplayName({
+      name: row.plot.name,
+      region: nameDraft,
+      plantYearLabel: plantYearForName(plantingDraft, initialPlantingTime, plantYearLabel),
+      variety: varietyName,
+    });
+  }, [
+    nameDraft,
+    plantingDraft,
+    initialPlantingTime,
+    plantYearLabel,
+    variety,
+    varieties,
+    row.plot.name,
+  ]);
   const yieldLoad = useMemo(
     () => (yieldDraft ? yieldLoadInfo(Number(yieldDraft)) : null),
     [yieldDraft]
@@ -485,10 +496,9 @@ function PlotDetailBody({
       <div className="olive-form-hero flex shrink-0 items-start gap-4 px-6 py-5">
         <div className="olive-hero-pattern" />
         <div className="relative z-10 min-w-0 flex-1">
-          {/* Name, falling back to the gush (region) for an unnamed plot. */}
+          {/* row.name is already "{שם} — {שנה} — {זן}" (plotDisplayName). */}
           <SheetTitle className="olive-hero-title text-xl tracking-tight md:text-2xl">
-            {[row.name || row.region, row.plantYear, row.variety].filter(Boolean).join(' - ') ||
-              '—'}
+            {row.name || '—'}
           </SheetTitle>
           {row.growerName && <p className="mt-1 text-xs text-white/70">{row.growerName}</p>}
         </div>

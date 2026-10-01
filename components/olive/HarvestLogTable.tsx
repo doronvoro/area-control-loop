@@ -137,7 +137,6 @@ export function HarvestLogTable({
               </TableCell>
               <TableCell>
                 <span className="font-medium">{row.areaName || '—'}</span>
-                {row.variety && <span className="olive-muted block text-xs">{row.variety}</span>}
               </TableCell>
               <TableCell className="tabular-nums">{row.passNumber ?? '—'}</TableCell>
               <TableCell className="olive-muted hidden text-xs lg:table-cell">

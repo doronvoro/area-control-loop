@@ -20,6 +20,7 @@ import {
 import { evaluateParameter, toDateString } from './logic';
 import type { ApiNirReport } from './adapt';
 import type { SortState } from '@/components/ui/sortable-table-head';
+import { embeddedAreaDisplayName } from './plot-name';
 
 /** A NIR reading flattened for display, with every numeric already coerced. */
 export interface NirRow {
@@ -133,7 +134,8 @@ export function toNirRow(report: ApiNirReport, taktNameById: Map<string, string>
     reportDate: report.report_date ? String(report.report_date).slice(0, 10) : null,
     createdAt: report.created_at,
     areaId: area?.id ?? null,
-    areaName: area?.name ?? '',
+    // "{שם} — {שנה} — {זן}", the same name the plots screen shows.
+    areaName: embeddedAreaDisplayName(area),
     variety: area?.variety ?? null,
     workerName: worker?.name ?? '',
     subAreaId,

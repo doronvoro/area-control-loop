@@ -31,6 +31,7 @@ import { showToast } from '@/lib/toast';
 import { HARVESTER_OPTIONS } from '@/types/database';
 import type { ApiPlot } from '@/lib/olive/adapt';
 import type { HarvestRow } from '@/lib/olive/harvest-rows';
+import { plotDisplayNameOf } from '@/lib/olive/plot-name';
 
 /**
  * Harvest pass entry, in a drawer.
@@ -84,8 +85,8 @@ type HarvestFormData = z.infer<typeof harvestSchema>;
 
 const STEPS = [
   { label: 'חלקה', icon: MapPin },
-  { label: 'ציוד', icon: Tractor },
   { label: 'תוצאות', icon: Scale },
+  { label: 'ציוד', icon: Tractor },
 ];
 
 const RESULTS: { name: keyof HarvestFormData; label: string; step: string }[] = [
@@ -246,19 +247,19 @@ function HarvestFormBody({
     () =>
       plots.map((p) => ({
         value: p.id,
-        label: [p.name, p.variety].filter(Boolean).join(' · '),
+        // The variety is the last part of the name, so it is not appended again.
+        label: plotDisplayNameOf(p),
       })),
     [plots]
   );
 
   const selectedPlot = useMemo(() => plots.find((p) => p.id === areaId), [plots, areaId]);
-  const takts = selectedPlot?.takts ?? [];
 
   const hasEquipment =
     (!!harvesterType && harvesterType !== NONE) || !!(operator as string | undefined)?.trim();
   const hasResult = results.some((v) => !!v && String(v).trim() !== '');
 
-  const currentStep = !areaId ? 0 : !hasEquipment && !hasResult ? 1 : 2;
+  const currentStep = !areaId ? 0 : !hasResult ? 1 : 2;
 
   useEffect(() => {
     if (currentStep > prevStep.current) {
@@ -506,108 +507,12 @@ function HarvestFormBody({
               </p>
             </section>
 
-            {/* 2 — equipment */}
+            {/* 2 — results */}
             <section
-              className={`olive-section olive-section-sample px-5 py-4 ${
+              className={`olive-section olive-section-values px-5 py-4 ${
                 currentStep > 1 ? 'olive-section-completed' : ''
               }`}
             >
-              <div className="olive-section-header">
-                <div className="olive-section-icon olive-icon-sample">
-                  <Tractor className="size-4" />
-                </div>
-                <h3 className="text-base font-bold">ציוד ומיקום</h3>
-                {hasEquipment && (
-                  <span className="olive-field-check">
-                    <Check className="size-2.5" />
-                  </span>
-                )}
-                <span className="olive-muted mr-auto text-xs">לא חובה</span>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-3">
-                <FormField
-                  control={form.control}
-                  name="sub_area_id"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-semibold">טאקט</FormLabel>
-                      <Select
-                        onValueChange={field.onChange}
-                        value={field.value || NONE}
-                        disabled={!areaId}
-                      >
-                        <FormControl>
-                          <SelectTrigger className="h-9">
-                            <SelectValue
-                              placeholder={
-                                !areaId
-                                  ? 'בחר חלקה תחילה'
-                                  : takts.length
-                                    ? 'כל החלקה'
-                                    : 'אין טאקטים בחלקה זו'
-                              }
-                            />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent position="popper" sideOffset={4}>
-                          <SelectItem value={NONE}>כל החלקה</SelectItem>
-                          {takts.map((takt) => (
-                            <SelectItem key={takt.id} value={takt.id}>
-                              {takt.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="harvester_type"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-semibold">סוג מוסקת</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value || NONE}>
-                        <FormControl>
-                          <SelectTrigger className="h-9">
-                            <SelectValue placeholder="—" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent position="popper" sideOffset={4}>
-                          <SelectItem value={NONE}>—</SelectItem>
-                          {HARVESTER_OPTIONS.map((o) => (
-                            <SelectItem key={o.value} value={o.value}>
-                              {o.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="operator"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-semibold">מפעיל</FormLabel>
-                      <FormControl>
-                        <Input className="h-9" {...field} value={field.value ?? ''} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-            </section>
-
-            {/* 3 — results */}
-            <section className="olive-section olive-section-values px-5 py-4">
               <div className="olive-section-header">
                 <div className="olive-section-icon olive-icon-values">
                   <Scale className="size-4" />
@@ -703,6 +608,64 @@ function HarvestFormBody({
                   </FormItem>
                 )}
               />
+            </section>
+
+            {/* 3 — equipment */}
+            <section className="olive-section olive-section-sample px-5 py-4">
+              <div className="olive-section-header">
+                <div className="olive-section-icon olive-icon-sample">
+                  <Tractor className="size-4" />
+                </div>
+                <h3 className="text-base font-bold">ציוד</h3>
+                {hasEquipment && (
+                  <span className="olive-field-check">
+                    <Check className="size-2.5" />
+                  </span>
+                )}
+                <span className="olive-muted mr-auto text-xs">לא חובה</span>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="harvester_type"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-sm font-semibold">סוג מוסקת</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value || NONE}>
+                        <FormControl>
+                          <SelectTrigger className="h-9">
+                            <SelectValue placeholder="—" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent position="popper" sideOffset={4}>
+                          <SelectItem value={NONE}>—</SelectItem>
+                          {HARVESTER_OPTIONS.map((o) => (
+                            <SelectItem key={o.value} value={o.value}>
+                              {o.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="operator"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-sm font-semibold">מפעיל</FormLabel>
+                      <FormControl>
+                        <Input className="h-9" {...field} value={field.value ?? ''} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
             </section>
           </div>
 

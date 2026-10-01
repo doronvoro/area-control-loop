@@ -34,6 +34,7 @@ import {
   PlotType,
   type ParameterRule,
 } from '@/types/database';
+import { plotDisplayNameOf } from '@/lib/olive/plot-name';
 
 interface DashboardPayload {
   plots: ApiPlot[];
@@ -300,7 +301,7 @@ export function OliveDashboardClassicContent() {
                 <div key={row.plot.id} className="olive-overview-row flex items-start gap-2 py-2">
                   <span className={`olive-dot mt-1.5 olive-dot-${row.status.level}`} />
                   <div className="min-w-0">
-                    <div className="truncate text-sm font-bold">{row.plot.name}</div>
+                    <div className="truncate text-sm font-bold">{plotDisplayNameOf(row.plot)}</div>
                     <div className="olive-muted text-xs">{row.status.headline}</div>
                   </div>
                 </div>
@@ -345,7 +346,7 @@ export function OliveDashboardClassicContent() {
                             <span className={`olive-dot mt-1.5 olive-dot-${row.status.level}`} />
                             <span className="min-w-0 flex-1">
                               <span className="block truncate text-sm font-bold">
-                                {row.plot.name}
+                                {plotDisplayNameOf(row.plot)}
                               </span>
                               <span className="olive-muted block text-xs">
                                 {row.status.headline}

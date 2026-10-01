@@ -172,7 +172,6 @@ export function NirLogTable({
               </TableCell>
               <TableCell>
                 <span className="font-medium">{row.areaName || '—'}</span>
-                {row.variety && <span className="olive-muted block text-xs">{row.variety}</span>}
                 {/* Fruit is the default and goes unmarked; pomace is the
                     exception the eye needs to catch, since its oil column
                     means something else and it carries no status. */}

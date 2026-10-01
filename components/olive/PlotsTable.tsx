@@ -147,14 +147,6 @@ export function PlotsTable({
               חלקה
             </SortableTableHead>
             <SortableTableHead
-              field="growerName"
-              sort={sort}
-              onSort={onSort}
-              className="hidden lg:table-cell"
-            >
-              מגדל
-            </SortableTableHead>
-            <SortableTableHead
               field="size"
               sort={sort}
               onSort={onSort}
@@ -204,18 +196,18 @@ export function PlotsTable({
               <TableCell>
                 <span className="font-medium">{row.name || '—'}</span>
                 <span className="olive-muted block text-xs">
+                  {/* The grower lives here rather than in a column of its own:
+                      "מייסדי נטור - מנדי, שותף". No variety — it is already the
+                      last part of the name. */}
                   {[
-                    row.variety,
+                    row.growerName,
                     row.plotType ? PLOT_TYPE_LABELS[row.plotType as never] : null,
                     regionAside(row),
                   ]
                     .filter(Boolean)
-                    .join(' · ') || ' '}
+                    .join(', ') || ' '}
                   {row.harvested && <span className="text-primary font-semibold"> · נמסק</span>}
                 </span>
-              </TableCell>
-              <TableCell className="olive-muted hidden text-xs lg:table-cell">
-                {row.growerName ?? '—'}
               </TableCell>
               <TableCell className="hidden tabular-nums md:table-cell">
                 {num(row.size, 1)}
@@ -346,12 +338,9 @@ export function PlotsTable({
                   {/* Only when the table is paged: the footer counts every
                     filtered plot, and the page below it does not. */}
                   {summary.plotCount !== rows.length && ' — כל העמודים'}
+                  {summary.growerCount > 0 &&
+                    ` · ${countLabel(summary.growerCount, 'מגדל אחד', 'מגדלים')}`}
                 </span>
-              </TableCell>
-              <TableCell className="olive-muted hidden text-xs font-normal lg:table-cell">
-                {summary.growerCount > 0
-                  ? countLabel(summary.growerCount, 'מגדל אחד', 'מגדלים')
-                  : '—'}
               </TableCell>
               <TableCell className="hidden tabular-nums md:table-cell">
                 {num(summary.totalDunam, 1)}
