@@ -7,6 +7,7 @@ import { showToast } from '@/lib/toast';
 import { yieldLoadInfo } from '@/lib/olive/logic';
 import { PARAMETER_STATUS_CONFIG } from '@/types/database';
 import type { ApiPlot } from '@/lib/olive/adapt';
+import { plotDisplayNameOf } from '@/lib/olive/plot-name';
 
 /**
  * Yield estimates for the active season, next to what was actually harvested.
@@ -183,7 +184,7 @@ export function YieldPageContent() {
 
                 return (
                   <tr key={plot.id} className="border-b last:border-0">
-                    <td className="p-2">{plot.name}</td>
+                    <td className="p-2">{plotDisplayNameOf(plot)}</td>
                     <td className="p-2">{plot.details?.region || '—'}</td>
                     <td className="p-2">{plot.size ?? '—'}</td>
                     <td className="p-2">

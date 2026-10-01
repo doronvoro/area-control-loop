@@ -33,7 +33,7 @@ export interface CreateHarvestParams extends HarvestValuesInput {
 
 const HARVEST_SELECT = `
   id, name, description, status, report_number, report_date, created_at, area_type_id,
-  area:areas(id, name, variety, size),
+  area:areas(id, name, variety, size, planting_time, details:olive_plot_details(region, plant_year_label)),
   worker:workers(id, name),
   detail:harvest_report(*)
 `;

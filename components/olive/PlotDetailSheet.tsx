@@ -7,12 +7,15 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import {
   AlertTriangle,
+  ChartLine,
   FileText,
   FlaskConical,
+  List,
   Loader2,
   MailCheck,
   MapPin,
   Plus,
+  Sprout,
   Tractor,
   X,
 } from 'lucide-react';
@@ -35,6 +38,7 @@ import {
 } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { showToast } from '@/lib/toast';
+import { NirGauge } from './NirGauge';
 import { NONE, fromFormValue, toFormValue } from '@/lib/forms/none-sentinel';
 import {
   GrowerPicker,
@@ -44,9 +48,18 @@ import {
   type GrowerSelection,
 } from './GrowerPicker';
 import {
-  HARVESTER_OPTIONS,
+  NEW_VARIETY,
+  VarietyPicker,
+  initialVarietySelection,
+  varietyChanged,
+  varietyPayload,
+  type VarietyOption,
+  type VarietySelection,
+} from './VarietyPicker';
+import { plantYearForName, plotDisplayName } from '@/lib/olive/plot-name';
+import {
+  NIR_SAMPLE_TYPE_LABELS,
   PARAMETER_STATUS_CONFIG,
-  PLOT_TYPE_OPTIONS,
   WATER_TYPE_OPTIONS,
   type ParameterRule,
 } from '@/types/database';
@@ -54,9 +67,12 @@ import { daysSinceLabel, evaluateParameter, yieldLoadInfo } from '@/lib/olive/lo
 import type { ApiPlot } from '@/lib/olive/adapt';
 import { toNirRow, type NirRow } from '@/lib/olive/nir-rows';
 import { toHarvestRow, type HarvestRow } from '@/lib/olive/harvest-rows';
-import { categoryLabel, type PlotRow } from '@/lib/olive/plot-rows';
+import type { PlotRow } from '@/lib/olive/plot-rows';
+import { parsePlantingDate } from '@/lib/olive/import-backup';
 import { NirFormSheet, type NirEditorState } from './NirFormSheet';
 import { HarvestFormSheet, type HarvestEditorState } from './HarvestFormSheet';
+import { PlotReportDialog } from './report/PlotReportDialog';
+import { NirTrendChart } from './report/NirTrendChart';
 
 /**
  * Everything about one plot.
@@ -74,16 +90,15 @@ import { HarvestFormSheet, type HarvestEditorState } from './HarvestFormSheet';
 
 const detailsSchema = z.object({
   region: z.string().optional(),
-  plant_year_label: z.string().optional(),
-  plot_type: z.string().optional(),
-  harvester: z.string().optional(),
-  water_type: z.string().optional(),
-  takt_count: z
+  planting_time: z.string().optional(),
+  // areas.size is DECIMAL(10,2) with no CHECK — same guard as the create form.
+  size: z
     .string()
     .optional()
-    .refine((v) => !v || (Number.isInteger(Number(v)) && Number(v) >= 1 && Number(v) <= 10), {
-      message: 'מספר בין 1 ל-10',
+    .refine((v) => !v || (!Number.isNaN(Number(v)) && Number(v) >= 0), {
+      message: 'נדרש ערך חיובי',
     }),
+  water_type: z.string().optional(),
   // yield_estimates.kg_per_dunam carries no CHECK constraint of any kind, so a
   // typo'd negative would be stored silently. This is the only guard there is.
   yield_kg_per_dunam: z
@@ -97,14 +112,10 @@ const detailsSchema = z.object({
 type DetailsFormData = z.infer<typeof detailsSchema>;
 
 const SELECTS: {
-  name: 'plot_type' | 'harvester' | 'water_type';
+  name: 'water_type';
   label: string;
   options: { value: string; label: string }[];
-}[] = [
-  { name: 'plot_type', label: 'סוג מגדל', options: PLOT_TYPE_OPTIONS },
-  { name: 'harvester', label: 'סוג מוסקת', options: HARVESTER_OPTIONS },
-  { name: 'water_type', label: 'סוג מים', options: WATER_TYPE_OPTIONS },
-];
+}[] = [{ name: 'water_type', label: 'סוג מים', options: WATER_TYPE_OPTIONS }];
 
 /** How many readings and passes to list before pointing at the full log. */
 const HISTORY_LIMIT = 5;
@@ -125,6 +136,8 @@ interface PlotDetailSheetProps {
   seasonId: string | null;
   /** The tenant's growers, for the picker. */
   growers: GrowerOption[];
+  /** The shared variety list, for the picker. */
+  varieties: VarietyOption[];
   onSaved: () => void;
 }
 
@@ -136,10 +149,12 @@ export function PlotDetailSheet({
   estimates,
   seasonId,
   growers,
+  varieties,
   onSaved,
 }: PlotDetailSheetProps) {
   const [nirEditor, setNirEditor] = useState<NirEditorState | null>(null);
   const [harvestEditor, setHarvestEditor] = useState<HarvestEditorState | null>(null);
+  const [report, setReport] = useState<{ id: string; name: string } | null>(null);
   // Bumped after a stacked save so the history lists below re-pull. The plots
   // table behind refreshes through onSaved instead.
   const [historyNonce, setHistoryNonce] = useState(0);
@@ -180,6 +195,7 @@ export function PlotDetailSheet({
               rules={rules}
               seasonId={seasonId}
               growers={growers}
+              varieties={varieties}
               historyNonce={historyNonce}
               onSaved={onSaved}
               onClose={close}
@@ -187,6 +203,7 @@ export function PlotDetailSheet({
               onEditNir={(r) => setNirEditor({ mode: 'edit', row: r })}
               onNewHarvest={() => setHarvestEditor({ mode: 'create', areaId: row.id })}
               onEditHarvest={(r) => setHarvestEditor({ mode: 'edit', row: r })}
+              onOpenReport={() => setReport({ id: row.id, name: row.name || row.region || '' })}
             />
           )}
         </SheetContent>
@@ -216,6 +233,11 @@ export function PlotDetailSheet({
         stacked
         lockPlot
       />
+      <PlotReportDialog
+        plotId={report?.id ?? null}
+        plotName={report?.name ?? ''}
+        onClose={() => setReport(null)}
+      />
     </>
   );
 }
@@ -225,6 +247,7 @@ function PlotDetailBody({
   rules,
   seasonId,
   growers,
+  varieties,
   historyNonce,
   onSaved,
   onClose,
@@ -232,11 +255,13 @@ function PlotDetailBody({
   onEditNir,
   onNewHarvest,
   onEditHarvest,
+  onOpenReport,
 }: {
   row: PlotRow;
   rules: ParameterRule[];
   seasonId: string | null;
   growers: GrowerOption[];
+  varieties: VarietyOption[];
   historyNonce: number;
   onSaved: () => void;
   onClose: () => void;
@@ -244,6 +269,7 @@ function PlotDetailBody({
   onEditNir: (r: NirRow) => void;
   onNewHarvest: () => void;
   onEditHarvest: (r: HarvestRow) => void;
+  onOpenReport: () => void;
 }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -253,8 +279,32 @@ function PlotDetailBody({
   const [grower, setGrower] = useState<GrowerSelection>(() =>
     initialGrowerSelection(row.plot.details?.grower_id, row.growerName, growers)
   );
+  const [variety, setVariety] = useState<VarietySelection>(() =>
+    initialVarietySelection(row.varietyId, row.variety, varieties)
+  );
+  // The variety list is a separate request and may land after the drawer
+  // opened, which seeds an untouched picker as "new" with the stored name.
+  // Once the plot's own variety appears in the list, show it as the list entry
+  // — only while the user has not changed anything.
+  useEffect(() => {
+    setVariety((current) =>
+      current.varietyId === NEW_VARIETY &&
+      current.varietyName === (row.variety ?? '') &&
+      row.varietyId &&
+      varieties.some((v) => v.id === row.varietyId)
+        ? { varietyId: row.varietyId, varietyName: '' }
+        : current
+    );
+  }, [varieties, row.varietyId, row.variety]);
 
   const [nirRows, setNirRows] = useState<NirRow[] | null>(null);
+  const [nirView, setNirView] = useState<'list' | 'chart'>('list');
+  // The report's trend: fruit only (pomace oil is extraction loss, not the
+  // plot's oil), oldest first as NirTrendChart expects.
+  const nirTrend = useMemo(
+    () => (nirRows ?? []).filter((r) => r.sampleType === 'fruit').reverse(),
+    [nirRows]
+  );
   const [harvestRows, setHarvestRows] = useState<HarvestRow[] | null>(null);
 
   const now = useMemo(() => new Date(), []);
@@ -313,21 +363,53 @@ function PlotDetailBody({
     };
   }, [row.id, historyNonce]);
 
+  // The picker edits areas.planting_time. A plot imported with only a label
+  // ("2003", "2006/7") has no date yet, so the label seeds the picker.
+  const plantYearLabel = row.plot.details?.plant_year_label ?? null;
+  const initialPlantingTime =
+    row.plot.planting_time?.slice(0, 10) ?? parsePlantingDate(plantYearLabel).date ?? '';
+
+  const initialSize = row.size != null ? String(row.size) : '';
+
   const form = useForm<DetailsFormData>({
     resolver: zodResolver(detailsSchema),
     defaultValues: {
       region: row.region ?? '',
-      plant_year_label: row.plot.details?.plant_year_label ?? '',
-      plot_type: toFormValue(row.plotType),
-      harvester: toFormValue(row.harvester),
+      planting_time: initialPlantingTime,
+      size: initialSize,
       water_type: toFormValue(row.waterType),
-      takt_count: row.plot.details?.takt_count != null ? String(row.plot.details.takt_count) : '',
       yield_kg_per_dunam: row.yieldKgPerDunam != null ? String(row.yieldKgPerDunam) : '',
     },
   });
 
   // The band pill beside the yield field, live off what has been typed.
   const yieldDraft = useWatch({ control: form.control, name: 'yield_kg_per_dunam' });
+
+  // "{שם} — {שנת נטיעה} — {זן}", live off the three fields above it.
+  const nameDraft = useWatch({ control: form.control, name: 'region' });
+  const plantingDraft = useWatch({ control: form.control, name: 'planting_time' });
+  const composedName = useMemo(() => {
+    const varietyName =
+      variety.varietyId === NEW_VARIETY
+        ? variety.varietyName
+        : (varieties.find((v) => v.id === variety.varietyId)?.name ?? '');
+    // Same rule as every other olive screen (plotDisplayName): with "שם" empty,
+    // the plot's own stored name stands in for it.
+    return plotDisplayName({
+      name: row.plot.name,
+      region: nameDraft,
+      plantYearLabel: plantYearForName(plantingDraft, initialPlantingTime, plantYearLabel),
+      variety: varietyName,
+    });
+  }, [
+    nameDraft,
+    plantingDraft,
+    initialPlantingTime,
+    plantYearLabel,
+    variety,
+    varieties,
+    row.plot.name,
+  ]);
   const yieldLoad = useMemo(
     () => (yieldDraft ? yieldLoadInfo(Number(yieldDraft)) : null),
     [yieldDraft]
@@ -344,12 +426,27 @@ function PlotDetailBody({
         body: JSON.stringify({
           area_id: row.id,
           ...growerPayload(grower),
+          // Only when changed: the variety lives on `areas`, and an untouched
+          // picker should not rewrite it.
+          ...(varietyChanged(variety, row.varietyId, row.variety) && varietyPayload(variety)),
           region: values.region || null,
-          plant_year_label: values.plant_year_label || null,
-          plot_type: fromFormValue(values.plot_type),
-          harvester: fromFormValue(values.harvester),
+          // The label wins over the date wherever the year is shown, so a
+          // picked date retires it — otherwise the change would not show.
+          plant_year_label:
+            (values.planting_time ?? '') === initialPlantingTime ? plantYearLabel : null,
+          ...((values.planting_time ?? '') !== initialPlantingTime && {
+            planting_time: values.planting_time || null,
+          }),
+          // Only when changed, like planting_time: it lives on `areas`.
+          ...((values.size ?? '') !== initialSize && {
+            size: values.size ? Number(values.size) : null,
+          }),
+          // No longer edited here, but the details write is a full-row
+          // upsert — omitting them would null whatever is stored.
+          plot_type: row.plotType,
+          harvester: row.harvester,
           water_type: fromFormValue(values.water_type),
-          takt_count: values.takt_count ? Number(values.takt_count) : null,
+          takt_count: row.plot.details?.takt_count ?? null,
         }),
       });
 
@@ -391,40 +488,51 @@ function PlotDetailBody({
     }
   };
 
+  const harvestEmpty = harvestRows?.length === 0;
+
   return (
     <>
       {/* Identity */}
-      <div className="olive-form-hero shrink-0 px-6 py-5">
+      <div className="olive-form-hero flex shrink-0 items-start gap-4 px-6 py-5">
         <div className="olive-hero-pattern" />
-        <div className="relative z-10">
+        <div className="relative z-10 min-w-0 flex-1">
+          {/* row.name is already "{שם} — {שנה} — {זן}" (plotDisplayName). */}
           <SheetTitle className="olive-hero-title text-xl tracking-tight md:text-2xl">
             {row.name || '—'}
           </SheetTitle>
-          <p className="relative z-10 mt-1 text-sm text-white/75">
-            {[row.variety, row.growerName, row.region].filter(Boolean).join(' · ') || ' '}
-          </p>
+          {row.growerName && <p className="mt-1 text-xs text-white/70">{row.growerName}</p>}
         </div>
-        <div className="absolute top-4 left-4 z-10 flex items-center gap-2">
+        {/* In the flow rather than absolutely placed, so a long title wraps
+            before it reaches the buttons instead of running under them. */}
+        <div className="relative z-10 flex shrink-0 items-center gap-1.5">
           {/* Up here rather than in the footer: the report is about the plot as
               a whole, not about the attributes form the footer saves, and the
               footer put it next to שמור פרטים where it read as part of saving.
-              Still disabled while the form is dirty — the report renders the
-              saved row, so unsaved edits would silently not appear on it. */}
+              While the form is dirty it does not open — the report renders the
+              saved row, so unsaved edits would silently not appear on it. It
+              stays clickable and says so in a toast: a disabled button's
+              tooltip never shows on touch, and on desktop it read as broken. */}
           <button
             type="button"
-            disabled={form.formState.isDirty}
-            title={form.formState.isDirty ? 'שמור תחילה כדי לכלול את השינויים' : undefined}
-            onClick={() => window.open(`/olive/report/plot/${row.id}`, '_blank', 'noopener')}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-white/25 bg-white/10 px-2.5 py-1.5 text-xs font-semibold text-white/90 transition-colors hover:bg-white/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/10"
+            aria-label="הפק דוח חלקה"
+            aria-disabled={form.formState.isDirty}
+            onClick={() => {
+              if (form.formState.isDirty) {
+                showToast.info('שמור את השינויים כדי שייכללו בדוח');
+                return;
+              }
+              onOpenReport();
+            }}
+            className="group inline-flex h-9 items-center gap-2 rounded-full border border-sidebar-primary/55 bg-sidebar-primary/14 ps-3.5 pe-3 text-sm font-semibold text-sidebar-accent-foreground shadow-sm transition-all hover:border-sidebar-primary/85 hover:bg-sidebar-primary/24 hover:text-white focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none active:scale-[0.97] aria-disabled:opacity-50 aria-disabled:hover:bg-sidebar-primary/14"
           >
-            <FileText className="size-3.5" />
-            הפק דוח
+            <FileText className="size-4" />
+            <span className="hidden sm:inline">הפק דוח</span>
           </button>
           <button
             type="button"
             onClick={onClose}
             aria-label="סגור"
-            className="rounded-lg p-1.5 text-white/80 transition-colors hover:bg-white/15 hover:text-white"
+            className="flex size-9 items-center justify-center rounded-full text-white/75 transition-colors hover:bg-white/15 hover:text-white focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none"
           >
             <X className="size-5" />
           </button>
@@ -432,49 +540,39 @@ function PlotDetailBody({
       </div>
 
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4 md:p-6">
-        {/* Stats. Three across rather than four, to give the yield band room. */}
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <Stat label="גודל (דונם)" value={num(row.size, 1)} />
-          <Stat label="טאקטים" value={String(row.taktCount)} />
-          {/* The season's planned figure, not an actual — it is what the
-              harvest form scores each pass against. */}
-          <Stat
-            label="יבול צפוי (ק״ג/דונם)"
-            value={num(row.yieldKgPerDunam)}
-            pill={
-              row.yieldLoad
-                ? {
-                    label: row.yieldLoad.label,
-                    className: PARAMETER_STATUS_CONFIG[row.yieldLoad.status].pillClass,
-                  }
-                : undefined
-            }
-          />
-          <Stat label="בדיקה אחרונה" value={row.lastMeasuredLabel ?? 'טרם נבדקה'} small />
-          <Stat
-            label="קטגוריה"
-            value={categoryLabel(row.category)}
-            small
-            hint={row.harvested ? 'נמסק' : undefined}
-          />
-        </div>
-
         {/* NIR history */}
         <section className="olive-section olive-section-values px-5 py-4">
           <div className="olive-section-header">
             <div className="olive-section-icon olive-icon-values">
               <FlaskConical className="size-4" />
             </div>
-            <h3 className="text-base font-bold">בדיקות NIR אחרונות</h3>
+            <h3 className="text-base font-bold">בדיקות NIR</h3>
+            {nirRows !== null && nirRows.length > 0 && (
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="mr-auto size-7"
+                onClick={() => setNirView((v) => (v === 'list' ? 'chart' : 'list'))}
+                aria-label={nirView === 'list' ? 'הצג כגרף' : 'הצג כרשימה'}
+                title={nirView === 'list' ? 'הצג כגרף' : 'הצג כרשימה'}
+              >
+                {nirView === 'list' ? (
+                  <ChartLine className="size-4" />
+                ) : (
+                  <List className="size-4" />
+                )}
+              </Button>
+            )}
             <Button
               type="button"
               size="sm"
               variant="ghost"
-              className="mr-auto h-7 text-xs"
+              className={`h-7 text-xs ${nirRows !== null && nirRows.length > 0 ? '' : 'mr-auto'}`}
               onClick={onNewNir}
             >
               <Plus className="ml-1 size-3.5" />
-              בדיקה חדשה
+              בדיקה
             </Button>
           </div>
 
@@ -482,59 +580,102 @@ function PlotDetailBody({
             <Skeleton />
           ) : nirRows.length === 0 ? (
             <p className="olive-muted text-sm">טרם בוצעה בדיקה בחלקה זו</p>
+          ) : nirView === 'chart' ? (
+            nirTrend.length < 2 ? (
+              <p className="olive-muted text-sm">נדרשות לפחות 2 בדיקות פרי כדי להציג גרף מגמה</p>
+            ) : (
+              <NirTrendChart rows={nirTrend} />
+            )
           ) : (
             <>
-              <ul className="divide-y text-sm">
-                {nirRows.slice(0, HISTORY_LIMIT).map((r) => {
-                  const match = evaluateParameter(rules, 'oil', r.oil);
-                  return (
-                    <li key={r.id}>
-                      {/* text-start is load-bearing: a button centres its text. */}
-                      <button
-                        type="button"
-                        onClick={() => onEditNir(r)}
-                        aria-label={`ערוך בדיקה מתאריך ${r.reportDate ?? ''}`}
-                        className="hover:bg-muted/50 flex w-full flex-wrap items-center gap-x-3 gap-y-1 rounded-md px-2 py-2 text-start transition-colors focus-visible:ring-2 focus-visible:outline-none"
-                      >
-                        <span className="tabular-nums">{r.reportDate ?? '—'}</span>
-                        <span className="olive-muted text-xs">
-                          {daysSinceLabel(r.reportDate, now) ?? ''}
+              {/* The latest reading on its scales; the rest as one-line
+                  history. Gauges on every row turned five readings into a
+                  wall — the question here is "where is it now". */}
+              {(() => {
+                const r = nirRows[0];
+                const fruit = r.sampleType === 'fruit';
+                // Fruit only — pomace oil is extraction loss and has no verdict.
+                const match = fruit ? evaluateParameter(rules, 'oil', r.oil) : null;
+                return (
+                  <button
+                    type="button"
+                    onClick={() => onEditNir(r)}
+                    aria-label={`ערוך בדיקה מתאריך ${r.reportDate ?? ''}`}
+                    className="hover:bg-muted/40 -mx-2 block w-[calc(100%+1rem)] rounded-lg px-2 py-1 text-start transition-colors focus-visible:ring-2 focus-visible:outline-none"
+                  >
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+                      <span className="font-semibold tabular-nums">{r.reportDate ?? '—'}</span>
+                      <span className="olive-muted text-xs">
+                        {daysSinceLabel(r.reportDate, now) ?? ''}
+                      </span>
+                      <NirRowMarks r={r} />
+                      {match && (
+                        <span
+                          className={`olive-pill mr-auto ${PARAMETER_STATUS_CONFIG[match.status].pillClass}`}
+                        >
+                          {match.message}
                         </span>
-                        {/* This list has its own markup, so it does not inherit
-                            the log's נשלח column. Without the glyph, marking a
-                            reading sent in the log and then opening the plot
-                            would look like it had not taken. */}
-                        {r.sentToClientAt && (
-                          <span
-                            className="inline-flex"
-                            title={`נשלח ללקוח ב-${r.sentToClientAt}`}
-                            aria-label="נשלח ללקוח"
-                          >
-                            <MailCheck className="text-primary size-3.5" />
-                          </span>
-                        )}
-                        <span className="mr-auto flex items-center gap-3 tabular-nums">
-                          <span>
-                            <span className="olive-muted text-xs">שמן </span>
-                            {num(r.oil, 1)}
-                          </span>
-                          <span>
-                            <span className="olive-muted text-xs">מים </span>
-                            {num(r.water, 1)}
-                          </span>
-                          {match && (
-                            <span
-                              className={`olive-pill ${PARAMETER_STATUS_CONFIG[match.status].pillClass}`}
-                            >
-                              {match.message}
+                      )}
+                    </div>
+                    <div className="mt-2 grid gap-x-6 sm:grid-cols-2">
+                      <NirGauge
+                        label="שמן"
+                        value={r.oil}
+                        rules={rules}
+                        parameterCode="oil"
+                        neutral={!fruit}
+                      />
+                      <NirGauge
+                        label="מים"
+                        value={r.water}
+                        rules={rules}
+                        parameterCode="water"
+                        neutral={!fruit}
+                      />
+                    </div>
+                  </button>
+                );
+              })()}
+
+              {nirRows.length > 1 && (
+                <ul className="mt-2 divide-y border-t text-sm">
+                  {nirRows.slice(1, HISTORY_LIMIT).map((r) => {
+                    const match =
+                      r.sampleType === 'fruit' ? evaluateParameter(rules, 'oil', r.oil) : null;
+                    return (
+                      <li key={r.id}>
+                        {/* text-start is load-bearing: a button centres its text. */}
+                        <button
+                          type="button"
+                          onClick={() => onEditNir(r)}
+                          aria-label={`ערוך בדיקה מתאריך ${r.reportDate ?? ''}`}
+                          className="hover:bg-muted/50 flex w-full flex-wrap items-center gap-x-3 gap-y-1 rounded-md px-2 py-2 text-start transition-colors focus-visible:ring-2 focus-visible:outline-none"
+                        >
+                          <span className="olive-muted tabular-nums">{r.reportDate ?? '—'}</span>
+                          <NirRowMarks r={r} />
+                          <span className="mr-auto flex items-center gap-3 tabular-nums">
+                            <span>
+                              <span className="olive-muted text-xs">שמן </span>
+                              {num(r.oil, 1)}
                             </span>
-                          )}
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
+                            <span>
+                              <span className="olive-muted text-xs">מים </span>
+                              {num(r.water, 1)}
+                            </span>
+                            {match && (
+                              <span
+                                className={`inline-block size-2 rounded-full olive-gauge-${match.status} bg-[var(--gauge-c)]`}
+                                title={match.message}
+                                aria-label={match.message}
+                              />
+                            )}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
               {nirRows.length > HISTORY_LIMIT && (
                 <Link
                   href={`/olive/nir?areaId=${row.id}`}
@@ -548,12 +689,18 @@ function PlotDetailBody({
         </section>
 
         {/* Harvest history */}
-        <section className="olive-section olive-section-sample px-5 py-4">
-          <div className="olive-section-header">
+        <section
+          className={`olive-section olive-section-sample px-5 ${harvestEmpty ? 'py-3' : 'py-4'}`}
+        >
+          {/* Empty: one row, the note beside the title, no divider — there is
+              nothing below for it to separate. The ! is needed because
+              olive.css is unlayered and outranks Tailwind's utilities layer. */}
+          <div className={`olive-section-header ${harvestEmpty ? 'mb-0! border-b-0! pb-0!' : ''}`}>
             <div className="olive-section-icon olive-icon-sample">
               <Tractor className="size-4" />
             </div>
             <h3 className="text-base font-bold">מעברי מסיק</h3>
+            {harvestEmpty && <span className="olive-muted text-sm">טרם נרשם מסיק</span>}
             <Button
               type="button"
               size="sm"
@@ -562,15 +709,13 @@ function PlotDetailBody({
               onClick={onNewHarvest}
             >
               <Plus className="ml-1 size-3.5" />
-              מעבר חדש
+              מעבר
             </Button>
           </div>
 
           {harvestRows === null ? (
             <Skeleton />
-          ) : harvestRows.length === 0 ? (
-            <p className="olive-muted text-sm">טרם נרשם מסיק בחלקה זו</p>
-          ) : (
+          ) : harvestEmpty ? null : (
             <ul className="divide-y text-sm">
               {harvestRows.slice(0, HISTORY_LIMIT).map((r) => (
                 <li key={r.id}>
@@ -602,7 +747,60 @@ function PlotDetailBody({
 
         {/* Attributes */}
         <Form {...form}>
-          <form id="plot-details-form" onSubmit={form.handleSubmit(onSubmit)}>
+          <form id="plot-details-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+            {/* One row, no body: a single figure does not need the header /
+                divider / label stack the list sections use. */}
+            <section className="olive-section olive-section-type px-5 py-3">
+              {/* Not an olive_plot_details column — it lives in
+                  yield_estimates, keyed by season, and is saved by a second
+                  request from the same submit. */}
+              <FormField
+                control={form.control}
+                name="yield_kg_per_dunam"
+                render={({ field }) => (
+                  <FormItem className="gap-1">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                      <div className="olive-section-icon olive-icon-type">
+                        <Sprout className="size-4" />
+                      </div>
+                      <FormLabel className="text-base font-bold">יבול צפוי</FormLabel>
+                      {seasonId ? (
+                        yieldLoad && (
+                          <span
+                            className={`olive-pill ${PARAMETER_STATUS_CONFIG[yieldLoad.status].pillClass}`}
+                          >
+                            {yieldLoad.label}
+                          </span>
+                        )
+                      ) : (
+                        <span className="olive-muted text-xs">אין עונה פעילה</span>
+                      )}
+                      <div className="mr-auto flex items-center gap-2">
+                        <FormControl>
+                          <Input
+                            className="h-9 w-24 text-center tabular-nums"
+                            type="number"
+                            // step="any" and no min on purpose. Native constraint
+                            // validation blocks submit BEFORE react-hook-form
+                            // runs, silently and with an unstyled English
+                            // tooltip — a step of 10 would have rejected 1234.
+                            // The zod refine owns this, so the message is ours.
+                            step="any"
+                            inputMode="decimal"
+                            disabled={!seasonId}
+                            {...field}
+                            value={field.value ?? ''}
+                          />
+                        </FormControl>
+                        <span className="olive-muted text-xs whitespace-nowrap">ק״ג/דונם</span>
+                      </div>
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </section>
+
             <section className="olive-section olive-section-plot px-5 py-4">
               <div className="olive-section-header">
                 <div className="olive-section-icon olive-icon-plot">
@@ -619,6 +817,84 @@ function PlotDetailBody({
               )}
 
               <div className="grid gap-3 sm:grid-cols-2">
+                {/* Order follows the client's naming: שם (the block or nickname,
+                    stored as region), planting date, variety — the three parts
+                    of a plot name like "מיצר — 2003 — ארבקינה". */}
+                <FormField
+                  control={form.control}
+                  name="region"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-sm font-semibold">שם</FormLabel>
+                      <FormControl>
+                        <Input className="h-9" {...field} value={field.value ?? ''} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="planting_time"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-sm font-semibold">תאריך נטיעה</FormLabel>
+                      <FormControl>
+                        <Input className="h-9" type="date" {...field} value={field.value ?? ''} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div>
+                  <label className="text-sm font-semibold" id="plot-detail-variety">
+                    זן
+                  </label>
+                  <div className="mt-2" aria-labelledby="plot-detail-variety">
+                    <VarietyPicker varieties={varieties} value={variety} onChange={setVariety} />
+                  </div>
+                </div>
+
+                {/* Calculated, not stored — the client's naming convention made
+                    visible, so a mistyped part shows up before saving. */}
+                <div>
+                  <label className="text-sm font-semibold" htmlFor="plot-detail-composed-name">
+                    שם מלא
+                  </label>
+                  <Input
+                    id="plot-detail-composed-name"
+                    className="bg-muted/40 mt-2 h-9"
+                    value={composedName}
+                    readOnly
+                    tabIndex={-1}
+                    placeholder="—"
+                  />
+                </div>
+
+                <FormField
+                  control={form.control}
+                  name="size"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-sm font-semibold">גודל (דונם)</FormLabel>
+                      <FormControl>
+                        <Input
+                          className="h-9"
+                          type="number"
+                          inputMode="decimal"
+                          step="0.01"
+                          min="0"
+                          {...field}
+                          value={field.value ?? ''}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
                 <div>
                   <label className="text-sm font-semibold" id="plot-detail-grower">
                     מגדל
@@ -627,20 +903,6 @@ function PlotDetailBody({
                     <GrowerPicker growers={growers} value={grower} onChange={setGrower} />
                   </div>
                 </div>
-
-                <FormField
-                  control={form.control}
-                  name="region"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-semibold">גוש</FormLabel>
-                      <FormControl>
-                        <Input className="h-9" {...field} value={field.value ?? ''} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
 
                 {SELECTS.map((s) => (
                   <FormField
@@ -674,94 +936,7 @@ function PlotDetailBody({
                     )}
                   />
                 ))}
-
-                <FormField
-                  control={form.control}
-                  name="plant_year_label"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-semibold">שנת נטיעה (תווית)</FormLabel>
-                      <FormControl>
-                        <Input
-                          className="h-9"
-                          placeholder="2006/7"
-                          {...field}
-                          value={field.value ?? ''}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="takt_count"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-semibold">מספר טאקטים</FormLabel>
-                      <FormControl>
-                        <Input
-                          className="h-9"
-                          type="number"
-                          min={1}
-                          max={10}
-                          {...field}
-                          value={field.value ?? ''}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                {/* Not an olive_plot_details column — it lives in
-                    yield_estimates, keyed by season, and is saved by a second
-                    request from the same submit. */}
-                <FormField
-                  control={form.control}
-                  name="yield_kg_per_dunam"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-semibold">יבול צפוי (ק״ג/דונם)</FormLabel>
-                      <FormControl>
-                        <Input
-                          className="h-9"
-                          type="number"
-                          // step="any" and no min on purpose. Native constraint
-                          // validation blocks submit BEFORE react-hook-form
-                          // runs, silently and with an unstyled English
-                          // tooltip — a step of 10 would have rejected 1234.
-                          // The zod refine owns this, so the message is ours.
-                          step="any"
-                          inputMode="decimal"
-                          disabled={!seasonId}
-                          {...field}
-                          value={field.value ?? ''}
-                        />
-                      </FormControl>
-                      {seasonId ? (
-                        yieldLoad && (
-                          <span
-                            className={`olive-pill ${PARAMETER_STATUS_CONFIG[yieldLoad.status].pillClass} mt-1`}
-                          >
-                            {yieldLoad.label}
-                          </span>
-                        )
-                      ) : (
-                        <p className="olive-muted text-xs">אין עונה פעילה</p>
-                      )}
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
               </div>
-
-              {/* The split of ownership is deliberate and documented on the
-                  plots route: these columns live on `areas`, not here. */}
-              <p className="olive-muted mt-3 text-xs">
-                שם, זן, שנת נטיעה וגודל נערכים במסך השטחים.
-              </p>
             </section>
           </form>
         </Form>
@@ -790,27 +965,28 @@ function PlotDetailBody({
   );
 }
 
-function Stat({
-  label,
-  value,
-  hint,
-  pill,
-  small,
-}: {
-  label: string;
-  value: string;
-  hint?: string;
-  /** A tinted band under the figure, e.g. the yield load. */
-  pill?: { label: string; className: string };
-  small?: boolean;
-}) {
+/**
+ * The sent glyph and the pomace tag, shared by the latest-reading card and the
+ * history rows. This list has its own markup, so it does not inherit the log's
+ * נשלח column; without the glyph, marking a reading sent in the log and then
+ * opening the plot would look like it had not taken.
+ */
+function NirRowMarks({ r }: { r: NirRow }) {
   return (
-    <div className="olive-card p-3">
-      <div className="olive-muted text-xs font-semibold">{label}</div>
-      <div className={small ? 'text-sm font-bold' : 'text-lg font-bold tabular-nums'}>{value}</div>
-      {pill && <span className={`olive-pill mt-1 ${pill.className}`}>{pill.label}</span>}
-      {hint && <div className="text-primary text-xs font-semibold">{hint}</div>}
-    </div>
+    <>
+      {r.sentToClientAt && (
+        <span
+          className="inline-flex"
+          title={`נשלח ללקוח ב-${r.sentToClientAt}`}
+          aria-label="נשלח ללקוח"
+        >
+          <MailCheck className="text-primary size-3.5" />
+        </span>
+      )}
+      {r.sampleType === 'pomace' && (
+        <span className="olive-pill olive-pill-sample">{NIR_SAMPLE_TYPE_LABELS.pomace}</span>
+      )}
+    </>
   );
 }
 

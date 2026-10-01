@@ -168,6 +168,12 @@ export interface OliveThresholdsDialogProps {
   /** What the cards read right now, for the "before" side of the preview. */
   currentCounts: Record<PlotCategory, number>;
   onSaved: () => void;
+  /**
+   * Render the editor on a page (/olive/thresholds) instead of in a dialog.
+   * `open` should then be true: the seeding and the preview's instant key off
+   * it. Cancel discards the edits in place, and nothing closes.
+   */
+  inline?: boolean;
 }
 
 export function OliveThresholdsDialog({
@@ -180,6 +186,7 @@ export function OliveThresholdsDialog({
   weatherDays,
   currentCounts,
   onSaved,
+  inline = false,
 }: OliveThresholdsDialogProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -205,6 +212,8 @@ export function OliveThresholdsDialog({
    * what the page last fetched; the population here is two people, so that is
    * the right trade.
    */
+  // Inline, the props change only after a save's refetch, so re-seeding then
+  // shows what was stored — and keeps the tab the user was on.
   useEffect(() => {
     if (!open) return;
     form.reset({
@@ -213,8 +222,22 @@ export function OliveThresholdsDialog({
       ...weatherToForm(toWeatherThresholds(weatherThresholds)),
     });
     setError(null);
-    setTab('category');
-  }, [open, categoryThresholds, weatherThresholds, rules, form]);
+    if (!inline) setTab('category');
+  }, [open, inline, categoryThresholds, weatherThresholds, rules, form]);
+
+  /** Dialog: close. Page: put the stored values back. */
+  const dismiss = () => {
+    if (!inline) {
+      onOpenChange(false);
+      return;
+    }
+    form.reset({
+      ...categoryToForm(toCategoryThresholds(categoryThresholds)),
+      ...alertToForm(readAlertBounds(rules)),
+      ...weatherToForm(toWeatherThresholds(weatherThresholds)),
+    });
+    setError(null);
+  };
 
   // --- Live preview ---
 
@@ -295,7 +318,7 @@ export function OliveThresholdsDialog({
     const weatherDirty = WEATHER_FIELD_NAMES.some((name) => dirty[name]);
 
     if (!categoryDirty && !alertDirty && !weatherDirty) {
-      onOpenChange(false);
+      if (!inline) onOpenChange(false);
       return;
     }
 
@@ -335,7 +358,7 @@ export function OliveThresholdsDialog({
       }
 
       showToast.success('הספים נשמרו');
-      onOpenChange(false);
+      if (!inline) onOpenChange(false);
       onSaved();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'שגיאה בשמירת הספים';
@@ -366,6 +389,94 @@ export function OliveThresholdsDialog({
     }
   };
 
+  // A page has no DialogFooter to pin the buttons; a plain row does the job.
+  const Footer = inline ? InlineFooter : DialogFooter;
+
+  const editor = (
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+        <Tabs value={tab} onValueChange={setTab}>
+          <TabsList className="w-full">
+            <TabsTrigger value="category" className="flex-1">
+              כרטיסי סטטוס
+              {categoryErrors > 0 && <ErrorCount count={categoryErrors} />}
+            </TabsTrigger>
+            <TabsTrigger value="alert" className="flex-1">
+              ספי התראות
+              {alertErrors > 0 && <ErrorCount count={alertErrors} />}
+            </TabsTrigger>
+            <TabsTrigger value="weather" className="flex-1">
+              מזג אוויר
+              {weatherErrors > 0 && <ErrorCount count={weatherErrors} />}
+            </TabsTrigger>
+          </TabsList>
+
+          {/* Dialog has no max-height of its own and there is no scroll-area
+              component, so without this the second tab runs off a phone
+              screen with no way to reach Save. */}
+          <div className={inline ? 'mt-4' : 'mt-4 max-h-[50vh] overflow-y-auto pe-1'}>
+            <TabsContent value="category" className="mt-0">
+              <CategoryTab form={form} onRestore={restore} />
+            </TabsContent>
+            <TabsContent value="alert" className="mt-0">
+              <AlertTab form={form} rules={rules} onRestore={restore} />
+            </TabsContent>
+            <TabsContent value="weather" className="mt-0">
+              <WeatherTab form={form} onRestore={restore} />
+            </TabsContent>
+          </div>
+        </Tabs>
+
+        <Separator />
+
+        {/* The card counts are not what the weather tab moves — weather never
+            reaches classifyPlotCategory — so showing them there would imply it
+            does. Same slot either way, so the dialog does not jump. */}
+        {tab === 'weather' ? (
+          <WeatherPreview weather={weatherPreview} />
+        ) : (
+          <PreviewStrip before={currentCounts} after={preview?.counts ?? null} />
+        )}
+
+        {issues.map((issue) => (
+          <p
+            key={`${issue.field}:${issue.message}`}
+            className="flex items-start gap-2 text-xs text-destructive"
+          >
+            <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+            {issue.message}
+          </p>
+        ))}
+
+        {preview?.warnings.map((warning) => (
+          <p key={warning} className="olive-muted flex items-start gap-2 text-xs">
+            <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+            {warning}
+          </p>
+        ))}
+
+        <p className="olive-muted flex items-start gap-2 text-xs">
+          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+          הספים גלובליים — שמירה משנה את הסטטוסים אצל כל הלקוחות במערכת, לא רק בחשבון זה.
+        </p>
+
+        {error && <p className="text-sm text-destructive">{error}</p>}
+
+        <Footer>
+          <Button type="button" variant="ghost" onClick={dismiss} disabled={saving}>
+            {inline ? 'בטל שינויים' : 'ביטול'}
+          </Button>
+          <Button type="submit" disabled={saving}>
+            {saving && <Loader2 className="ml-2 size-4 animate-spin" />}
+            {saving ? 'שומר...' : 'שמור'}
+          </Button>
+        </Footer>
+      </form>
+    </Form>
+  );
+
+  if (inline) return editor;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl">
@@ -375,95 +486,14 @@ export function OliveThresholdsDialog({
             הספים שמחליטים את סטטוס החלקות. הם משותפים לכל הלקוחות במערכת.
           </DialogDescription>
         </DialogHeader>
-
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <Tabs value={tab} onValueChange={setTab}>
-              <TabsList className="w-full">
-                <TabsTrigger value="category" className="flex-1">
-                  כרטיסי סטטוס
-                  {categoryErrors > 0 && <ErrorCount count={categoryErrors} />}
-                </TabsTrigger>
-                <TabsTrigger value="alert" className="flex-1">
-                  ספי התראות
-                  {alertErrors > 0 && <ErrorCount count={alertErrors} />}
-                </TabsTrigger>
-                <TabsTrigger value="weather" className="flex-1">
-                  מזג אוויר
-                  {weatherErrors > 0 && <ErrorCount count={weatherErrors} />}
-                </TabsTrigger>
-              </TabsList>
-
-              {/* Dialog has no max-height of its own and there is no scroll-area
-                  component, so without this the second tab runs off a phone
-                  screen with no way to reach Save. */}
-              <div className="mt-4 max-h-[50vh] overflow-y-auto pe-1">
-                <TabsContent value="category" className="mt-0">
-                  <CategoryTab form={form} onRestore={restore} />
-                </TabsContent>
-                <TabsContent value="alert" className="mt-0">
-                  <AlertTab form={form} rules={rules} onRestore={restore} />
-                </TabsContent>
-                <TabsContent value="weather" className="mt-0">
-                  <WeatherTab form={form} onRestore={restore} />
-                </TabsContent>
-              </div>
-            </Tabs>
-
-            <Separator />
-
-            {/* The card counts are not what the weather tab moves — weather never
-                reaches classifyPlotCategory — so showing them there would imply it
-                does. Same slot either way, so the dialog does not jump. */}
-            {tab === 'weather' ? (
-              <WeatherPreview weather={weatherPreview} />
-            ) : (
-              <PreviewStrip before={currentCounts} after={preview?.counts ?? null} />
-            )}
-
-            {issues.map((issue) => (
-              <p
-                key={`${issue.field}:${issue.message}`}
-                className="flex items-start gap-2 text-xs text-destructive"
-              >
-                <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-                {issue.message}
-              </p>
-            ))}
-
-            {preview?.warnings.map((warning) => (
-              <p key={warning} className="olive-muted flex items-start gap-2 text-xs">
-                <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-                {warning}
-              </p>
-            ))}
-
-            <p className="olive-muted flex items-start gap-2 text-xs">
-              <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-              הספים גלובליים — שמירה משנה את הסטטוסים אצל כל הלקוחות במערכת, לא רק בחשבון זה.
-            </p>
-
-            {error && <p className="text-sm text-destructive">{error}</p>}
-
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => onOpenChange(false)}
-                disabled={saving}
-              >
-                ביטול
-              </Button>
-              <Button type="submit" disabled={saving}>
-                {saving && <Loader2 className="ml-2 size-4 animate-spin" />}
-                {saving ? 'שומר...' : 'שמור'}
-              </Button>
-            </DialogFooter>
-          </form>
-        </Form>
+        {editor}
       </DialogContent>
     </Dialog>
   );
+}
+
+function InlineFooter({ children }: { children: React.ReactNode }) {
+  return <div className="flex justify-end gap-2">{children}</div>;
 }
 
 // --- Tabs ---

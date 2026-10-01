@@ -154,6 +154,11 @@ export interface CreateOlivePlotInput {
   name: string;
   description?: string | null;
   variety?: string | null;
+  /**
+   * A varieties.id from the picker. Wins over `variety` in
+   * trg_areas_resolve_variety, which then writes the name alongside it.
+   */
+  varietyId?: string | null;
   size?: number | null;
   plantingTime?: string | null;
   details?: OlivePlotDetailsInput;
@@ -201,13 +206,17 @@ export async function createOlivePlot(
       size_unit_type: 'dunam',
       area_type: 'outdoor',
       variety: input.variety ?? null,
+      variety_id: input.varietyId ?? null,
       planting_time: input.plantingTime ?? null,
     })
-    .select('id')
+    // variety comes back as the trigger resolved it — the canonical name, even
+    // when the caller sent only an id or an alias — and the takts copy that.
+    .select('id, variety')
     .single();
 
   if (areaError) throw areaError;
   const areaId = (area as { id: string }).id;
+  const varietyName = (area as { variety: string | null }).variety ?? null;
 
   // 2. Tenancy. customer_areas is the ONLY thing that makes this plot reachable.
   const { error: linkError } = await (adminClient.from('customer_areas') as any).insert({
@@ -239,7 +248,7 @@ export async function createOlivePlot(
         area_id: areaId,
         name: taktName(i + 1),
         level: 1,
-        variety: input.variety ?? null,
+        variety: varietyName,
       }))
     );
 

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   toNirRow,
+  rowStatus,
   filterNirRows,
   sortNirRows,
   hasActiveNirFilters,
@@ -103,6 +104,11 @@ function row(overrides: Partial<NirRow> = {}): NirRow {
     subAreaId: null,
     subAreaName: null,
     direction: null,
+    sampleType: 'fruit',
+    crushingType: null,
+    decanterDifferential: null,
+    monopumpSpeed: null,
+    malaxationTemp: null,
     oil: null,
     water: null,
     dry: null,
@@ -364,6 +370,47 @@ describe('filterNirRows', () => {
   it('combines filters with AND', () => {
     expect(filter({ areaId: 'area-2', direction: 'דרום' })).toEqual(['b']);
     expect(filter({ areaId: 'area-1', direction: 'דרום' })).toEqual([]);
+  });
+});
+
+describe('sample type', () => {
+  it('reads a row stored before the column existed as fruit', () => {
+    expect(toNirRow(apiReport(), TAKTS).sampleType).toBe('fruit');
+  });
+
+  it('maps a pomace reading and its mill settings', () => {
+    const r = toNirRow(
+      apiReport({
+        detail: {
+          sample_type: 'pomace',
+          crushing_type: 'פטישים',
+          decanter_differential: '12.50',
+          monopump_speed: '30',
+          malaxation_temp: '27.5',
+        },
+      }),
+      TAKTS
+    );
+    expect(r.sampleType).toBe('pomace');
+    expect(r.crushingType).toBe('פטישים');
+    expect(r.decanterDifferential).toBe(12.5);
+    expect(r.monopumpSpeed).toBe(30);
+    expect(r.malaxationTemp).toBe(27.5);
+  });
+
+  it('gives a pomace reading no ripeness verdict, whatever its oil', () => {
+    expect(rowStatus(row({ oil: 25 }), RULES)).not.toBeNull();
+    expect(rowStatus(row({ oil: 25, sampleType: 'pomace' }), RULES)).toBeNull();
+  });
+
+  it('filters by sample type and counts the filter', () => {
+    const rows = [row({ id: 'f' }), row({ id: 'p', sampleType: 'pomace' })];
+    const ids = (sampleType: string) =>
+      filterNirRows(rows, { ...EMPTY_NIR_FILTERS, sampleType }, RULES).map((r) => r.id);
+    expect(ids('all')).toEqual(['f', 'p']);
+    expect(ids('pomace')).toEqual(['p']);
+    expect(ids('fruit')).toEqual(['f']);
+    expect(countActiveNirFilters({ ...EMPTY_NIR_FILTERS, sampleType: 'pomace' })).toBe(1);
   });
 });
 

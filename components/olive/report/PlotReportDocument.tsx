@@ -1,8 +1,12 @@
 /**
  * The printable plot status report (דוח סטטוס חלקה).
  *
- * A port of the client prototype's buildReportHTML (docs/code.html:5926) — the
- * layout, section order and wording the client already uses and signed off on.
+ * Laid out after the client's sample report of 2026-09-29, which trimmed the
+ * prototype's buildReportHTML (docs/code.html:5926): three large tiles plus a
+ * smaller acidity/green row, a per-measurement recommendations list, one shared
+ * trend chart with a legend, a five-column history of the last checks, and the
+ * company's details in the footer. What the sample gives up by that is listed
+ * in docs/OLIVE_PLOT_REPORT_SAMPLE_ISSUES.md.
  *
  * MUST STAY PURE. No hooks, no 'use client', no context. The PDF endpoint runs
  * this through renderToStaticMarkup with no React runtime and no provider tree
@@ -10,22 +14,23 @@
  * working and only the PDF would come out wrong.
  *
  * It carries its own <style> so the page and the PDF are styled by one source;
- * see components/olive/report/report-styles.ts for why that is a string.
- *
- * Deviation from the prototype, deliberate: it prints every measurement taken,
- * not just oil/water/dry. Acidity gets a tile, and green, maturity, irrigation,
- * direction, takt and the inspector all appear. The readings exist; a report
- * that drops them makes the grower ask for them by mail.
+ * see components/olive/report/report-styles.ts for why that is a string. The
+ * look specific to this report is scoped under .rpt-plot there.
  */
 
 import { NirTrendChart } from './NirTrendChart';
 import { ReportStyles } from './ReportStyles';
-import type { PlotReportData } from '@/lib/olive/report/fetch-plot-report';
+import { COMPANY } from '@/lib/olive/report/company';
+import {
+  HISTORY_TABLE_ROWS,
+  type PlotReportData,
+  type ReportKpi,
+} from '@/lib/olive/report/fetch-plot-report';
 
 function num(value: number | null | undefined, digits = 1): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return '—';
-  const fixed = value.toFixed(digits);
-  return fixed.endsWith('.0') ? fixed.slice(0, -2) : fixed;
+  // Round, then drop trailing zeros: 12.0 → "12", 21.00 → "21", 18.90 → "18.9".
+  return String(Number(value.toFixed(digits)));
 }
 
 function text(value: string | null | undefined): string {
@@ -42,37 +47,46 @@ export interface PlotReportDocumentProps {
   logoSrc: string;
 }
 
+function KpiTile({ kpi }: { kpi: ReportKpi }) {
+  return (
+    <div className={`rpt-kpi ${kpi.flagClass}`}>
+      <div className="rpt-lbl">{kpi.label}</div>
+      <div className="rpt-val">
+        {kpi.value}
+        {kpi.unit && kpi.value !== '—' && <small>{kpi.unit}</small>}
+      </div>
+    </div>
+  );
+}
+
 export function PlotReportDocument({ data, logoSrc }: PlotReportDocumentProps) {
   const {
     generatedAt,
-    seasonLabel,
     plotName,
     growerName,
     variety,
-    region,
-    plantYear,
     maturityLabel,
     sizeDunam,
+    inspectorName,
     tags,
     status,
-    recommendation,
+    recommendations,
     weatherLines,
-    latest,
     latestDateLabel,
-    kpis,
-    subValues,
+    primaryKpis,
+    secondaryKpis,
     history,
-    harvest,
   } = data;
 
-  // Oldest-first is what the chart wants; the table reads better newest-first.
-  const historyDesc = [...history].reverse();
+  // Oldest-first is what the chart wants; the table reads newest-first and
+  // shows only the latest few.
+  const recentDesc = [...history].reverse().slice(0, HISTORY_TABLE_ROWS);
 
   return (
     <>
       <ReportStyles />
 
-      <div className="rpt-page">
+      <div className="rpt-page rpt-plot">
         <header className="rpt-header">
           <div className="rpt-logo">
             {/* eslint-disable-next-line @next/next/no-img-element -- must also render
@@ -84,14 +98,9 @@ export function PlotReportDocument({ data, logoSrc }: PlotReportDocumentProps) {
             <p>דוח סטטוס חלקה</p>
           </div>
           <div className="rpt-h-meta">
-            <div>
-              נכון לתאריך: <b>{generatedAt}</b>
-            </div>
-            {seasonLabel && (
-              <div>
-                עונת מסיק: <b>{seasonLabel}</b>
-              </div>
-            )}
+            {/* bdi keeps the date/time pair in its own direction, so the comma
+                stays between them instead of jumping to the line's start. */}
+            תאריך הפקת הדוח: <bdi>{generatedAt}</bdi>
           </div>
         </header>
 
@@ -101,13 +110,20 @@ export function PlotReportDocument({ data, logoSrc }: PlotReportDocumentProps) {
               <h2>{text(growerName)}</h2>
               {variety && <div className="rpt-variety-line">{variety}</div>}
             </div>
-            <span className={`rpt-status-badge ${status.level}`}>{status.headline}</span>
+            <div className="rpt-status-block">
+              <span className="rpt-status-caption">סטטוס מסיק צפוי</span>
+              <span className={`rpt-status-badge ${status.level}`}>{status.headline}</span>
+            </div>
           </div>
 
           <div className="rpt-subline">
-            {plotName ? `כינוי: ${plotName} · ` : ''}
-            {region ? `גוש ${region} · ` : ''}
-            {`נטוע ${text(plantYear)} (${maturityLabel}) · ${num(sizeDunam)} דונם`}
+            {/* plotName already carries block, year and variety
+                ("{שם} — {שנה} — {זן}"), so they are not repeated here. */}
+            {plotName ? `${plotName} · ` : ''}
+            {`${maturityLabel} · ${num(sizeDunam)} דונם`}
+          </div>
+          <div className="rpt-inspector">
+            {inspectorName ? `נבדק על ידי: ${inspectorName}` : ''}
           </div>
 
           {tags.length > 0 && (
@@ -125,92 +141,30 @@ export function PlotReportDocument({ data, logoSrc }: PlotReportDocumentProps) {
               {latestDateLabel ? `בדיקת NIR אחרונה — ${latestDateLabel}` : 'בדיקת NIR אחרונה'}
             </h3>
             <div className="rpt-kpi-grid">
-              {kpis.map((kpi) => (
-                <div className={`rpt-kpi ${kpi.flagClass}`} key={kpi.label}>
-                  <div className="rpt-val">
-                    {kpi.value}
-                    {kpi.unit && <small>{kpi.unit}</small>}
-                  </div>
-                  <div className="rpt-lbl">{kpi.label}</div>
-                </div>
+              {primaryKpis.map((kpi) => (
+                <KpiTile kpi={kpi} key={kpi.label} />
               ))}
             </div>
-            {subValues.length > 0 && (
-              <div className="rpt-subvals">
-                {subValues.map((item) => (
-                  <span key={item.label}>
-                    {item.label}: <b>{item.value}</b>
-                  </span>
-                ))}
-              </div>
-            )}
-            {latest?.notes && <p className="rpt-subvals">הערות: {latest.notes}</p>}
+            <div className="rpt-kpi-grid cols-2">
+              {secondaryKpis.map((kpi) => (
+                <KpiTile kpi={kpi} key={kpi.label} />
+              ))}
+            </div>
           </section>
 
           <section className="rpt-section">
-            <h3>תחזית מזג אוויר — ימים קרובים</h3>
-            {weatherLines.length > 0 ? (
-              weatherLines.map((line) => (
-                <div className="rpt-weather-line warn" key={line}>
-                  <span className="rpt-icon">⚠</span> {line}
-                </div>
-              ))
-            ) : (
-              <div className="rpt-weather-line">
-                <span className="rpt-icon">✓</span> אין התראות מזג אוויר צפויות
+            {weatherLines.map((line) => (
+              <div className="rpt-weather-line warn" key={line}>
+                <span className="rpt-icon">⚠</span> {line}
               </div>
-            )}
-          </section>
-
-          {harvest && (
-            <section className="rpt-section">
-              <h3>יבול בפועל</h3>
-              <div className="rpt-kpi-grid cols-5">
-                <div className="rpt-kpi">
-                  <div className="rpt-val">
-                    {num(harvest.fruitKg, 0)}
-                    <small>ק&quot;ג</small>
-                  </div>
-                  <div className="rpt-lbl">סה&quot;כ פרי</div>
-                </div>
-                <div className="rpt-kpi">
-                  <div className="rpt-val">
-                    {num(harvest.oilKg, 0)}
-                    <small>ק&quot;ג</small>
-                  </div>
-                  <div className="rpt-lbl">סה&quot;כ שמן</div>
-                </div>
-                <div className="rpt-kpi">
-                  <div className="rpt-val">{num(harvest.fruitPerDunam)}</div>
-                  <div className="rpt-lbl">פרי לדונם</div>
-                </div>
-                <div className="rpt-kpi">
-                  <div className="rpt-val">{num(harvest.oilPerDunam)}</div>
-                  <div className="rpt-lbl">שמן לדונם</div>
-                </div>
-                <div className="rpt-kpi">
-                  <div className="rpt-val">
-                    {num(harvest.oilPercent)}
-                    {harvest.oilPercent !== null && <small>%</small>}
-                  </div>
-                  <div className="rpt-lbl">אחוז שמן מפרי</div>
-                </div>
-              </div>
-              <div className="rpt-subvals">
-                <span>
-                  מספר מסיקים: <b>{harvest.passes}</b>
-                </span>
-                <span>
-                  דונם שנמסקו: <b>{num(harvest.areaDoneDunam)}</b>
-                </span>
-              </div>
-            </section>
-          )}
-
-          <section className="rpt-section">
+            ))}
             <div className="rpt-rec-box">
-              <div className="rpt-rec-head">המלצה</div>
-              <p>{recommendation}</p>
+              <div className="rpt-rec-head">המלצות</div>
+              {recommendations.length > 0 ? (
+                recommendations.map((line) => <p key={line}>{line}</p>)
+              ) : (
+                <p>אין המלצות מיוחדות.</p>
+              )}
             </div>
           </section>
 
@@ -223,45 +177,31 @@ export function PlotReportDocument({ data, logoSrc }: PlotReportDocumentProps) {
           </section>
 
           <section className="rpt-section">
-            <h3>היסטוריית בדיקות</h3>
-            <table className="rpt-table wide">
+            <h3>היסטוריית בדיקות אחרונות</h3>
+            <table className="rpt-table">
               <thead>
                 <tr>
                   <th>תאריך</th>
-                  <th>טאקט</th>
-                  <th>כיוון</th>
                   <th>שמן%</th>
                   <th>מים%</th>
                   <th>שמן בחו&quot;י%</th>
-                  <th>ירוק%</th>
-                  <th>חומציות</th>
-                  <th>הבשלה</th>
-                  <th>השקיה</th>
-                  <th>נבדק ע&quot;י</th>
-                  <th>הערות</th>
+                  <th>אחוז צבע ירוק%</th>
                 </tr>
               </thead>
               <tbody>
-                {historyDesc.length > 0 ? (
-                  historyDesc.map((row) => (
+                {recentDesc.length > 0 ? (
+                  recentDesc.map((row) => (
                     <tr key={row.id}>
                       <td>{text(row.reportDate)}</td>
-                      <td>{text(row.subAreaName)}</td>
-                      <td>{text(row.direction)}</td>
                       <td className="num">{num(row.oil)}</td>
                       <td className="num">{num(row.water)}</td>
                       <td className="num">{num(row.dry, 2)}</td>
                       <td className="num">{num(row.green)}</td>
-                      <td className="num">{num(row.acid, 2)}</td>
-                      <td className="num">{num(row.maturity, 2)}</td>
-                      <td className="num">{num(row.irrigAmount)}</td>
-                      <td>{text(row.workerName)}</td>
-                      <td>{text(row.notes)}</td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td className="rpt-empty-cell" colSpan={12}>
+                    <td className="rpt-empty-cell" colSpan={5}>
                       אין בדיקות עדיין
                     </td>
                   </tr>
@@ -271,9 +211,9 @@ export function PlotReportDocument({ data, logoSrc }: PlotReportDocumentProps) {
           </section>
         </main>
 
-        <footer className="rpt-footer">
-          <span className="rpt-tagline">כל זן והטבע שלו</span>
-          <span>הופק אוטומטית מדשבורד מסיק — ארץ גשור</span>
+        <footer className="rpt-company-footer">
+          <b>{COMPANY.name}</b>
+          {COMPANY.line}
         </footer>
       </div>
     </>

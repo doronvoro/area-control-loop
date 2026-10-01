@@ -26,13 +26,15 @@
  * ago by this same run, so that check would 403 on rows this import just wrote.
  * The raw writes are deliberate; do not "tidy" them into the services.
  */
-
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { MAX_TAKT_COUNT, OLIVE_CROP_NAME, taktName } from '@/lib/olive/constants';
 import { ALERT_BAND_FIELDS, CATEGORY_BAND_FIELDS } from '@/lib/olive/thresholds';
 import { resolveYieldRows, type YieldPlotLike } from '@/lib/olive/import-yield';
 import type { ImportIssue, IssueCategory } from '@/lib/olive/import-issues';
 import { isMissingTableError } from '@/lib/supabase/errors';
+import { normalizeVarietyName } from '@/lib/olive/variety';
+
+export { normalizeVarietyName };
 
 // --- Types (the prototype's own shapes, not ours) ---
 
@@ -344,6 +346,20 @@ function isRealDate(year: number, month: number, day: number): boolean {
   return date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 }
 
+export type VarietyCheck = { kind: 'missing' } | { kind: 'alias'; from: string; to: string } | null;
+
+/**
+ * What the import should report about one plot's variety. Reporting only —
+ * trg_areas_resolve_variety is what applies the alias on write, for the same
+ * reason the grower alias is left to its trigger: one rule, one place.
+ */
+export function checkVariety(raw: unknown, aliases: ReadonlyMap<string, string>): VarietyCheck {
+  const name = normalizeVarietyName(raw);
+  if (!name) return { kind: 'missing' };
+  const to = aliases.get(name);
+  return to ? { kind: 'alias', from: name, to } : null;
+}
+
 // --- Dirty-data reporting ---
 
 /**
@@ -543,6 +559,24 @@ export async function importBackup(
     }
   }
 
+  // --- variety aliases ---
+  // Global, per crop (20261001100000). Like the grower map above it drives the
+  // REPORT only: trg_areas_resolve_variety folds "ארבקינה צעיר" into ארבקינה on
+  // write. Missing table degrades to no aliases for the same rollout reason.
+  const varietyAliases = new Map<string, string>();
+  {
+    const { data: aliasRows, error: aliasError } = await supabase
+      .from('variety_aliases')
+      .select('alias, varieties(name)')
+      .eq('crop_id', cropId);
+    if (aliasError && !isMissingTableError(aliasError)) throw aliasError;
+    type AliasRow = { alias: string; varieties: { name: string } | null };
+    for (const row of (aliasRows || []) as unknown as AliasRow[]) {
+      if (row.varieties?.name)
+        varietyAliases.set(normalizeVarietyName(row.alias), row.varieties.name);
+    }
+  }
+
   // --- season ---
   // Yield estimates are keyed by season, and every screen that shows one reads
   // it through getActiveSeason(). A season that is not the active one is a
@@ -732,6 +766,16 @@ export async function importBackup(
       flag(
         'growerAlias',
         `${where}: שם המגדל "${growerName}" אוחד במערכת למגדל "${mergedInto}" — החלקה שויכה אליו`
+      );
+    }
+
+    const varietyCheck = checkVariety(plot.variety, varietyAliases);
+    if (varietyCheck?.kind === 'missing') {
+      flag('varietyMissing', `${where}: לא נרשם זן — החלקה יובאה ללא זן`);
+    } else if (varietyCheck?.kind === 'alias') {
+      flag(
+        'varietyAlias',
+        `${where}: הזן "${varietyCheck.from}" אוחד לזן "${varietyCheck.to}" — החלקה שויכה אליו`
       );
     }
 
@@ -1065,12 +1109,38 @@ export async function importBackup(
   }
 
   // --- variety windows ---
+  // Global and never keyed, so a re-run used to insert every window again. A
+  // window is now skipped when one with the same variety and dates already
+  // exists — compared by canonical name, so "ארבקינה בוגר" in the file meets
+  // the ארבקינה row the trigger stored last time.
+  const windowKey = (variety: string, start: string, end: string) => {
+    const name = normalizeVarietyName(variety);
+    return `${varietyAliases.get(name) ?? name}|${start.trim()}|${end.trim()}`;
+  };
+  const seenWindows = new Set<string>();
+  if (!assumeEmpty) {
+    const { data: existingWindows, error: windowReadError } = await supabase
+      .from('variety_windows')
+      .select('variety, start_dm, end_dm');
+    if (windowReadError) throw windowReadError;
+    for (const row of (existingWindows || []) as {
+      variety: string;
+      start_dm: string;
+      end_dm: string;
+    }[]) {
+      seenWindows.add(windowKey(row.variety, row.start_dm, row.end_dm));
+    }
+  }
+
   let windowCount = 0;
   for (const w of backup.varietyWindows || []) {
     if (!w.variety || !w.start || !w.end) {
       flag('varietyWindow', `חלון זן "${w.variety}": חסרים נתונים — דולג`);
       continue;
     }
+    const key = windowKey(w.variety, w.start, w.end);
+    if (seenWindows.has(key)) continue;
+    seenWindows.add(key);
     if (apply) {
       const { error } = await supabase
         .from('variety_windows')

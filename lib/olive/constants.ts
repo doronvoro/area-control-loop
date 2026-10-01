@@ -1,4 +1,5 @@
-import type { PlotCategory } from './logic';
+import { CircleCheck, FlaskConical, Sprout, TriangleAlert, type LucideIcon } from 'lucide-react';
+import type { PlotCategory, UrgencyLevel } from './logic';
 
 /**
  * The crop that switches the olive module on.
@@ -68,4 +69,23 @@ export const PLOT_CATEGORY_CARDS: { key: PlotCategory; label: string; className:
   { key: 'normal', label: 'חלקות תקינות', className: 'olive-sc-normal' },
   { key: 'anomaly', label: 'חריגות', className: 'olive-sc-anomaly' },
   { key: 'ready', label: 'מוכן למסיק', className: 'olive-sc-ready' },
+];
+
+/**
+ * The cards' icons, for the neutral variant on /olive and /olive/plots. Those
+ * cards tell themselves apart by icon, not colour: red, amber and green there
+ * mean harvest urgency only, and the cards measure the latest NIR reading.
+ */
+export const PLOT_CATEGORY_ICONS: Record<PlotCategory, LucideIcon> = {
+  testing: FlaskConical,
+  normal: CircleCheck,
+  anomaly: TriangleAlert,
+  ready: Sprout,
+};
+
+/** Harvest urgency, most pressing first — the order both the dashboard and the plots filter show. */
+export const URGENCY_OPTIONS: { level: UrgencyLevel; label: string }[] = [
+  { level: 'urgent', label: 'דחוף' },
+  { level: 'plan', label: 'מתוכנן' },
+  { level: 'ok', label: 'ללא דחיפות' },
 ];

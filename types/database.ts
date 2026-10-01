@@ -208,6 +208,19 @@ export const NIR_DIRECTIONS = [
 
 export type NirDirection = (typeof NIR_DIRECTIONS)[number];
 
+// What a NIR reading was taken from. Stored in English, shown in Hebrew.
+export const NIR_SAMPLE_TYPES = ['fruit', 'pomace'] as const;
+
+export type NirSampleType = (typeof NIR_SAMPLE_TYPES)[number];
+
+export const NIR_SAMPLE_TYPE_LABELS: Record<NirSampleType, string> = {
+  fruit: 'פרי',
+  pomace: 'גפת',
+};
+
+// Crusher used at the mill — pomace readings only (סוג ריסוק)
+export const NIR_CRUSHING_TYPES = ['פטישים', 'סכינים'] as const;
+
 export type Json =
   | string
   | number
@@ -367,6 +380,7 @@ export interface Database {
           geometry: Json | null;
           area_type: string | null;
           variety: string | null;
+          variety_id: string | null;
           planting_time: string | null;
           created_at: string;
           updated_at: string;
@@ -381,6 +395,7 @@ export interface Database {
           geometry?: Json | null;
           area_type?: string | null;
           variety?: string | null;
+          variety_id?: string | null;
           planting_time?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -395,6 +410,7 @@ export interface Database {
           geometry?: Json | null;
           area_type?: string | null;
           variety?: string | null;
+          variety_id?: string | null;
           planting_time?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -1455,10 +1471,59 @@ export interface Database {
           updated_at?: string;
         };
       };
+      varieties: {
+        // זנים — one row per variety of a crop. areas.variety / variety_windows.variety
+        // stay as the display name; the resolve triggers keep variety_id in step.
+        Row: {
+          id: string;
+          crop_id: string | null;
+          name: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          crop_id?: string | null;
+          name: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          crop_id?: string | null;
+          name?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      variety_aliases: {
+        // Other spellings folded into a variety, e.g. "ארבקינה צעיר" -> ארבקינה.
+        // crop_id is derived from the variety by trigger; never send it.
+        Row: {
+          id: string;
+          variety_id: string;
+          crop_id: string | null;
+          alias: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          variety_id: string;
+          alias: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          variety_id?: string;
+          alias?: string;
+          created_at?: string;
+        };
+      };
       variety_windows: {
         Row: {
           id: string;
           variety: string;
+          variety_id: string | null;
           start_dm: string; // 'DD/MM'
           end_dm: string; // 'DD/MM', may wrap the year end
           created_at: string;
@@ -1467,6 +1532,7 @@ export interface Database {
         Insert: {
           id?: string;
           variety: string;
+          variety_id?: string | null;
           start_dm: string;
           end_dm: string;
           created_at?: string;
@@ -1475,6 +1541,7 @@ export interface Database {
         Update: {
           id?: string;
           variety?: string;
+          variety_id?: string | null;
           start_dm?: string;
           end_dm?: string;
           created_at?: string;
@@ -1528,6 +1595,13 @@ export interface Database {
           maturity: number | null;
           irrig_amount: number | null;
           direction: string | null;
+          /** 'fruit' | 'pomace'. Only fruit feeds ripeness classification. */
+          sample_type: NirSampleType;
+          /** Pomace only — the mill settings that produced the sample. */
+          crushing_type: string | null;
+          decanter_differential: number | null;
+          monopump_speed: number | null;
+          malaxation_temp: number | null;
           /** When it was sent to the client. NULL = not sent. An instant, not a day. */
           sent_to_client_at: string | null;
           /** auth.users.id of whoever marked it sent — NOT workers.id. */
@@ -1545,6 +1619,11 @@ export interface Database {
           maturity?: number | null;
           irrig_amount?: number | null;
           direction?: string | null;
+          sample_type?: NirSampleType;
+          crushing_type?: string | null;
+          decanter_differential?: number | null;
+          monopump_speed?: number | null;
+          malaxation_temp?: number | null;
           sent_to_client_at?: string | null;
           sent_to_client_by?: string | null;
           created_at?: string;
@@ -1560,6 +1639,11 @@ export interface Database {
           maturity?: number | null;
           irrig_amount?: number | null;
           direction?: string | null;
+          sample_type?: NirSampleType;
+          crushing_type?: string | null;
+          decanter_differential?: number | null;
+          monopump_speed?: number | null;
+          malaxation_temp?: number | null;
           sent_to_client_at?: string | null;
           sent_to_client_by?: string | null;
           created_at?: string;

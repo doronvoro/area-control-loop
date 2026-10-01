@@ -32,6 +32,12 @@ import {
   type GrowerOption,
   type GrowerSelection,
 } from './GrowerPicker';
+import {
+  VarietyPicker,
+  varietyPayload,
+  type VarietyOption,
+  type VarietySelection,
+} from './VarietyPicker';
 import { MAX_TAKT_COUNT } from '@/lib/olive/constants';
 import { HARVESTER_OPTIONS, PLOT_TYPE_OPTIONS, WATER_TYPE_OPTIONS } from '@/types/database';
 
@@ -67,7 +73,6 @@ const SELECTS: {
 
 const plotSchema = z.object({
   name: z.string().min(1, 'נדרש שם חלקה'),
-  variety: z.string().optional(),
   // areas.size is DECIMAL(10,2) with no CHECK, so a typo'd negative would be
   // stored silently. This is the only guard there is.
   size: z
@@ -102,6 +107,8 @@ interface PlotCreateSheetProps {
   customerName: string | null;
   /** The tenant's growers, for the picker. */
   growers: GrowerOption[];
+  /** The shared variety list, for the picker. */
+  varieties: VarietyOption[];
   /** Called with the new plot's area id, so the table can flash its row. */
   onSaved: (areaId: string) => void;
 }
@@ -111,6 +118,7 @@ export function PlotCreateSheet({
   onOpenChange,
   customerName,
   growers,
+  varieties,
   onSaved,
 }: PlotCreateSheetProps) {
   return (
@@ -129,6 +137,7 @@ export function PlotCreateSheet({
             key="create"
             customerName={customerName}
             growers={growers}
+            varieties={varieties}
             onSaved={onSaved}
             onClose={() => onOpenChange(false)}
           />
@@ -141,11 +150,13 @@ export function PlotCreateSheet({
 function PlotCreateBody({
   customerName,
   growers,
+  varieties,
   onSaved,
   onClose,
 }: {
   customerName: string | null;
   growers: GrowerOption[];
+  varieties: VarietyOption[];
   onSaved: (areaId: string) => void;
   onClose: () => void;
 }) {
@@ -155,12 +166,13 @@ function PlotCreateBody({
   // react-hook-form would model as two fields needing a cross-field refine for
   // no gain — nothing here is required.
   const [grower, setGrower] = useState<GrowerSelection>({ growerId: NONE, growerName: '' });
+  // Same reasoning as `grower`: a picked id or a typed name, behind a sentinel.
+  const [variety, setVariety] = useState<VarietySelection>({ varietyId: NONE, varietyName: '' });
 
   const form = useForm<PlotFormData>({
     resolver: zodResolver(plotSchema),
     defaultValues: {
       name: '',
-      variety: '',
       size: '',
       planting_time: '',
       description: '',
@@ -183,7 +195,7 @@ function PlotCreateBody({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: values.name,
-          variety: values.variety || null,
+          ...varietyPayload(variety),
           size: values.size ? Number(values.size) : null,
           planting_time: values.planting_time || null,
           description: values.description || null,
@@ -296,19 +308,14 @@ function PlotCreateBody({
                   )}
                 />
 
-                <FormField
-                  control={form.control}
-                  name="variety"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-semibold">זן</FormLabel>
-                      <FormControl>
-                        <Input {...field} value={field.value ?? ''} className="h-9" placeholder="ארבקינה" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <div>
+                  <label className="text-sm font-semibold" id="plot-create-variety">
+                    זן
+                  </label>
+                  <div className="mt-2" aria-labelledby="plot-create-variety">
+                    <VarietyPicker varieties={varieties} value={variety} onChange={setVariety} />
+                  </div>
+                </div>
 
                 <FormField
                   control={form.control}

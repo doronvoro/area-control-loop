@@ -6,6 +6,8 @@ import {
   hasActivePlotFilters,
   countActivePlotFilters,
   plotTypeCounts,
+  categoryCounts,
+  urgencyCounts,
   summarisePlotRows,
   categoryLabel,
   categoryReadingText,
@@ -64,6 +66,7 @@ function row(overrides: Partial<PlotRow> = {}): PlotRow {
     id: 'p',
     name: 'מיצר',
     variety: null,
+    varietyId: null,
     growerId: null,
     growerName: null,
     plotType: null,
@@ -74,6 +77,7 @@ function row(overrides: Partial<PlotRow> = {}): PlotRow {
     size: null,
     taktCount: 0,
     category: 'testing',
+    urgency: null,
     harvested: false,
     daysSinceNir: null,
     nirCountInSeason: 0,
@@ -246,6 +250,7 @@ describe('filterPlotRows', () => {
       id: 'a',
       name: 'מיצר — 2003 — ארבקינה',
       variety: 'ארבקינה',
+      varietyId: 'v-arb',
       growerId: 'g-1',
       growerName: 'ארץ גשור',
       plotType: PlotType.OWNER,
@@ -257,6 +262,9 @@ describe('filterPlotRows', () => {
     row({
       id: 'b',
       name: 'גבעה',
+      // Entered as an alias; the trigger stored the canonical name and id.
+      variety: 'ארבקינה',
+      varietyId: 'v-arb',
       growerId: 'g-2',
       plotType: PlotType.PARTNER,
       category: 'anomaly',
@@ -329,6 +337,20 @@ describe('filterPlotRows', () => {
     expect(filter({ growerId: NONE })).toEqual(['c']);
   });
 
+  it('filters by variety id, whatever spelling the plot was entered under', () => {
+    expect(filter({ varietyId: 'v-arb' })).toEqual(['a', 'b']);
+    expect(filter({ varietyId: 'v-other' })).toEqual([]);
+  });
+
+  it('treats both spellings of "no variety filter" as no filter', () => {
+    expect(filter({ varietyId: '' })).toEqual(['a', 'b', 'c']);
+    expect(filter({ varietyId: 'all' })).toEqual(['a', 'b', 'c']);
+  });
+
+  it('finds the plots with no variety at all', () => {
+    expect(filter({ varietyId: NONE })).toEqual(['c']);
+  });
+
   it('combines filters with AND', () => {
     expect(filter({ plotType: PlotType.PARTNER, category: 'testing' })).toEqual(['c']);
     expect(filter({ plotType: PlotType.OWNER, category: 'testing' })).toEqual([]);
@@ -377,6 +399,50 @@ describe('plotTypeCounts', () => {
   });
 });
 
+describe('urgency', () => {
+  it('is dropped once the plot is harvested', () => {
+    expect(build({ urgency: 'urgent' }).urgency).toBe('urgent');
+    expect(build({ urgency: 'urgent', harvested: true }).urgency).toBeNull();
+    expect(build().urgency).toBeNull();
+  });
+
+  const rows = [
+    row({ id: 'a', urgency: 'urgent', category: 'ready' }),
+    row({ id: 'b', urgency: 'plan', category: 'normal' }),
+    row({ id: 'c', urgency: 'plan', category: 'ready' }),
+    // Harvested: no urgency, so no urgency chip admits it.
+    row({ id: 'd', urgency: null, harvested: true, category: 'ready' }),
+  ];
+
+  it('filters by level, and a harvested plot matches none', () => {
+    const ids = (urgency: string) =>
+      filterPlotRows(rows, { ...EMPTY_PLOT_FILTERS, urgency }).map((r) => r.id);
+    expect(ids('urgent')).toEqual(['a']);
+    expect(ids('plan')).toEqual(['b', 'c']);
+    expect(ids('ok')).toEqual([]);
+    expect(ids('all')).toEqual(['a', 'b', 'c', 'd']);
+  });
+
+  it('counts each level under the other filters, ignoring its own', () => {
+    const c = urgencyCounts(rows, { ...EMPTY_PLOT_FILTERS, category: 'ready' });
+    expect(c).toEqual({ all: 3, urgent: 1, plan: 1 });
+    expect(urgencyCounts(rows, { ...EMPTY_PLOT_FILTERS, urgency: 'urgent' })).toEqual(
+      urgencyCounts(rows, EMPTY_PLOT_FILTERS)
+    );
+  });
+
+  it('feeds the category tiles the same way', () => {
+    expect(categoryCounts(rows, { ...EMPTY_PLOT_FILTERS, urgency: 'plan' })).toEqual({
+      all: 2,
+      normal: 1,
+      ready: 1,
+    });
+    expect(categoryCounts(rows, { ...EMPTY_PLOT_FILTERS, category: 'ready' })).toEqual(
+      categoryCounts(rows, EMPTY_PLOT_FILTERS)
+    );
+  });
+});
+
 describe('hasActivePlotFilters', () => {
   it('is false for the empty set', () => {
     expect(hasActivePlotFilters(EMPTY_PLOT_FILTERS)).toBe(false);
@@ -389,6 +455,7 @@ describe('hasActivePlotFilters', () => {
   it('is true once any filter is set', () => {
     expect(hasActivePlotFilters({ ...EMPTY_PLOT_FILTERS, plotType: PlotType.OWNER })).toBe(true);
     expect(hasActivePlotFilters({ ...EMPTY_PLOT_FILTERS, growerId: 'g-1' })).toBe(true);
+    expect(hasActivePlotFilters({ ...EMPTY_PLOT_FILTERS, varietyId: 'v-arb' })).toBe(true);
     expect(hasActivePlotFilters({ ...EMPTY_PLOT_FILTERS, category: 'ready' })).toBe(true);
     expect(hasActivePlotFilters({ ...EMPTY_PLOT_FILTERS, harvest: 'active' })).toBe(true);
     expect(hasActivePlotFilters({ ...EMPTY_PLOT_FILTERS, nir: 'never' })).toBe(true);
@@ -397,6 +464,11 @@ describe('hasActivePlotFilters', () => {
   it('is false for either spelling of an unset grower', () => {
     expect(hasActivePlotFilters({ ...EMPTY_PLOT_FILTERS, growerId: '' })).toBe(false);
     expect(hasActivePlotFilters({ ...EMPTY_PLOT_FILTERS, growerId: 'all' })).toBe(false);
+  });
+
+  it('is false for either spelling of an unset variety', () => {
+    expect(hasActivePlotFilters({ ...EMPTY_PLOT_FILTERS, varietyId: '' })).toBe(false);
+    expect(hasActivePlotFilters({ ...EMPTY_PLOT_FILTERS, varietyId: 'all' })).toBe(false);
   });
 });
 
@@ -416,6 +488,7 @@ describe('countActivePlotFilters', () => {
     expect(count({ category: 'ready' })).toBe(1);
     expect(count({ harvest: 'active' })).toBe(1);
     expect(count({ nir: 'never' })).toBe(1);
+    expect(count({ urgency: 'urgent' })).toBe(1);
   });
 
   it('does not count an unset grower under either spelling', () => {

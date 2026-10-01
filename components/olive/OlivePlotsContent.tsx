@@ -8,6 +8,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { NirFormSheet, type NirEditorState } from './NirFormSheet';
 import { PlotCreateSheet } from './PlotCreateSheet';
 import type { GrowerOption } from './GrowerPicker';
+import type { VarietyOption } from './VarietyPicker';
 import { PlotDetailSheet } from './PlotDetailSheet';
 import { PlotsToolbar } from './PlotsToolbar';
 import { PlotsTable } from './PlotsTable';
@@ -16,10 +17,14 @@ import { useApiData } from '@/hooks/useApiData';
 import { usePagination } from '@/hooks/usePagination';
 import { useRowFlash } from '@/hooks/useRowFlash';
 import { useTableSort } from '@/hooks/useTableSort';
-import { classifyPlotCategory } from '@/lib/olive/logic';
+import { classifyPlotCategory, computePlotStatus, computeUpcomingWeather } from '@/lib/olive/logic';
 import {
   toNirLike,
+  toPlotLike,
   toCategoryThresholds,
+  toVarietyWindowLike,
+  toWeatherDayLike,
+  toWeatherThresholds,
   type ApiNirReport,
   type ApiPlot,
 } from '@/lib/olive/adapt';
@@ -27,6 +32,7 @@ import { toNirRow } from '@/lib/olive/nir-rows';
 import { showToast } from '@/lib/toast';
 import {
   EMPTY_PLOT_FILTERS,
+  categoryCounts,
   filterPlotRows,
   hasActivePlotFilters,
   nextOilWaterSort,
@@ -34,6 +40,7 @@ import {
   sortPlotRows,
   summarisePlotRows,
   toPlotRow,
+  urgencyCounts,
   type PlotFilters,
   type PlotRow,
   type PlotSortField,
@@ -65,6 +72,10 @@ interface DashboardPayload {
   harvestedAreaIds: string[];
   parameterRules: ParameterRule[];
   categoryThresholds: Record<string, unknown> | null;
+  /** The urgency filter reads these, through computePlotStatus. */
+  varietyWindows: Record<string, unknown>[];
+  weatherDays: Record<string, unknown>[];
+  weatherThresholds: Record<string, unknown> | null;
   /** The active season. A yield estimate cannot be written without one. */
   season: { id: string; name: string } | null;
   /** Readings per plot IN THE SEASON, keyed by area id. Absent means none. */
@@ -84,17 +95,27 @@ const SORT_DEFAULT_DIRECTIONS: Partial<Record<PlotSortField, 'asc' | 'desc'>> = 
   category: 'asc',
 };
 
-export function OlivePlotsContent({ initialSearch = null }: { initialSearch?: string | null }) {
+export function OlivePlotsContent({
+  initialSearch = null,
+  initialVarietyId = null,
+}: {
+  initialSearch?: string | null;
+  initialVarietyId?: string | null;
+}) {
   const { data, loading, error, refetch } = useApiData<DashboardPayload>('/api/olive/dashboard');
   // A second, small request rather than widening the dashboard payload: the
   // growers list is only needed by the two drawers, and the dashboard is fetched
   // on every save.
   const { data: growerData } = useApiData<{ id: string; name: string }[]>('/api/growers');
+  // The shared variety list, for the create drawer's picker.
+  const { data: varietyData } = useApiData<{ id: string; name: string }[]>('/api/varieties');
   // Lazy initial state rather than an effect, so arriving from the growers page
   // renders filtered on the first paint instead of flashing the full list.
-  const [filters, setFilters] = useState<PlotFilters>(
-    initialSearch ? { ...EMPTY_PLOT_FILTERS, search: initialSearch } : EMPTY_PLOT_FILTERS
-  );
+  const [filters, setFilters] = useState<PlotFilters>(() => ({
+    ...EMPTY_PLOT_FILTERS,
+    search: initialSearch ?? '',
+    varietyId: initialVarietyId ?? '',
+  }));
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // The NIR form, opened from a row's flask over this table. Separate from the
   // one PlotDetailSheet stacks on itself: this one has no drawer underneath.
@@ -118,13 +139,18 @@ export function OlivePlotsContent({ initialSearch = null }: { initialSearch?: st
   // resurrect the filter. Empty deps on purpose: with initialSearch in them this
   // would re-fire whenever the prop identity changed.
   useEffect(() => {
-    if (initialSearch) window.history.replaceState(null, '', '/olive/plots');
+    if (initialSearch || initialVarietyId) window.history.replaceState(null, '', '/olive/plots');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const growers = useMemo<GrowerOption[]>(
     () => (growerData ?? []).map((g) => ({ id: g.id, name: g.name })),
     [growerData]
+  );
+
+  const varieties = useMemo<VarietyOption[]>(
+    () => (varietyData ?? []).map((v) => ({ id: v.id, name: v.name })),
+    [varietyData]
   );
 
   /**
@@ -182,6 +208,16 @@ export function OlivePlotsContent({ initialSearch = null }: { initialSearch?: st
   const rows = useMemo(() => {
     if (!data) return [];
     const harvested = new Set(data.harvestedAreaIds || []);
+    const rules = data.parameterRules || [];
+    // The dashboard's urgency, computed the dashboard's way. The forecast only
+    // changes computePlotStatus's wording, not its level, but it is passed so
+    // the two screens cannot come to disagree if that ever changes.
+    const weather = computeUpcomingWeather(
+      (data.weatherDays || []).map(toWeatherDayLike),
+      now,
+      toWeatherThresholds(data.weatherThresholds)
+    );
+    const windows = (data.varietyWindows || []).map(toVarietyWindowLike);
 
     return (data.plots || []).map((plot) => {
       const latest = data.latestNir?.[plot.id] as ApiNirReport | undefined;
@@ -191,13 +227,33 @@ export function OlivePlotsContent({ initialSearch = null }: { initialSearch?: st
         nir,
         nirSentToClientAt: latest?.detail?.sent_to_client_at ?? null,
         nirCountInSeason: data.nirCountByArea?.[plot.id] ?? 0,
-        category: classifyPlotCategory(nir, data.parameterRules || [], bands),
+        category: classifyPlotCategory(nir, rules, bands),
+        urgency: computePlotStatus(toPlotLike(plot), nir, rules, weather, windows, now).level,
         harvested: harvested.has(plot.id),
         yieldEstimate: data.yieldEstimates?.[plot.id] ?? null,
         now,
       });
     });
   }, [data, bands, now]);
+
+  /**
+   * The variety filter's options: the varieties this tenant's plots actually
+   * use, keyed by id. Built from the rows rather than /api/varieties so the list
+   * never offers a variety that would filter to nothing, and so it costs no
+   * request. No "all" entry, for the reason given on growerOptions.
+   */
+  const varietyOptions = useMemo<SearchableSelectOption[]>(() => {
+    const byId = new Map<string, string>();
+    for (const row of rows) {
+      if (row.varietyId && row.variety) byId.set(row.varietyId, row.variety);
+    }
+    return [
+      ...[...byId.entries()]
+        .sort(([, a], [, b]) => a.localeCompare(b, 'he'))
+        .map(([value, label]) => ({ value, label })),
+      { value: NONE, label: 'ללא זן' },
+    ];
+  }, [rows]);
 
   // Derived, not a snapshot: a reading saved from the drawer stacked on top of
   // the plot drawer moves this plot's category and last-measured, and the stat
@@ -312,6 +368,8 @@ export function OlivePlotsContent({ initialSearch = null }: { initialSearch?: st
   // keystroke, which is free, and it keeps the chips honest about the other
   // filters rather than quoting the unfiltered list.
   const typeCounts = useMemo(() => plotTypeCounts(rows, filters), [rows, filters]);
+  const tileCounts = useMemo(() => categoryCounts(rows, filters), [rows, filters]);
+  const levelCounts = useMemo(() => urgencyCounts(rows, filters), [rows, filters]);
 
   const pagination = usePagination(visibleRows, {
     pageSize: 50,
@@ -359,12 +417,16 @@ export function OlivePlotsContent({ initialSearch = null }: { initialSearch?: st
         onFiltersChange={setFilters}
         onClear={() => setFilters(EMPTY_PLOT_FILTERS)}
         growerOptions={growerOptions}
+        varietyOptions={varietyOptions}
         typeCounts={typeCounts}
+        categoryCounts={tileCounts}
+        urgencyCounts={levelCounts}
+        bands={bands}
         shown={visibleRows.length}
         total={rows.length}
         // Arriving from the growers screen lands a term in the search box; open
         // the panel so the shortened list has a visible cause.
-        defaultExpanded={Boolean(initialSearch)}
+        defaultExpanded={Boolean(initialSearch || initialVarietyId)}
       />
 
       <section className="olive-card overflow-hidden">
@@ -388,7 +450,6 @@ export function OlivePlotsContent({ initialSearch = null }: { initialSearch?: st
               onEdit={(row: PlotRow) => setSelectedId(row.id)}
               onCycleOilWater={cycleOilWater}
               onOpenNir={openLatestNir}
-              onAddNir={(row: PlotRow) => setNirEditor({ mode: 'create', areaId: row.id })}
               bands={bands}
               seasonId={seasonId}
               onYieldSave={handleYieldSave}
@@ -423,6 +484,7 @@ export function OlivePlotsContent({ initialSearch = null }: { initialSearch?: st
         estimates={data?.yieldEstimates ?? NO_ESTIMATES}
         seasonId={seasonId}
         growers={growers.length ? growers : NO_GROWERS}
+        varieties={varieties}
         onSaved={handleSaved}
       />
 
@@ -454,6 +516,7 @@ export function OlivePlotsContent({ initialSearch = null }: { initialSearch?: st
         onOpenChange={setCreateOpen}
         customerName={user?.selectedCustomer?.name ?? null}
         growers={growers.length ? growers : NO_GROWERS}
+        varieties={varieties}
         onSaved={handleCreated}
       />
     </div>

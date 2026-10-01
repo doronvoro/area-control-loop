@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState, type ReactElement } from 'react';
-import { ArrowDown, ArrowUp, ArrowUpDown, FlaskConical, Pencil } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, FileText, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -27,6 +27,7 @@ import {
 } from '@/lib/olive/plot-rows';
 import { parseYieldDraft, type CategoryThresholds, type PlotCategory } from '@/lib/olive/logic';
 import { showToast } from '@/lib/toast';
+import { PlotReportDialog } from './report/PlotReportDialog';
 import { cn } from '@/lib/utils';
 
 /**
@@ -63,10 +64,8 @@ interface PlotsTableProps {
   onEdit: (row: PlotRow) => void;
   /** Steps the merged שמן/מים header through its four sort states. */
   onCycleOilWater: () => void;
-  /** Opens the NIR form for this plot, over the table. */
   /** Opens the plot's latest NIR reading for editing. */
   onOpenNir: (row: PlotRow) => void;
-  onAddNir: (row: PlotRow) => void;
   /**
    * The client's live category bands. Only the pill's tooltip reads them — the
    * category itself is classified before the row reaches this table — but that
@@ -131,292 +130,275 @@ export function PlotsTable({
   onEdit,
   onCycleOilWater,
   onOpenNir,
-  onAddNir,
   bands,
   seasonId,
   onYieldSave,
   activeId,
   flash,
 }: PlotsTableProps) {
+  const [report, setReport] = useState<{ id: string; name: string } | null>(null);
+
   return (
-    <Table>
-      <TableHeader>
-        <TableRow className="text-xs">
-          <SortableTableHead field="name" sort={sort} onSort={onSort}>
-            חלקה
-          </SortableTableHead>
-          <SortableTableHead
-            field="growerName"
-            sort={sort}
-            onSort={onSort}
-            className="hidden lg:table-cell"
-          >
-            מגדל
-          </SortableTableHead>
-          <SortableTableHead
-            field="size"
-            sort={sort}
-            onSort={onSort}
-            className="hidden md:table-cell"
-          >
-            גודל (דונם)
-          </SortableTableHead>
-          <SortableTableHead field="category" sort={sort} onSort={onSort}>
-            קטגוריה
-          </SortableTableHead>
-          <SortableTableHead field="daysSinceNir" sort={sort} onSort={onSort}>
-            בדיקה אחרונה
-          </SortableTableHead>
-          {/* The oil breakpoint, the earlier of the two this replaces: the
+    <>
+      <Table>
+        <TableHeader>
+          <TableRow className="text-xs">
+            <SortableTableHead field="name" sort={sort} onSort={onSort}>
+              חלקה
+            </SortableTableHead>
+            <SortableTableHead
+              field="size"
+              sort={sort}
+              onSort={onSort}
+              className="hidden md:table-cell"
+            >
+              גודל (דונם)
+            </SortableTableHead>
+            <SortableTableHead field="category" sort={sort} onSort={onSort}>
+              קטגוריה
+            </SortableTableHead>
+            <SortableTableHead field="daysSinceNir" sort={sort} onSort={onSort}>
+              בדיקה אחרונה
+            </SortableTableHead>
+            {/* The oil breakpoint, the earlier of the two this replaces: the
               pair is read together, so it must not arrive in halves. */}
-          <OilWaterHead sort={sort} onCycle={onCycleOilWater} className="hidden sm:table-cell" />
-          <SortableTableHead
-            field="yieldKgPerDunam"
-            sort={sort}
-            onSort={onSort}
-            className="hidden md:table-cell"
-          >
-            יבול (ק״ג/דונם)
-          </SortableTableHead>
-          {/* Not sortable, deliberately: it is a band of the very number the
+            <OilWaterHead sort={sort} onCycle={onCycleOilWater} className="hidden sm:table-cell" />
+            <SortableTableHead
+              field="yieldKgPerDunam"
+              sort={sort}
+              onSort={onSort}
+              className="hidden md:table-cell"
+            >
+              יבול (ק״ג/דונם)
+            </SortableTableHead>
+            {/* Not sortable, deliberately: it is a band of the very number the
               column before it sorts, and two headers driving one field would
               light up together and flip each other's direction. */}
-          <TableHead className="hidden md:table-cell">עומס יבול</TableHead>
-          <TableHead className="w-px" />
-        </TableRow>
-      </TableHeader>
+            <TableHead className="hidden md:table-cell">עומס יבול</TableHead>
+            <TableHead className="w-px" />
+          </TableRow>
+        </TableHeader>
 
-      <TableBody>
-        {rows.map((row) => (
-          <TableRow
-            key={row.id}
-            onClick={() => onEdit(row)}
-            className={cn(
-              'cursor-pointer hover:bg-muted/50',
-              activeId === row.id && 'bg-primary/10 hover:bg-primary/15',
-              // A running animation outranks the hover rule, so moving the
-              // mouse over the row mid-highlight does not cut it short.
-              flash?.id === row.id &&
-                (flash.kind === 'saved' ? 'olive-row-flash' : 'olive-row-release')
-            )}
-          >
-            <TableCell>
-              <span className="font-medium">{row.name || '—'}</span>
-              <span className="olive-muted block text-xs">
-                {[
-                  row.variety,
-                  row.plotType ? PLOT_TYPE_LABELS[row.plotType as never] : null,
-                  regionAside(row),
-                ]
-                  .filter(Boolean)
-                  .join(' · ') || ' '}
-                {row.harvested && <span className="text-primary font-semibold"> · נמסק</span>}
-              </span>
-            </TableCell>
-            <TableCell className="olive-muted hidden text-xs lg:table-cell">
-              {row.growerName ?? '—'}
-            </TableCell>
-            <TableCell className="hidden tabular-nums md:table-cell">{num(row.size, 1)}</TableCell>
-            <TableCell>
-              <PillTooltip
-                title={categoryLabel(row.category)}
-                body={categoryRuleText(row.category, bands)}
-                foot={categoryReadingText(row)}
-              >
-                <span className={`olive-pill ${CATEGORY_PILL[row.category]}`}>
-                  {categoryLabel(row.category)}
-                </span>
-              </PillTooltip>
-            </TableCell>
-            <TableCell>
-              {row.lastMeasuredLabel ? (
-                <span className="text-xs">{row.lastMeasuredLabel}</span>
-              ) : (
-                <span className="olive-muted text-xs">טרם נבדקה</span>
+        <TableBody>
+          {rows.map((row) => (
+            <TableRow
+              key={row.id}
+              onClick={() => onEdit(row)}
+              className={cn(
+                'cursor-pointer hover:bg-muted/50',
+                activeId === row.id && 'bg-primary/10 hover:bg-primary/15',
+                // A running animation outranks the hover rule, so moving the
+                // mouse over the row mid-highlight does not cut it short.
+                flash?.id === row.id &&
+                  (flash.kind === 'saved' ? 'olive-row-flash' : 'olive-row-release')
               )}
-              {/* Under the date, not beside it: the count is context for the
-                  date above, and this column is the narrowest on the screen. */}
-              {row.nirCountInSeason > 0 && (
+            >
+              <TableCell>
+                <span className="font-medium">{row.name || '—'}</span>
                 <span className="olive-muted block text-xs">
-                  {nirCountLabel(row.nirCountInSeason)}
+                  {/* The grower lives here rather than in a column of its own:
+                      "מייסדי נטור - מנדי, שותף". No variety — it is already the
+                      last part of the name. */}
+                  {[
+                    row.growerName,
+                    row.plotType ? PLOT_TYPE_LABELS[row.plotType as never] : null,
+                    regionAside(row),
+                  ]
+                    .filter(Boolean)
+                    .join(', ') || ' '}
+                  {row.harvested && <span className="text-primary font-semibold"> · נמסק</span>}
                 </span>
-              )}
-            </TableCell>
-            <TableCell className="hidden tabular-nums sm:table-cell">
-              {row.oil === null && row.water === null ? (
-                <span className="olive-muted">—</span>
-              ) : (
-                // Three elements, not the one "8.0 / 60.7" text node it looks
-                // like. That node is two digit runs around a bidi-neutral
-                // slash, so in this RTL page it paints as "60.7 / 8.0" — oil
-                // and water silently swapped. `olive-ltr-num` would unswap the
-                // digits but not the header, leaving שמן over the water; as
-                // flex children in an RTL row the parts cannot reorder at all,
-                // and the first one lands rightmost, under שמן.
-                // Green once the reading has reached the client, red until it
-                // has — the one cell on this screen that speaks for the reading
-                // itself. Colour alone would be invisible to a colour-blind
-                // reader, so the title and aria-label carry the same fact in
-                // words. A button, not a link: it opens the reading over this
-                // table rather than navigating, for the reason the NIR action
-                // below documents.
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onOpenNir(row);
-                  }}
-                  title={
-                    row.nirSentToClientAt
-                      ? `נשלח ללקוח ב-${row.nirSentToClientAt} — פתח את הבדיקה`
-                      : 'טרם נשלח ללקוח — פתח את הבדיקה'
-                  }
-                  aria-label={`בדיקת NIR בחלקה ${row.name} — ${
-                    row.nirSentToClientAt ? 'נשלחה ללקוח' : 'טרם נשלחה ללקוח'
-                  }`}
-                  className={cn(
-                    'inline-flex items-center gap-1 rounded underline decoration-dotted underline-offset-4 hover:opacity-75 focus-visible:ring-2 focus-visible:outline-none',
-                    row.nirSentToClientAt ? 'olive-sent-yes' : 'olive-sent-no'
-                  )}
+              </TableCell>
+              <TableCell className="hidden tabular-nums md:table-cell">
+                {num(row.size, 1)}
+              </TableCell>
+              <TableCell>
+                <PillTooltip
+                  title={categoryLabel(row.category)}
+                  body={categoryRuleText(row.category, bands)}
+                  foot={categoryReadingText(row)}
                 >
-                  <span>{num(row.oil, 1)}</span>
-                  <span aria-hidden>/</span>
-                  <span>{num(row.water, 1)}</span>
-                </button>
-              )}
-            </TableCell>
-            <YieldCell
-              value={row.yieldKgPerDunam}
-              plotName={row.name}
-              editable={seasonId !== null}
-              onSave={(next) => onYieldSave(row.id, next)}
-            />
-            <TableCell className="hidden md:table-cell">
-              {row.yieldLoad ? (
-                // `short`, not `label`: the column is headed עומס יבול, and the
-                // full label repeated it in every cell under it. The prefix is
-                // still what the tooltip's own title needs.
-                <PillTooltip title={row.yieldLoad.label} body={`${row.yieldLoad.range}.`}>
-                  <span
-                    className={`olive-pill ${PARAMETER_STATUS_CONFIG[row.yieldLoad.status].pillClass}`}
-                  >
-                    {row.yieldLoad.short}
+                  <span className={`olive-pill ${CATEGORY_PILL[row.category]}`}>
+                    {categoryLabel(row.category)}
                   </span>
                 </PillTooltip>
-              ) : (
-                <span className="olive-muted">—</span>
-              )}
-            </TableCell>
-            <TableCell className="p-1">
-              <div className="flex items-center">
+              </TableCell>
+              <TableCell>
+                {row.lastMeasuredLabel ? (
+                  <span className="text-xs">{row.lastMeasuredLabel}</span>
+                ) : (
+                  <span className="olive-muted text-xs">טרם נבדקה</span>
+                )}
+                {/* Under the date, not beside it: the count is context for the
+                  date above, and this column is the narrowest on the screen. */}
+                {row.nirCountInSeason > 0 && (
+                  <span className="olive-muted block text-xs">
+                    {nirCountLabel(row.nirCountInSeason)}
+                  </span>
+                )}
+              </TableCell>
+              <TableCell className="hidden tabular-nums sm:table-cell">
+                {row.oil === null && row.water === null ? (
+                  <span className="olive-muted">—</span>
+                ) : (
+                  // Three elements, not the one "8.0 / 60.7" text node it looks
+                  // like. That node is two digit runs around a bidi-neutral
+                  // slash, so in this RTL page it paints as "60.7 / 8.0" — oil
+                  // and water silently swapped. `olive-ltr-num` would unswap the
+                  // digits but not the header, leaving שמן over the water; as
+                  // flex children in an RTL row the parts cannot reorder at all,
+                  // and the first one lands rightmost, under שמן.
+                  // Green once the reading has reached the client, red until it
+                  // has — the one cell on this screen that speaks for the reading
+                  // itself. Colour alone would be invisible to a colour-blind
+                  // reader, so the title and aria-label carry the same fact in
+                  // words. A button, not a link: it opens the reading over this
+                  // table rather than navigating, for the reason the NIR action
+                  // below documents.
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpenNir(row);
+                    }}
+                    title={
+                      row.nirSentToClientAt
+                        ? `נשלח ללקוח ב-${row.nirSentToClientAt} — פתח את הבדיקה`
+                        : 'טרם נשלח ללקוח — פתח את הבדיקה'
+                    }
+                    aria-label={`בדיקת NIR בחלקה ${row.name} — ${
+                      row.nirSentToClientAt ? 'נשלחה ללקוח' : 'טרם נשלחה ללקוח'
+                    }`}
+                    className={cn(
+                      'inline-flex items-center gap-1 rounded underline decoration-dotted underline-offset-4 hover:opacity-75 focus-visible:ring-2 focus-visible:outline-none',
+                      row.nirSentToClientAt ? 'olive-sent-yes' : 'olive-sent-no'
+                    )}
+                  >
+                    <span>{num(row.oil, 1)}</span>
+                    <span aria-hidden>/</span>
+                    <span>{num(row.water, 1)}</span>
+                  </button>
+                )}
+              </TableCell>
+              <YieldCell
+                value={row.yieldKgPerDunam}
+                plotName={row.name}
+                editable={seasonId !== null}
+                onSave={(next) => onYieldSave(row.id, next)}
+              />
+              <TableCell className="hidden md:table-cell">
+                {row.yieldLoad ? (
+                  // `short`, not `label`: the column is headed עומס יבול, and the
+                  // full label repeated it in every cell under it. The prefix is
+                  // still what the tooltip's own title needs.
+                  <PillTooltip title={row.yieldLoad.label} body={`${row.yieldLoad.range}.`}>
+                    <span
+                      className={`olive-pill ${PARAMETER_STATUS_CONFIG[row.yieldLoad.status].pillClass}`}
+                    >
+                      {row.yieldLoad.short}
+                    </span>
+                  </PillTooltip>
+                ) : (
+                  <span className="olive-muted">—</span>
+                )}
+              </TableCell>
+              <TableCell className="p-1">
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
                   // The row itself opens the editor; keep the click from
-                  // firing twice.
+                  // firing it too. Same dialog as הפק דוח in the plot sheet.
                   onClick={(e) => {
                     e.stopPropagation();
-                    onEdit(row);
+                    setReport({ id: row.id, name: row.name || row.region || '' });
                   }}
-                  aria-label={`ערוך פרטי חלקה ${row.name}`}
+                  title="הפק דוח"
+                  aria-label={`הפק דוח לחלקה ${row.name}`}
                 >
-                  <Pencil className="size-4" />
+                  <FileText className="size-4" />
                 </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  // Was a link to /olive/nir?areaId=…, which threw away the
-                  // filters, the sort and the scroll position to record one
-                  // reading. The form opens over the table instead.
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onAddNir(row);
-                  }}
-                  aria-label={`הוסף בדיקת NIR בחלקה ${row.name}`}
-                >
-                  <FlaskConical className="size-4" />
-                </Button>
-              </div>
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
 
-      {/*
+        {/*
         The summary line. Drawn only from two plots up — under a single row it
         would just repeat it, one line lower and in different words.
       */}
-      {summary && summary.plotCount > 1 && (
-        <TableFooter className="olive-table-summary">
-          {/* No hover tint: unlike every row above it, nothing here opens. */}
-          <TableRow className="hover:bg-transparent">
-            <TableCell>
-              <span className="font-semibold">סיכום</span>
-              <span className="olive-muted block text-xs font-normal">
-                {countLabel(summary.plotCount, 'חלקה אחת', 'חלקות')}
-                {/* Only when the table is paged: the footer counts every
+        {summary && summary.plotCount > 1 && (
+          <TableFooter className="olive-table-summary">
+            {/* No hover tint: unlike every row above it, nothing here opens. */}
+            <TableRow className="hover:bg-transparent">
+              <TableCell>
+                <span className="font-semibold">סיכום</span>
+                <span className="olive-muted block text-xs font-normal">
+                  {countLabel(summary.plotCount, 'חלקה אחת', 'חלקות')}
+                  {/* Only when the table is paged: the footer counts every
                     filtered plot, and the page below it does not. */}
-                {summary.plotCount !== rows.length && ' — כל העמודים'}
-              </span>
-            </TableCell>
-            <TableCell className="olive-muted hidden text-xs font-normal lg:table-cell">
-              {summary.growerCount > 0
-                ? countLabel(summary.growerCount, 'מגדל אחד', 'מגדלים')
-                : '—'}
-            </TableCell>
-            <TableCell className="hidden tabular-nums md:table-cell">
-              {num(summary.totalDunam, 1)}
-              {/* Which arithmetic this cell did. Three of the columns below
+                  {summary.plotCount !== rows.length && ' — כל העמודים'}
+                  {summary.growerCount > 0 &&
+                    ` · ${countLabel(summary.growerCount, 'מגדל אחד', 'מגדלים')}`}
+                </span>
+              </TableCell>
+              <TableCell className="hidden tabular-nums md:table-cell">
+                {num(summary.totalDunam, 1)}
+                {/* Which arithmetic this cell did. Three of the columns below
                   total, average and weight-average respectively, and a bare
                   number in a footer is read as a sum by default. */}
-              <span className="olive-muted block text-xs font-normal">סה״כ</span>
-            </TableCell>
-            <TableCell className="olive-muted text-xs font-normal">
-              {summary.anomalyCount > 0
-                ? countLabel(summary.anomalyCount, 'חריגה אחת', 'חריגות')
-                : 'אין חריגות'}
-            </TableCell>
-            <TableCell className="olive-muted text-xs font-normal">
-              {summary.neverMeasured === 0
-                ? 'כולן נבדקו'
-                : summary.neverMeasured === 1
-                  ? 'חלקה אחת טרם נבדקה'
-                  : `${summary.neverMeasured} טרם נבדקו`}
-            </TableCell>
-            <TableCell className="hidden tabular-nums sm:table-cell">
-              {summary.measuredCount === 0 ? (
-                <span className="olive-muted">—</span>
-              ) : (
-                <>
-                  {/* Three elements around the slash, for the bidi reason the
+                <span className="olive-muted block text-xs font-normal">סה״כ</span>
+              </TableCell>
+              <TableCell className="olive-muted text-xs font-normal">
+                {summary.anomalyCount > 0
+                  ? countLabel(summary.anomalyCount, 'חריגה אחת', 'חריגות')
+                  : 'אין חריגות'}
+              </TableCell>
+              <TableCell className="olive-muted text-xs font-normal">
+                {summary.neverMeasured === 0
+                  ? 'כולן נבדקו'
+                  : summary.neverMeasured === 1
+                    ? 'חלקה אחת טרם נבדקה'
+                    : `${summary.neverMeasured} טרם נבדקו`}
+              </TableCell>
+              <TableCell className="hidden tabular-nums sm:table-cell">
+                {summary.measuredCount === 0 ? (
+                  <span className="olive-muted">—</span>
+                ) : (
+                  <>
+                    {/* Three elements around the slash, for the bidi reason the
                       row's own cell documents at length. */}
-                  <span className="flex items-center gap-1">
-                    <span>{num(summary.avgOil, 1)}</span>
-                    <span aria-hidden>/</span>
-                    <span>{num(summary.avgWater, 1)}</span>
-                  </span>
-                  <span className="olive-muted block text-xs font-normal">
-                    {summary.measuredCount === summary.plotCount
-                      ? 'ממוצע'
-                      : `ממוצע ${countLabel(summary.measuredCount, 'חלקה אחת', 'חלקות')}`}
-                  </span>
-                </>
-              )}
-            </TableCell>
-            {/* px-3, not the default p-2: the yield cells above hold a button
+                    <span className="flex items-center gap-1">
+                      <span>{num(summary.avgOil, 1)}</span>
+                      <span aria-hidden>/</span>
+                      <span>{num(summary.avgWater, 1)}</span>
+                    </span>
+                    <span className="olive-muted block text-xs font-normal">
+                      {summary.measuredCount === summary.plotCount
+                        ? 'ממוצע'
+                        : `ממוצע ${countLabel(summary.measuredCount, 'חלקה אחת', 'חלקות')}`}
+                    </span>
+                  </>
+                )}
+              </TableCell>
+              {/* px-3, not the default p-2: the yield cells above hold a button
                 with its own padding, and the digits line up only at 12px. */}
-            <TableCell className="hidden px-3 tabular-nums md:table-cell">
-              {num(summary.avgYieldPerDunam, 0)}
-              <span className="olive-muted block text-xs font-normal">ממוצע משוקלל</span>
-            </TableCell>
-            <TableCell className="hidden md:table-cell" />
-            <TableCell className="w-px" />
-          </TableRow>
-        </TableFooter>
-      )}
-    </Table>
+              <TableCell className="hidden px-3 tabular-nums md:table-cell">
+                {num(summary.avgYieldPerDunam, 0)}
+                <span className="olive-muted block text-xs font-normal">ממוצע משוקלל</span>
+              </TableCell>
+              <TableCell className="hidden md:table-cell" />
+              <TableCell className="w-px" />
+            </TableRow>
+          </TableFooter>
+        )}
+      </Table>
+      <PlotReportDialog
+        plotId={report?.id ?? null}
+        plotName={report?.name ?? ''}
+        onClose={() => setReport(null)}
+      />
+    </>
   );
 }
 

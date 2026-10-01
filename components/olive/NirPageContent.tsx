@@ -24,6 +24,7 @@ import {
 import { NirFormSheet, type NirEditorState } from './NirFormSheet';
 import { NirLogToolbar } from './NirLogToolbar';
 import { NirLogTable } from './NirLogTable';
+import { plotDisplayNameOf } from '@/lib/olive/plot-name';
 
 /**
  * The NIR log.
@@ -145,7 +146,8 @@ export function NirPageContent({
     () =>
       (plots ?? []).map((p) => ({
         value: p.id,
-        label: [p.name, p.variety].filter(Boolean).join(' · '),
+        // The variety is the last part of the name, so it is not appended again.
+        label: plotDisplayNameOf(p),
       })),
     [plots]
   );

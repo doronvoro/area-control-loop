@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { latestNirByArea, nirCountByAreaInSeason } from '@/lib/services/olive-nir.service';
+import {
+  isFruitReading,
+  latestNirByArea,
+  nirCountByAreaInSeason,
+} from '@/lib/services/olive-nir.service';
 import type { Season } from '@/types/database';
 
 /**
@@ -44,6 +48,27 @@ describe('latestNirByArea', () => {
 
   it('is empty for no reports', () => {
     expect(latestNirByArea([])).toEqual({});
+  });
+
+  it('skips a newer pomace reading and keeps the fruit one behind it', () => {
+    // Pomace oil is extraction loss, not ripeness — it must never become the
+    // reading a plot (or the plot and grower reports) is classified by.
+    const latest = latestNirByArea([
+      { ...report('a', '2026-09-20'), detail: { sample_type: 'pomace' } },
+      report('a', '2026-09-10'),
+    ]);
+    expect(latest.a.report_date).toBe('2026-09-10');
+  });
+});
+
+describe('isFruitReading', () => {
+  it('reads a row from before sample_type existed as fruit', () => {
+    expect(isFruitReading({ detail: {} })).toBe(true);
+    expect(isFruitReading({ detail: null })).toBe(true);
+  });
+
+  it('is false for pomace', () => {
+    expect(isFruitReading({ detail: { sample_type: 'pomace' } })).toBe(false);
   });
 });
 

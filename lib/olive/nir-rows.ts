@@ -13,12 +13,14 @@
 
 import {
   PARAMETER_STATUS_CONFIG,
+  type NirSampleType,
   type ParameterRule,
   type ParameterStatus,
 } from '@/types/database';
 import { evaluateParameter, toDateString } from './logic';
 import type { ApiNirReport } from './adapt';
 import type { SortState } from '@/components/ui/sortable-table-head';
+import { embeddedAreaDisplayName } from './plot-name';
 
 /** A NIR reading flattened for display, with every numeric already coerced. */
 export interface NirRow {
@@ -35,6 +37,12 @@ export interface NirRow {
   subAreaId: string | null;
   subAreaName: string | null;
   direction: string | null;
+  sampleType: NirSampleType;
+  /** Pomace only — the mill settings. Null on fruit readings. */
+  crushingType: string | null;
+  decanterDifferential: number | null;
+  monopumpSpeed: number | null;
+  malaxationTemp: number | null;
   oil: number | null;
   water: number | null;
   dry: number | null;
@@ -78,6 +86,8 @@ export interface NirFilters {
   /** 'all' | ParameterStatus | 'none' (no oil reading to score). */
   status: string;
   direction: string;
+  /** 'all' | NirSampleType. */
+  sampleType: string;
   /** 'all' | 'sent' | 'unsent'. */
   sent: string;
 }
@@ -87,6 +97,7 @@ export const EMPTY_NIR_FILTERS: NirFilters = {
   areaId: '',
   status: 'all',
   direction: 'all',
+  sampleType: 'all',
   sent: 'all',
 };
 
@@ -101,6 +112,7 @@ export function countActiveNirFilters(f: NirFilters): number {
   if (f.areaId !== '' && f.areaId !== 'all') n += 1;
   if (f.status !== 'all') n += 1;
   if (f.direction !== 'all') n += 1;
+  if (f.sampleType !== 'all') n += 1;
   if (f.sent !== 'all') n += 1;
   return n;
 }
@@ -122,12 +134,18 @@ export function toNirRow(report: ApiNirReport, taktNameById: Map<string, string>
     reportDate: report.report_date ? String(report.report_date).slice(0, 10) : null,
     createdAt: report.created_at,
     areaId: area?.id ?? null,
-    areaName: area?.name ?? '',
+    // "{שם} — {שנה} — {זן}", the same name the plots screen shows.
+    areaName: embeddedAreaDisplayName(area),
     variety: area?.variety ?? null,
     workerName: worker?.name ?? '',
     subAreaId,
     subAreaName: subAreaId ? (taktNameById.get(subAreaId) ?? null) : null,
     direction: (detail.direction as string | null) ?? null,
+    sampleType: detail.sample_type === 'pomace' ? 'pomace' : 'fruit',
+    crushingType: (detail.crushing_type as string | null) ?? null,
+    decanterDifferential: numeric(detail.decanter_differential),
+    monopumpSpeed: numeric(detail.monopump_speed),
+    malaxationTemp: numeric(detail.malaxation_temp),
     oil: numeric(detail.oil),
     water: numeric(detail.water),
     dry: numeric(detail.dry),
@@ -147,10 +165,13 @@ export function toNirRow(report: ApiNirReport, taktNameById: Map<string, string>
 /**
  * The oil verdict a row is filtered and sorted by.
  *
- * Deliberately NOT report_areas.status: every NIR write patches the header to
+ * Null for a pomace reading. Deliberately NOT report_areas.status: every NIR write patches the header to
  * 'completed', so that column is a constant and would make a useless filter.
  */
 export function rowStatus(row: NirRow, rules: ParameterRule[]): ParameterStatus | null {
+  // parameter_rules score fruit ripeness; pomace oil is extraction loss and has
+  // no verdict. It files under 'none' in the status filter.
+  if (row.sampleType !== 'fruit') return null;
   return evaluateParameter(rules, 'oil', row.oil)?.status ?? null;
 }
 
@@ -165,6 +186,7 @@ export function filterNirRows(
   return rows.filter((row) => {
     if (areaId && row.areaId !== areaId) return false;
     if (filters.direction !== 'all' && row.direction !== filters.direction) return false;
+    if (filters.sampleType !== 'all' && row.sampleType !== filters.sampleType) return false;
 
     if (filters.sent !== 'all' && (row.sentToClientAt !== null) !== (filters.sent === 'sent'))
       return false;
@@ -182,6 +204,7 @@ export function filterNirRows(
         row.notes,
         row.subAreaName,
         row.direction,
+        row.crushingType,
         row.reportNumber !== null ? String(row.reportNumber) : '',
       ]
         .filter(Boolean)

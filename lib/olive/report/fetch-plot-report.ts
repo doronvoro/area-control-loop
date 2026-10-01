@@ -1,8 +1,10 @@
 /**
  * Everything the per-plot status report prints, in one call.
  *
- * Ported from the client prototype's generatePlotReport / buildReportHTML
- * (docs/code.html:6042 and :5926), which is the layout this reproduces.
+ * Originally ported from the client prototype's generatePlotReport /
+ * buildReportHTML (docs/code.html:6042 and :5926); the fields now follow the
+ * client's sample report of 2026-09-29, which trims that layout. Where the
+ * sample itself falls short, see docs/OLIVE_PLOT_REPORT_SAMPLE_ISSUES.md.
  *
  * WHY A LOADER RATHER THAN AN API ROUTE
  * Two renderers need this data — the printable page and the PDF endpoint — and
@@ -20,9 +22,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { getOlivePlot } from '@/lib/services/olive-plot.service';
-import { getNirReports } from '@/lib/services/olive-nir.service';
-import { getHarvestReports } from '@/lib/services/olive-harvest.service';
-import { getYieldEstimatesBySeason } from '@/lib/services/olive-yield.service';
+import { getNirReports, isFruitReading } from '@/lib/services/olive-nir.service';
 import { getWeatherDays } from '@/lib/services/olive-weather.service';
 import {
   getParameterRules,
@@ -45,22 +45,17 @@ import {
   computePlotStatus,
   evaluateParameter,
   daysSinceLabel,
-  yieldLoadInfo,
   type UrgencyLevel,
 } from '@/lib/olive/logic';
 import { toNirRow, type NirRow } from '@/lib/olive/nir-rows';
-import { toHarvestRow } from '@/lib/olive/harvest-rows';
-import { buildRecommendation } from '@/lib/olive/report/recommendation';
+import { buildParameterRecommendations } from '@/lib/olive/report/recommendation';
 import {
   ParameterStatus,
-  HARVESTER_LABELS,
-  WATER_TYPE_LABELS,
   PLOT_TYPE_LABELS,
   type ParameterRule,
-  type HarvesterType,
-  type WaterType,
   type PlotType,
 } from '@/types/database';
+import { plotDisplayNameOf } from '@/lib/olive/plot-name';
 
 // --- Types ---
 
@@ -78,20 +73,15 @@ export interface ReportTag {
   value: string;
 }
 
-export interface HarvestTotals {
-  passes: number;
-  fruitKg: number | null;
-  oilKg: number | null;
-  areaDoneDunam: number | null;
-  fruitPerDunam: number | null;
-  oilPerDunam: number | null;
-  oilPercent: number | null;
-}
+/**
+ * Rows in the history table. The client's sample titles it "אחרונות" and the
+ * prototype sliced to the same five; the chart still gets the full season.
+ */
+export const HISTORY_TABLE_ROWS = 5;
 
 export interface PlotReportData {
   /** he-IL date + time, formatted once here so both renderers agree. */
   generatedAt: string;
-  seasonLabel: string | null;
 
   plotName: string;
   growerName: string;
@@ -101,21 +91,25 @@ export interface PlotReportData {
   maturityLabel: string;
   sizeDunam: number | null;
 
+  /** Who took the latest reading; null for imported readings, which carry none. */
+  inspectorName: string | null;
+
   tags: ReportTag[];
 
   status: { level: UrgencyLevel; headline: string; windowLine: string };
-  recommendation: string;
+  /** One line per banded measurement that calls for action; may be empty. */
+  recommendations: string[];
   weatherLines: string[];
 
   latest: NirRow | null;
   latestDateLabel: string | null;
-  kpis: ReportKpi[];
-  /** Measurements with no threshold band of their own. */
-  subValues: ReportTag[];
+  /** The three banded readings — the large tiles. */
+  primaryKpis: ReportKpi[];
+  /** Acidity and green — the smaller row under them. */
+  secondaryKpis: ReportKpi[];
 
-  /** Oldest first — the order the chart and the table both want. */
+  /** Oldest first — the order the chart wants. The table reverses and caps it. */
   history: NirRow[];
-  harvest: HarvestTotals | null;
 }
 
 // --- Helpers ---
@@ -195,9 +189,6 @@ export async function fetchPlotReport(
   if (!plot) return null;
 
   const season = (await getActiveSeason(supabase)) as {
-    id: string;
-    name: string;
-    year_type: string | null;
     starts_on: string;
     ends_on: string;
   } | null;
@@ -207,28 +198,26 @@ export async function fetchPlotReport(
   // rather than showing nothing.
   const range = season ? { from: season.starts_on, to: season.ends_on } : {};
 
-  const [nirReports, harvestReports, rules, windowRows, weatherRow, weatherRows] =
-    await Promise.all([
-      getNirReports(supabase, [areaId], range),
-      getHarvestReports(supabase, [areaId], range),
-      getParameterRules(supabase),
-      getVarietyWindows(supabase),
-      getWeatherThresholds(supabase),
-      getWeatherDays(supabase, todayString(now)),
-    ]);
-
-  const yieldEstimates = season
-    ? await getYieldEstimatesBySeason(supabase, season.id, [areaId])
-    : {};
+  const [nirReports, rules, windowRows, weatherRow, weatherRows] = await Promise.all([
+    getNirReports(supabase, [areaId], range),
+    getParameterRules(supabase),
+    getVarietyWindows(supabase),
+    getWeatherThresholds(supabase),
+    getWeatherDays(supabase, todayString(now)),
+  ]);
 
   // --- flatten ---
 
   const taktNameById = new Map<string, string>((plot.takts ?? []).map((t) => [t.id, t.name]));
 
-  // getNirReports returns newest first; the chart and the history table both
-  // read oldest first.
-  const history = (nirReports as ApiNirReport[]).map((r) => toNirRow(r, taktNameById)).reverse();
-  const latestReport = (nirReports as ApiNirReport[])[0] ?? null;
+  // Fruit only: this report is about ripeness, and pomace oil is extraction
+  // loss on a different scale — it would put a spike in the trend and could
+  // become the "latest" verdict. See isFruitReading.
+  const fruitReports = (nirReports as ApiNirReport[]).filter(isFruitReading);
+
+  // getNirReports returns newest first; the chart reads oldest first.
+  const history = fruitReports.map((r) => toNirRow(r, taktNameById)).reverse();
+  const latestReport = fruitReports[0] ?? null;
   const latest = history.length > 0 ? history[history.length - 1] : null;
 
   const weather = computeUpcomingWeather(
@@ -250,17 +239,12 @@ export async function fetchPlotReport(
 
   const details = plot.details ?? null;
   const plantYear = details?.plant_year_label ?? plot.planting_time?.slice(0, 4) ?? null;
-  const sizeDunam = numeric(plot.size);
-  const harvesterLabel = details?.harvester
-    ? (HARVESTER_LABELS[details.harvester as HarvesterType] ?? details.harvester)
-    : null;
 
   // --- tags ---
-
-  const kgPerDunam = numeric(
-    (yieldEstimates as Record<string, { kg_per_dunam?: unknown }>)[areaId]?.kg_per_dunam
-  );
-  const load = yieldLoadInfo(kgPerDunam);
+  //
+  // Grower type only, as in the client's sample. Harvester, water, irrigation,
+  // yield estimate and takt count used to follow; the sample drops them and the
+  // dashboard still shows every one.
 
   const tags: ReportTag[] = [];
   if (details?.plot_type) {
@@ -269,148 +253,66 @@ export async function fetchPlotReport(
       value: PLOT_TYPE_LABELS[details.plot_type as PlotType] ?? details.plot_type,
     });
   }
-  if (harvesterLabel) tags.push({ label: 'מוסקת', value: harvesterLabel });
-  if (details?.water_type) {
-    tags.push({
-      label: 'מים',
-      value: WATER_TYPE_LABELS[details.water_type as WaterType] ?? details.water_type,
-    });
-  }
-  if (latest?.irrigAmount !== null && latest?.irrigAmount !== undefined) {
-    tags.push({
-      label: `השקיה (${latest.reportDate ?? ''})`.trim(),
-      value: `${fmt(latest.irrigAmount)} קוב/דונם`,
-    });
-  }
-  if (kgPerDunam !== null) {
-    const total = sizeDunam !== null ? ` · ${fmt(kgPerDunam * sizeDunam, 0)} ק"ג` : '';
-    tags.push({
-      label: season ? `הערכת יבול ${season.name}` : 'הערכת יבול',
-      value: `${fmt(kgPerDunam, 0)} ק"ג/דונם${total}${load ? ` · ${load.label}` : ''}`,
-    });
-  }
-  const taktCount = plot.takts?.length ?? numeric(details?.takt_count) ?? 0;
-  if (taktCount > 0) tags.push({ label: 'טאקטים', value: String(taktCount) });
 
   // --- KPIs ---
   //
-  // Four tiles, where the prototype had three. Acidity is measured on every
-  // reading and rises with oil, and leaving it off a ripeness report sent to a
-  // grower loses a number they act on. It has no rules row (only oil, water and
-  // dry are banded in 20260908100000), so evaluateParameter returns null and the
-  // tile renders unflagged — correct, not a gap.
+  // Three banded readings as large tiles, then acidity and green as a smaller
+  // row, per the sample. Neither of the small two has a rules row (only oil,
+  // water and dry are banded in 20260908100000), so evaluateParameter returns
+  // null and they render unflagged — correct, not a gap.
 
-  const kpis: ReportKpi[] = [
-    {
-      label: 'שמן',
-      value: fmt(latest?.oil ?? null),
-      unit: '%',
-      flagClass: flagClass(
-        evaluateParameter(rules as ParameterRule[], 'oil', latest?.oil ?? null)?.status
-      ),
-    },
-    {
-      label: 'מים',
-      value: fmt(latest?.water ?? null),
-      unit: '%',
-      flagClass: flagClass(
-        evaluateParameter(rules as ParameterRule[], 'water', latest?.water ?? null)?.status
-      ),
-    },
-    {
-      label: 'שמן בחו"י',
-      value: fmt(latest?.dry ?? null, 2),
-      unit: '%',
-      flagClass: flagClass(
-        evaluateParameter(rules as ParameterRule[], 'dry', latest?.dry ?? null)?.status
-      ),
-    },
-    {
-      label: 'חומציות',
-      value: fmt(latest?.acid ?? null, 2),
-      unit: '%',
-      flagClass: flagClass(
-        evaluateParameter(rules as ParameterRule[], 'acid', latest?.acid ?? null)?.status
-      ),
-    },
+  const kpi = (
+    label: string,
+    code: string,
+    value: number | null | undefined,
+    digits = 1
+  ): ReportKpi => ({
+    label,
+    value: fmt(value ?? null, digits),
+    unit: '%',
+    flagClass: flagClass(evaluateParameter(rules as ParameterRule[], code, value ?? null)?.status),
+  });
+
+  const primaryKpis: ReportKpi[] = [
+    kpi('שמן', 'oil', latest?.oil),
+    kpi('מים', 'water', latest?.water),
+    kpi('שמן בחו"י', 'dry', latest?.dry, 2),
   ];
-
-  const subValues: ReportTag[] = [];
-  if (latest) {
-    if (latest.green !== null) subValues.push({ label: 'ירוק', value: `${fmt(latest.green)}%` });
-    if (latest.maturity !== null)
-      subValues.push({ label: 'הבשלה', value: fmt(latest.maturity, 2) });
-    if (latest.subAreaName) subValues.push({ label: 'טאקט', value: latest.subAreaName });
-    if (latest.direction) subValues.push({ label: 'כיוון', value: latest.direction });
-    // Imported readings carry no worker: lib/olive/import-backup.ts writes the
-    // header without one, and the prototype's `examiner` field is not mapped.
-    subValues.push({ label: 'נבדק ע"י', value: latest.workerName || '—' });
-  }
-
-  // --- harvest actuals ---
-
-  const harvestRows = (harvestReports || []).map((r) => toHarvestRow(r, taktNameById));
-  const harvest: HarvestTotals | null =
-    harvestRows.length > 0
-      ? (() => {
-          const sum = (pick: (r: (typeof harvestRows)[number]) => number | null) =>
-            harvestRows.reduce<number | null>((acc, r) => {
-              const v = pick(r);
-              return v === null ? acc : (acc ?? 0) + v;
-            }, null);
-
-          const fruitKg = sum((r) => r.fruitKg);
-          const oilKg = sum((r) => r.oilKg);
-          const areaDoneDunam = sum((r) => r.areaDoneDunam);
-          const basis = areaDoneDunam ?? sizeDunam;
-
-          return {
-            passes: harvestRows.length,
-            fruitKg,
-            oilKg,
-            areaDoneDunam,
-            fruitPerDunam: fruitKg !== null && basis ? fruitKg / basis : null,
-            oilPerDunam: oilKg !== null && basis ? oilKg / basis : null,
-            oilPercent: fruitKg && oilKg !== null ? (oilKg / fruitKg) * 100 : null,
-          };
-        })()
-      : null;
+  const secondaryKpis: ReportKpi[] = [
+    kpi('חומציות בפרי', 'acid', latest?.acid, 2),
+    kpi('אחוז צבע ירוק', 'green', latest?.green),
+  ];
 
   return {
     generatedAt: `${now.toLocaleDateString('he-IL')}, ${now.toLocaleTimeString('he-IL', {
       hour: '2-digit',
       minute: '2-digit',
     })}`,
-    seasonLabel: season
-      ? `${season.name}${season.year_type ? ` (${season.year_type})` : ''}`
-      : null,
 
-    plotName: plot.name ?? '',
+    // "{שם} — {שנה} — {זן}" — the name every olive screen shows.
+    plotName: plotDisplayNameOf(plot),
     growerName: details?.grower_name ?? '—',
     variety: plot.variety,
     region: details?.region ?? null,
     plantYear,
     maturityLabel: maturityLabel(plantYear, now),
-    sizeDunam,
+    sizeDunam: numeric(plot.size),
+    // Imported readings carry no worker: lib/olive/import-backup.ts writes the
+    // header without one, and the prototype's `examiner` field is not mapped.
+    inspectorName: latest?.workerName || null,
 
     tags,
     status: { level: status.level, headline: status.headline, windowLine: status.windowLine },
-    recommendation: buildRecommendation({
-      headline: status.headline,
-      windowLine: status.windowLine,
-      weatherLines: weather.weatherLines,
-      harvesterLabel,
-    }),
+    recommendations: buildParameterRecommendations(rules as ParameterRule[], latest),
     weatherLines: weather.weatherLines,
 
     latest,
     latestDateLabel: latest?.reportDate
       ? `${latest.reportDate}${daysSinceLabel(latest.reportDate, now) ? ` (${daysSinceLabel(latest.reportDate, now)})` : ''}`
       : null,
-    kpis,
-    subValues,
+    primaryKpis,
+    secondaryKpis,
 
     history,
-    harvest,
   };
 }

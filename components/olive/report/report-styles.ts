@@ -135,10 +135,6 @@ export const REPORT_CSS = `
 .rpt-kpi.flag-ok{ border-inline-start-color:var(--rpt-sage); }
 .rpt-kpi.flag-ok .rpt-val{ color:var(--rpt-sage-deep); }
 
-/* Secondary measurements, the ones with no threshold band of their own. */
-.rpt-subvals{ display:flex; flex-wrap:wrap; gap:6px 18px; margin-top:12px; font-size:.78rem; color:var(--rpt-ink-soft); }
-.rpt-subvals b{ color:var(--rpt-ink); font-weight:600; }
-
 /* --- recommendation --- */
 .rpt-rec-box{
   background:var(--rpt-cream); border:1px solid var(--rpt-line); border-inline-start:3px solid var(--rpt-gold);
@@ -155,9 +151,6 @@ export const REPORT_CSS = `
 .rpt-table{ width:100%; border-collapse:collapse; font-size:.82rem; }
 .rpt-table th,.rpt-table td{ padding:9px 10px; border-bottom:1px solid var(--rpt-line); text-align:right; }
 .rpt-table th{ color:var(--rpt-ink-soft); font-weight:600; font-size:.72rem; text-transform:uppercase; letter-spacing:.03em; }
-/* The full-measurement history runs to twelve columns; it needs the room. */
-.rpt-table.wide{ font-size:.7rem; }
-.rpt-table.wide th,.rpt-table.wide td{ padding:6px 4px; white-space:nowrap; }
 .rpt-table .num{ font-variant-numeric:tabular-nums; }
 .rpt-empty-cell{ text-align:center; color:var(--rpt-ink-soft); }
 
@@ -167,11 +160,6 @@ export const REPORT_CSS = `
 .rpt-weather-line.warn{ color:var(--rpt-terracotta); font-weight:600; }
 
 /* --- chart --- */
-.rpt-chart-panel{ margin-bottom:10px; }
-.rpt-chart-title{
-  display:flex; align-items:center; gap:6px;
-  font-size:.72rem; color:var(--rpt-ink-soft); margin:0 0 2px; font-weight:600;
-}
 .rpt-chart-swatch{ display:inline-block; width:9px; height:9px; border-radius:50%; flex:none; }
 .rpt-note{ font-size:.8rem; color:var(--rpt-ink-soft); margin:0; }
 
@@ -210,6 +198,71 @@ export const REPORT_CSS = `
   font-family:var(--font-frank-ruhl,'Frank Ruhl Libre'),serif; font-style:italic;
   color:var(--rpt-gold-deep); font-size:.85rem;
 }
+
+/*
+ * --- plot status report (client sample, 2026-09-29) ---
+ *
+ * Everything below is scoped to .rpt-plot so the grower season report, which
+ * shares the classes above, keeps its look. The sample moves to a light header,
+ * outlined tiles with the label on top, and a company footer.
+ */
+.rpt-plot .rpt-header{ background:#fff; color:var(--rpt-ink); padding:20px 42px 10px; }
+.rpt-plot .rpt-header::after{ display:none; }
+.rpt-plot .rpt-h-title h1{ color:#8C8577; }
+.rpt-plot .rpt-h-title p{ color:var(--rpt-ink); }
+.rpt-plot .rpt-h-meta{ color:#8C8577; align-self:flex-start; }
+.rpt-plot .rpt-h-meta b{ color:#8C8577; font-weight:400; }
+.rpt-plot .rpt-main{ padding-top:14px; padding-bottom:18px; }
+/* The sample is one A4 page; these tighten the shared spacing just enough to keep it there. */
+.rpt-plot .rpt-section{ margin-bottom:14px; }
+.rpt-plot .rpt-tags{ margin-bottom:14px; }
+.rpt-plot .rpt-table th,.rpt-plot .rpt-table td{ padding:5px 10px; }
+.rpt-plot .rpt-plot-title{ align-items:flex-start; }
+.rpt-status-block{ display:flex; flex-direction:column; align-items:center; gap:6px; }
+.rpt-status-caption{ font-size:.74rem; color:var(--rpt-ink); font-weight:500; }
+.rpt-plot .rpt-status-badge{ background:#fff; border-color:var(--rpt-gold); padding:7px 30px; font-weight:700; }
+.rpt-plot .rpt-status-badge::before{ display:none; }
+.rpt-plot .rpt-subline{ color:var(--rpt-gold-deep); font-size:.95rem; font-weight:500; margin-bottom:2px; }
+.rpt-inspector{ color:var(--rpt-gold-deep); font-size:.78rem; margin-bottom:12px; }
+.rpt-plot .rpt-tag{ background:#fff; }
+.rpt-plot .rpt-section h3{ color:var(--rpt-gold-deep); border-bottom-width:2px; font-weight:700; margin-bottom:10px; padding-bottom:6px; }
+
+.rpt-plot .rpt-kpi-grid{ grid-template-columns:repeat(3,1fr); gap:14px; }
+.rpt-plot .rpt-kpi-grid.cols-2{
+  grid-template-columns:repeat(2,1fr); width:calc((100% - 28px) / 3 * 2 - 30px); margin:10px auto 0; gap:10px;
+}
+.rpt-plot .rpt-kpi{
+  background:#fff; border:1px solid var(--rpt-gold); border-inline-start-width:1px;
+  border-radius:12px; padding:8px 12px 9px; box-shadow:2px 2px 0 rgba(201,152,46,.35);
+}
+.rpt-plot .rpt-kpi .rpt-lbl{ margin:0 0 4px; font-size:.8rem; color:var(--rpt-ink-soft); }
+.rpt-plot .rpt-kpi .rpt-val{ font-size:1.35rem; }
+.rpt-plot .rpt-kpi-grid.cols-2 .rpt-lbl{ font-size:.7rem; }
+.rpt-plot .rpt-kpi-grid.cols-2 .rpt-val{ font-size:1.05rem; }
+.rpt-plot .rpt-kpi.flag-urgent,
+.rpt-plot .rpt-kpi.flag-plan,
+.rpt-plot .rpt-kpi.flag-ok{ border-inline-start-color:var(--rpt-gold); }
+
+.rpt-plot .rpt-weather-line{ font-size:.78rem; padding:0 0 4px; }
+.rpt-plot .rpt-weather-line.warn{ font-weight:500; }
+.rpt-plot .rpt-rec-box{ background:#fff; border-inline-start-width:4px; padding:10px 18px 10px; }
+.rpt-plot .rpt-rec-head{ font-weight:700; font-size:.88rem; text-transform:none; }
+.rpt-plot .rpt-rec-box p{ color:var(--rpt-gold-deep); font-size:.95rem; }
+
+.rpt-legend{
+  display:flex; justify-content:center; gap:22px; margin-top:4px;
+  font-size:.72rem; color:var(--rpt-ink);
+}
+.rpt-legend span{ display:inline-flex; align-items:center; gap:5px; }
+
+.rpt-plot .rpt-table th{ color:var(--rpt-ink-soft); font-size:.78rem; text-transform:none; border-bottom-width:2px; }
+.rpt-plot .rpt-table td{ font-size:.85rem; }
+
+.rpt-company-footer{
+  margin:0 20px; padding:10px 22px 12px; border-top:2px solid var(--rpt-gold);
+  text-align:center; font-size:.72rem; color:var(--rpt-gold-deep); line-height:1.7;
+}
+.rpt-company-footer b{ display:block; font-size:.85rem; color:var(--rpt-ink); }
 
 /*
  * Print. The prototype hid everything but its overlay

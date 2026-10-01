@@ -16,6 +16,7 @@
 
 import { HARVESTER_LABELS, type HarvesterType } from '@/types/database';
 import type { SortState } from '@/components/ui/sortable-table-head';
+import { embeddedAreaDisplayName } from './plot-name';
 
 /** A harvest pass flattened for display, with every numeric already coerced. */
 export interface HarvestRow {
@@ -126,7 +127,8 @@ export function toHarvestRow(
     reportDate: report.report_date ? String(report.report_date).slice(0, 10) : null,
     createdAt: report.created_at as string,
     areaId: area?.id ?? null,
-    areaName: area?.name ?? '',
+    // "{שם} — {שנה} — {זן}", the same name the plots screen shows.
+    areaName: embeddedAreaDisplayName(area),
     variety: area?.variety ?? null,
     plotSize: numeric(area?.size),
     workerName: worker?.name ?? '',

@@ -18,9 +18,11 @@ import {
   Scale,
   CloudSun,
   CalendarRange,
+  Leaf,
   Building2,
   MapPinned,
   BookOpen,
+  SlidersHorizontal,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -95,11 +97,15 @@ export const oliveGroup: NavGroup = {
     // Next to the plots rather than under ניהול: a grower exists to own plots,
     // and the two screens link to each other.
     { href: '/olive/growers', label: 'מגדלים', icon: Users },
+    // Next to growers for the same reason: a variety is reference data a plot
+    // points at, and the variety screen links back to the filtered plots.
+    { href: '/olive/varieties', label: 'זנים', icon: Leaf },
     { href: '/olive/nir', label: 'בדיקות NIR', icon: FlaskConical },
     { href: '/olive/harvest', label: 'רישום מסיק', icon: Tractor },
     { href: '/olive/yield', label: 'הערכת יבול', icon: Scale },
     { href: '/olive/weather', label: 'מזג אוויר', icon: CloudSun },
     { href: '/olive/seasons', label: 'עונות', icon: CalendarRange },
+    { href: '/olive/thresholds', label: 'ספים', icon: SlidersHorizontal },
     // Last in the group, and the only external item: a static document rather
     // than a screen. It is served from public/ as a single self-contained HTML
     // file, so the same URL is both what the link opens and what the download
