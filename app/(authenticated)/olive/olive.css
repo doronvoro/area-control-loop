@@ -419,11 +419,13 @@
 .olive-form-hero {
   position: relative;
   overflow: hidden;
+  /* The sidebar's green (--sidebar, hue 155), so a drawer reads as part of the
+     same chrome rather than a separate brown theme. */
   background: linear-gradient(
     135deg,
-    oklch(0.26 0.02 75) 0%,
-    oklch(0.32 0.035 82) 55%,
-    oklch(0.28 0.02 70) 100%
+    var(--sidebar) 0%,
+    oklch(0.25 0.045 155) 55%,
+    oklch(0.21 0.04 155) 100%
   );
 }
 
@@ -434,9 +436,9 @@
   height: 3px;
   background: linear-gradient(
     90deg,
-    oklch(0.70 0.12 85) 0%,
-    oklch(0.83 0.09 88) 50%,
-    oklch(0.70 0.12 85) 100%
+    oklch(0.50 0.13 155) 0%,
+    var(--sidebar-primary) 50%,
+    oklch(0.50 0.13 155) 100%
   );
 }
 
@@ -660,8 +662,9 @@
 .olive-submit {
   position: relative;
   overflow: hidden;
-  background: linear-gradient(135deg, oklch(0.60 0.11 80) 0%, oklch(0.50 0.10 78) 100%);
-  color: oklch(0.99 0.01 90);
+  /* The app's primary green (--primary, hue 152), matching the drawer header. */
+  background: linear-gradient(135deg, oklch(0.52 0.13 153) 0%, var(--primary) 100%);
+  color: var(--primary-foreground);
   border: none;
   border-radius: 0.875rem;
   font-weight: 700;
@@ -671,7 +674,7 @@
 }
 
 .olive-submit:hover:not(:disabled) {
-  box-shadow: 0 6px 24px oklch(0.55 0.11 80 / 30%);
+  box-shadow: 0 6px 24px oklch(0.45 0.12 152 / 30%);
   transform: translateY(-1px);
 }
 

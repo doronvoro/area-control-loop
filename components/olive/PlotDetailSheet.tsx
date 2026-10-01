@@ -48,10 +48,18 @@ import {
   type GrowerSelection,
 } from './GrowerPicker';
 import {
-  HARVESTER_OPTIONS,
+  NEW_VARIETY,
+  VarietyPicker,
+  initialVarietySelection,
+  varietyChanged,
+  varietyPayload,
+  type VarietyOption,
+  type VarietySelection,
+} from './VarietyPicker';
+import { composePlotName, plantYearForName } from '@/lib/olive/plot-name';
+import {
   NIR_SAMPLE_TYPE_LABELS,
   PARAMETER_STATUS_CONFIG,
-  PLOT_TYPE_OPTIONS,
   WATER_TYPE_OPTIONS,
   type ParameterRule,
 } from '@/types/database';
@@ -60,6 +68,7 @@ import type { ApiPlot } from '@/lib/olive/adapt';
 import { toNirRow, type NirRow } from '@/lib/olive/nir-rows';
 import { toHarvestRow, type HarvestRow } from '@/lib/olive/harvest-rows';
 import type { PlotRow } from '@/lib/olive/plot-rows';
+import { parsePlantingDate } from '@/lib/olive/import-backup';
 import { NirFormSheet, type NirEditorState } from './NirFormSheet';
 import { HarvestFormSheet, type HarvestEditorState } from './HarvestFormSheet';
 import { PlotReportDialog } from './report/PlotReportDialog';
@@ -81,16 +90,15 @@ import { NirTrendChart } from './report/NirTrendChart';
 
 const detailsSchema = z.object({
   region: z.string().optional(),
-  plant_year_label: z.string().optional(),
-  plot_type: z.string().optional(),
-  harvester: z.string().optional(),
-  water_type: z.string().optional(),
-  takt_count: z
+  planting_time: z.string().optional(),
+  // areas.size is DECIMAL(10,2) with no CHECK — same guard as the create form.
+  size: z
     .string()
     .optional()
-    .refine((v) => !v || (Number.isInteger(Number(v)) && Number(v) >= 1 && Number(v) <= 10), {
-      message: 'מספר בין 1 ל-10',
+    .refine((v) => !v || (!Number.isNaN(Number(v)) && Number(v) >= 0), {
+      message: 'נדרש ערך חיובי',
     }),
+  water_type: z.string().optional(),
   // yield_estimates.kg_per_dunam carries no CHECK constraint of any kind, so a
   // typo'd negative would be stored silently. This is the only guard there is.
   yield_kg_per_dunam: z
@@ -104,14 +112,10 @@ const detailsSchema = z.object({
 type DetailsFormData = z.infer<typeof detailsSchema>;
 
 const SELECTS: {
-  name: 'plot_type' | 'harvester' | 'water_type';
+  name: 'water_type';
   label: string;
   options: { value: string; label: string }[];
-}[] = [
-  { name: 'plot_type', label: 'סוג מגדל', options: PLOT_TYPE_OPTIONS },
-  { name: 'harvester', label: 'סוג מוסקת', options: HARVESTER_OPTIONS },
-  { name: 'water_type', label: 'סוג מים', options: WATER_TYPE_OPTIONS },
-];
+}[] = [{ name: 'water_type', label: 'סוג מים', options: WATER_TYPE_OPTIONS }];
 
 /** How many readings and passes to list before pointing at the full log. */
 const HISTORY_LIMIT = 5;
@@ -132,6 +136,8 @@ interface PlotDetailSheetProps {
   seasonId: string | null;
   /** The tenant's growers, for the picker. */
   growers: GrowerOption[];
+  /** The shared variety list, for the picker. */
+  varieties: VarietyOption[];
   onSaved: () => void;
 }
 
@@ -143,6 +149,7 @@ export function PlotDetailSheet({
   estimates,
   seasonId,
   growers,
+  varieties,
   onSaved,
 }: PlotDetailSheetProps) {
   const [nirEditor, setNirEditor] = useState<NirEditorState | null>(null);
@@ -188,6 +195,7 @@ export function PlotDetailSheet({
               rules={rules}
               seasonId={seasonId}
               growers={growers}
+              varieties={varieties}
               historyNonce={historyNonce}
               onSaved={onSaved}
               onClose={close}
@@ -239,6 +247,7 @@ function PlotDetailBody({
   rules,
   seasonId,
   growers,
+  varieties,
   historyNonce,
   onSaved,
   onClose,
@@ -252,6 +261,7 @@ function PlotDetailBody({
   rules: ParameterRule[];
   seasonId: string | null;
   growers: GrowerOption[];
+  varieties: VarietyOption[];
   historyNonce: number;
   onSaved: () => void;
   onClose: () => void;
@@ -269,6 +279,23 @@ function PlotDetailBody({
   const [grower, setGrower] = useState<GrowerSelection>(() =>
     initialGrowerSelection(row.plot.details?.grower_id, row.growerName, growers)
   );
+  const [variety, setVariety] = useState<VarietySelection>(() =>
+    initialVarietySelection(row.varietyId, row.variety, varieties)
+  );
+  // The variety list is a separate request and may land after the drawer
+  // opened, which seeds an untouched picker as "new" with the stored name.
+  // Once the plot's own variety appears in the list, show it as the list entry
+  // — only while the user has not changed anything.
+  useEffect(() => {
+    setVariety((current) =>
+      current.varietyId === NEW_VARIETY &&
+      current.varietyName === (row.variety ?? '') &&
+      row.varietyId &&
+      varieties.some((v) => v.id === row.varietyId)
+        ? { varietyId: row.varietyId, varietyName: '' }
+        : current
+    );
+  }, [varieties, row.varietyId, row.variety]);
 
   const [nirRows, setNirRows] = useState<NirRow[] | null>(null);
   const [nirView, setNirView] = useState<'list' | 'chart'>('list');
@@ -336,21 +363,42 @@ function PlotDetailBody({
     };
   }, [row.id, historyNonce]);
 
+  // The picker edits areas.planting_time. A plot imported with only a label
+  // ("2003", "2006/7") has no date yet, so the label seeds the picker.
+  const plantYearLabel = row.plot.details?.plant_year_label ?? null;
+  const initialPlantingTime =
+    row.plot.planting_time?.slice(0, 10) ?? parsePlantingDate(plantYearLabel).date ?? '';
+
+  const initialSize = row.size != null ? String(row.size) : '';
+
   const form = useForm<DetailsFormData>({
     resolver: zodResolver(detailsSchema),
     defaultValues: {
       region: row.region ?? '',
-      plant_year_label: row.plot.details?.plant_year_label ?? '',
-      plot_type: toFormValue(row.plotType),
-      harvester: toFormValue(row.harvester),
+      planting_time: initialPlantingTime,
+      size: initialSize,
       water_type: toFormValue(row.waterType),
-      takt_count: row.plot.details?.takt_count != null ? String(row.plot.details.takt_count) : '',
       yield_kg_per_dunam: row.yieldKgPerDunam != null ? String(row.yieldKgPerDunam) : '',
     },
   });
 
   // The band pill beside the yield field, live off what has been typed.
   const yieldDraft = useWatch({ control: form.control, name: 'yield_kg_per_dunam' });
+
+  // "{שם} — {שנת נטיעה} — {זן}", live off the three fields above it.
+  const nameDraft = useWatch({ control: form.control, name: 'region' });
+  const plantingDraft = useWatch({ control: form.control, name: 'planting_time' });
+  const composedName = useMemo(() => {
+    const varietyName =
+      variety.varietyId === NEW_VARIETY
+        ? variety.varietyName
+        : (varieties.find((v) => v.id === variety.varietyId)?.name ?? '');
+    return composePlotName(
+      nameDraft,
+      plantYearForName(plantingDraft, initialPlantingTime, plantYearLabel),
+      varietyName
+    );
+  }, [nameDraft, plantingDraft, initialPlantingTime, plantYearLabel, variety, varieties]);
   const yieldLoad = useMemo(
     () => (yieldDraft ? yieldLoadInfo(Number(yieldDraft)) : null),
     [yieldDraft]
@@ -367,12 +415,27 @@ function PlotDetailBody({
         body: JSON.stringify({
           area_id: row.id,
           ...growerPayload(grower),
+          // Only when changed: the variety lives on `areas`, and an untouched
+          // picker should not rewrite it.
+          ...(varietyChanged(variety, row.varietyId, row.variety) && varietyPayload(variety)),
           region: values.region || null,
-          plant_year_label: values.plant_year_label || null,
-          plot_type: fromFormValue(values.plot_type),
-          harvester: fromFormValue(values.harvester),
+          // The label wins over the date wherever the year is shown, so a
+          // picked date retires it — otherwise the change would not show.
+          plant_year_label:
+            (values.planting_time ?? '') === initialPlantingTime ? plantYearLabel : null,
+          ...((values.planting_time ?? '') !== initialPlantingTime && {
+            planting_time: values.planting_time || null,
+          }),
+          // Only when changed, like planting_time: it lives on `areas`.
+          ...((values.size ?? '') !== initialSize && {
+            size: values.size ? Number(values.size) : null,
+          }),
+          // No longer edited here, but the details write is a full-row
+          // upsert — omitting them would null whatever is stored.
+          plot_type: row.plotType,
+          harvester: row.harvester,
           water_type: fromFormValue(values.water_type),
-          takt_count: values.takt_count ? Number(values.takt_count) : null,
+          takt_count: row.plot.details?.takt_count ?? null,
         }),
       });
 
@@ -450,7 +513,7 @@ function PlotDetailBody({
               }
               onOpenReport();
             }}
-            className="group inline-flex h-9 items-center gap-2 rounded-full border border-[oklch(0.83_0.09_88/55%)] bg-[oklch(0.83_0.09_88/14%)] ps-3.5 pe-3 text-sm font-semibold text-[oklch(0.93_0.06_88)] shadow-sm transition-all hover:border-[oklch(0.83_0.09_88/85%)] hover:bg-[oklch(0.83_0.09_88/24%)] hover:text-white focus-visible:ring-2 focus-visible:ring-[oklch(0.83_0.09_88)] focus-visible:outline-none active:scale-[0.97] aria-disabled:opacity-50 aria-disabled:hover:bg-[oklch(0.83_0.09_88/14%)]"
+            className="group inline-flex h-9 items-center gap-2 rounded-full border border-sidebar-primary/55 bg-sidebar-primary/14 ps-3.5 pe-3 text-sm font-semibold text-sidebar-accent-foreground shadow-sm transition-all hover:border-sidebar-primary/85 hover:bg-sidebar-primary/24 hover:text-white focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none active:scale-[0.97] aria-disabled:opacity-50 aria-disabled:hover:bg-sidebar-primary/14"
           >
             <FileText className="size-4" />
             <span className="hidden sm:inline">הפק דוח</span>
@@ -744,6 +807,84 @@ function PlotDetailBody({
               )}
 
               <div className="grid gap-3 sm:grid-cols-2">
+                {/* Order follows the client's naming: שם (the block or nickname,
+                    stored as region), planting date, variety — the three parts
+                    of a plot name like "מיצר — 2003 — ארבקינה". */}
+                <FormField
+                  control={form.control}
+                  name="region"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-sm font-semibold">שם</FormLabel>
+                      <FormControl>
+                        <Input className="h-9" {...field} value={field.value ?? ''} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="planting_time"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-sm font-semibold">תאריך נטיעה</FormLabel>
+                      <FormControl>
+                        <Input className="h-9" type="date" {...field} value={field.value ?? ''} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div>
+                  <label className="text-sm font-semibold" id="plot-detail-variety">
+                    זן
+                  </label>
+                  <div className="mt-2" aria-labelledby="plot-detail-variety">
+                    <VarietyPicker varieties={varieties} value={variety} onChange={setVariety} />
+                  </div>
+                </div>
+
+                {/* Calculated, not stored — the client's naming convention made
+                    visible, so a mistyped part shows up before saving. */}
+                <div>
+                  <label className="text-sm font-semibold" htmlFor="plot-detail-composed-name">
+                    שם מלא
+                  </label>
+                  <Input
+                    id="plot-detail-composed-name"
+                    className="bg-muted/40 mt-2 h-9"
+                    value={composedName}
+                    readOnly
+                    tabIndex={-1}
+                    placeholder="—"
+                  />
+                </div>
+
+                <FormField
+                  control={form.control}
+                  name="size"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-sm font-semibold">גודל (דונם)</FormLabel>
+                      <FormControl>
+                        <Input
+                          className="h-9"
+                          type="number"
+                          inputMode="decimal"
+                          step="0.01"
+                          min="0"
+                          {...field}
+                          value={field.value ?? ''}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
                 <div>
                   <label className="text-sm font-semibold" id="plot-detail-grower">
                     מגדל
@@ -752,20 +893,6 @@ function PlotDetailBody({
                     <GrowerPicker growers={growers} value={grower} onChange={setGrower} />
                   </div>
                 </div>
-
-                <FormField
-                  control={form.control}
-                  name="region"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-semibold">גוש</FormLabel>
-                      <FormControl>
-                        <Input className="h-9" {...field} value={field.value ?? ''} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
 
                 {SELECTS.map((s) => (
                   <FormField
@@ -799,53 +926,7 @@ function PlotDetailBody({
                     )}
                   />
                 ))}
-
-                <FormField
-                  control={form.control}
-                  name="plant_year_label"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-semibold">שנת נטיעה (תווית)</FormLabel>
-                      <FormControl>
-                        <Input
-                          className="h-9"
-                          placeholder="2006/7"
-                          {...field}
-                          value={field.value ?? ''}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="takt_count"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-semibold">מספר טאקטים</FormLabel>
-                      <FormControl>
-                        <Input
-                          className="h-9"
-                          type="number"
-                          min={1}
-                          max={10}
-                          {...field}
-                          value={field.value ?? ''}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
               </div>
-
-              {/* The split of ownership is deliberate and documented on the
-                  plots route: these columns live on `areas`, not here. */}
-              <p className="olive-muted mt-3 text-xs">
-                שם, זן, שנת נטיעה וגודל נערכים במסך השטחים.
-              </p>
             </section>
           </form>
         </Form>

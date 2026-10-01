@@ -66,6 +66,7 @@ function row(overrides: Partial<PlotRow> = {}): PlotRow {
     id: 'p',
     name: 'מיצר',
     variety: null,
+    varietyId: null,
     growerId: null,
     growerName: null,
     plotType: null,
@@ -249,6 +250,7 @@ describe('filterPlotRows', () => {
       id: 'a',
       name: 'מיצר — 2003 — ארבקינה',
       variety: 'ארבקינה',
+      varietyId: 'v-arb',
       growerId: 'g-1',
       growerName: 'ארץ גשור',
       plotType: PlotType.OWNER,
@@ -260,6 +262,9 @@ describe('filterPlotRows', () => {
     row({
       id: 'b',
       name: 'גבעה',
+      // Entered as an alias; the trigger stored the canonical name and id.
+      variety: 'ארבקינה',
+      varietyId: 'v-arb',
       growerId: 'g-2',
       plotType: PlotType.PARTNER,
       category: 'anomaly',
@@ -330,6 +335,20 @@ describe('filterPlotRows', () => {
 
   it('finds the plots with no grower at all', () => {
     expect(filter({ growerId: NONE })).toEqual(['c']);
+  });
+
+  it('filters by variety id, whatever spelling the plot was entered under', () => {
+    expect(filter({ varietyId: 'v-arb' })).toEqual(['a', 'b']);
+    expect(filter({ varietyId: 'v-other' })).toEqual([]);
+  });
+
+  it('treats both spellings of "no variety filter" as no filter', () => {
+    expect(filter({ varietyId: '' })).toEqual(['a', 'b', 'c']);
+    expect(filter({ varietyId: 'all' })).toEqual(['a', 'b', 'c']);
+  });
+
+  it('finds the plots with no variety at all', () => {
+    expect(filter({ varietyId: NONE })).toEqual(['c']);
   });
 
   it('combines filters with AND', () => {
@@ -436,6 +455,7 @@ describe('hasActivePlotFilters', () => {
   it('is true once any filter is set', () => {
     expect(hasActivePlotFilters({ ...EMPTY_PLOT_FILTERS, plotType: PlotType.OWNER })).toBe(true);
     expect(hasActivePlotFilters({ ...EMPTY_PLOT_FILTERS, growerId: 'g-1' })).toBe(true);
+    expect(hasActivePlotFilters({ ...EMPTY_PLOT_FILTERS, varietyId: 'v-arb' })).toBe(true);
     expect(hasActivePlotFilters({ ...EMPTY_PLOT_FILTERS, category: 'ready' })).toBe(true);
     expect(hasActivePlotFilters({ ...EMPTY_PLOT_FILTERS, harvest: 'active' })).toBe(true);
     expect(hasActivePlotFilters({ ...EMPTY_PLOT_FILTERS, nir: 'never' })).toBe(true);
@@ -444,6 +464,11 @@ describe('hasActivePlotFilters', () => {
   it('is false for either spelling of an unset grower', () => {
     expect(hasActivePlotFilters({ ...EMPTY_PLOT_FILTERS, growerId: '' })).toBe(false);
     expect(hasActivePlotFilters({ ...EMPTY_PLOT_FILTERS, growerId: 'all' })).toBe(false);
+  });
+
+  it('is false for either spelling of an unset variety', () => {
+    expect(hasActivePlotFilters({ ...EMPTY_PLOT_FILTERS, varietyId: '' })).toBe(false);
+    expect(hasActivePlotFilters({ ...EMPTY_PLOT_FILTERS, varietyId: 'all' })).toBe(false);
   });
 });
 

@@ -30,6 +30,11 @@ export interface PlotRow {
   id: string;
   name: string;
   variety: string | null;
+  /**
+   * varieties.id, which is what the variety filter matches on — so a plot
+   * entered under an alias ("ארבקינה צעיר") is found under ארבקינה.
+   */
+  varietyId: string | null;
   /** growers.id, which is what the grower filter matches on. */
   growerId: string | null;
   growerName: string | null;
@@ -93,6 +98,8 @@ export interface PlotFilters {
    * NONE means "this plot has no grower", the same word the plot forms use.
    */
   growerId: string;
+  /** Same convention as growerId: '' or 'all' is no filter, NONE is "no variety". */
+  varietyId: string;
   /** 'all' | a PlotCategory value. Driven by the category tiles. */
   category: string;
   /** 'all' | an UrgencyLevel. Driven by the header's urgency chips. */
@@ -107,6 +114,7 @@ export const EMPTY_PLOT_FILTERS: PlotFilters = {
   search: '',
   plotType: 'all',
   growerId: '',
+  varietyId: '',
   category: 'all',
   urgency: 'all',
   harvest: 'all',
@@ -127,6 +135,7 @@ export function countActivePlotFilters(f: PlotFilters): number {
   // Both spellings of "no grower filter" have to be checked here; collapsing
   // this to a truthiness test would count 'all' as an active filter.
   if (f.growerId !== '' && f.growerId !== 'all') n += 1;
+  if (f.varietyId !== '' && f.varietyId !== 'all') n += 1;
   if (f.category !== 'all') n += 1;
   if (f.urgency !== 'all') n += 1;
   if (f.harvest !== 'all') n += 1;
@@ -254,6 +263,7 @@ export function toPlotRow({
     id: plot.id,
     name: plot.name ?? '',
     variety: plot.variety,
+    varietyId: plot.variety_id ?? null,
     growerId: details?.grower_id ?? null,
     growerName: details?.grower_name ?? null,
     plotType: details?.plot_type ?? null,
@@ -307,12 +317,17 @@ export function filterPlotRows(rows: PlotRow[], filters: PlotFilters): PlotRow[]
   // 'all' is tolerated as well as '', so a caller that hands the dropdown
   // vocabulary to the searchable one is not silently filtering everything out.
   const growerId = filters.growerId === 'all' ? '' : filters.growerId;
+  const varietyId = filters.varietyId === 'all' ? '' : filters.varietyId;
 
   return rows.filter((row) => {
     if (filters.plotType !== 'all' && row.plotType !== filters.plotType) return false;
 
     if (growerId) {
       if (growerId === NONE ? row.growerId !== null : row.growerId !== growerId) return false;
+    }
+
+    if (varietyId) {
+      if (varietyId === NONE ? row.varietyId !== null : row.varietyId !== varietyId) return false;
     }
 
     if (filters.category !== 'all' && row.category !== filters.category) return false;

@@ -23,6 +23,8 @@ export interface PlotLike {
   id: string;
   name: string | null;
   variety: string | null;
+  /** varieties.id. Optional: callers built before the varieties table omit it. */
+  variety_id?: string | null;
   region: string | null;
   grower_name: string | null;
 }
@@ -51,6 +53,8 @@ export interface WeatherDayLike {
 
 export interface VarietyWindowLike {
   variety: string;
+  /** varieties.id, when the window has been linked (20261001100000). */
+  variety_id?: string | null;
   start_dm: string; // 'DD/MM'
   end_dm: string; // 'DD/MM'
 }
@@ -300,7 +304,14 @@ export function computePlotStatus(
   let windowLine = '';
   if (plot.variety) {
     const variety = plot.variety.trim();
-    const matching = windows.filter((w) => w.variety.trim() === variety);
+    // By id when both sides carry one, so a window and a plot that spell the
+    // variety differently still meet. The trimmed-text match stays as the
+    // fallback for rows that predate the link.
+    const matching = windows.filter((w) =>
+      plot.variety_id && w.variety_id
+        ? w.variety_id === plot.variety_id
+        : w.variety.trim() === variety
+    );
 
     if (matching.length > 0) {
       const inWindow = matching.some((w) => isDateInWindow(w.start_dm, w.end_dm, now));

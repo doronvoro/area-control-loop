@@ -117,6 +117,7 @@ export async function POST(request: Request) {
       name,
       description: body.description ?? null,
       variety: body.variety ?? null,
+      varietyId: body.variety_id ?? null,
       size: body.size === null || body.size === undefined || body.size === '' ? null : Number(body.size),
       plantingTime: body.planting_time || null,
       taktCount: takts,
@@ -142,8 +143,10 @@ export async function POST(request: Request) {
 /**
  * Update the olive-specific fields of a plot.
  *
- * The plot's own columns (name, variety, planting_time, size) live on `areas`
- * and are edited through /api/areas — this endpoint owns olive_plot_details only.
+ * The plot's name lives on `areas` and is edited through /api/areas — this
+ * endpoint owns olive_plot_details, plus the `areas` columns the drawer edits
+ * when the body carries them: planting_time, size and the variety. /api/areas PUT rewrites every area
+ * column, so it cannot serve as a partial update for either.
  */
 export async function PUT(request: Request) {
   try {
@@ -152,7 +155,7 @@ export async function PUT(request: Request) {
     if (unauthorized) return unauthorized;
 
     const body = await request.json();
-    const { area_id, ...details } = body;
+    const { area_id, planting_time, size, variety_id, variety, ...details } = body;
 
     if (!area_id) {
       return NextResponse.json({ error: 'נדרש מזהה חלקה' }, { status: 400 });
@@ -163,6 +166,40 @@ export async function PUT(request: Request) {
     const areaIds = await getOliveAreaIds(ctx.supabase, accessible);
     if (!areaIds.includes(area_id)) {
       return NextResponse.json({ error: 'אין הרשאה לחלקה זו' }, { status: 403 });
+    }
+
+    if (size !== undefined) {
+      const sizeValue = size === null || size === '' ? null : Number(size);
+      if (sizeValue !== null && (!Number.isFinite(sizeValue) || sizeValue < 0)) {
+        return NextResponse.json({ error: 'גודל חייב להיות מספר חיובי' }, { status: 400 });
+      }
+      const { error } = await (ctx.adminClient.from('areas') as any)
+        .update({ size: sizeValue })
+        .eq('id', area_id);
+      if (error) throw error;
+    }
+
+    if (planting_time !== undefined) {
+      // adminClient: areas UPDATE is admin-only at the RLS level; the access
+      // check above is the boundary, as for the details row.
+      const { error } = await (ctx.adminClient.from('areas') as any)
+        .update({ planting_time: planting_time || null })
+        .eq('id', area_id);
+      if (error) throw error;
+    }
+
+    // Sent only when the drawer's picker changed it. A picked id is written
+    // alone: trg_areas_resolve_variety copies the name from it. A typed name is
+    // written with the id cleared, so the trigger resolves the text (exact name,
+    // alias, or a new variety). Both null clears the variety.
+    if (variety_id !== undefined || variety !== undefined) {
+      const patch = variety_id
+        ? { variety_id }
+        : { variety_id: null, variety: (variety as string | null) || null };
+      const { error } = await (ctx.adminClient.from('areas') as any)
+        .update(patch)
+        .eq('id', area_id);
+      if (error) throw error;
     }
 
     const saved = await upsertOlivePlotDetails(ctx.adminClient, area_id, details);

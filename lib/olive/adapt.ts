@@ -22,6 +22,8 @@ export interface ApiPlot {
   id: string;
   name: string | null;
   variety: string | null;
+  /** varieties.id, kept in step with `variety` by trg_areas_resolve_variety. */
+  variety_id?: string | null;
   planting_time: string | null;
   size: number | null;
   details?: {
@@ -78,6 +80,7 @@ export function toPlotLike(plot: ApiPlot): PlotLike {
     id: plot.id,
     name: plot.name,
     variety: plot.variety,
+    variety_id: plot.variety_id ?? null,
     region: plot.details?.region ?? null,
     grower_name: plot.details?.grower_name ?? null,
   };
@@ -173,6 +176,7 @@ export function toCategoryThresholds(
 export function toVarietyWindowLike(row: Record<string, unknown>): VarietyWindowLike {
   return {
     variety: String(row.variety ?? ''),
+    variety_id: row.variety_id ? String(row.variety_id) : null,
     start_dm: String(row.start_dm ?? ''),
     end_dm: String(row.end_dm ?? ''),
   };

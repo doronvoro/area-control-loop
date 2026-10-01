@@ -18,6 +18,7 @@ import {
   Scale,
   CloudSun,
   CalendarRange,
+  Leaf,
   Building2,
   MapPinned,
   BookOpen,
@@ -96,6 +97,9 @@ export const oliveGroup: NavGroup = {
     // Next to the plots rather than under ניהול: a grower exists to own plots,
     // and the two screens link to each other.
     { href: '/olive/growers', label: 'מגדלים', icon: Users },
+    // Next to growers for the same reason: a variety is reference data a plot
+    // points at, and the variety screen links back to the filtered plots.
+    { href: '/olive/varieties', label: 'זנים', icon: Leaf },
     { href: '/olive/nir', label: 'בדיקות NIR', icon: FlaskConical },
     { href: '/olive/harvest', label: 'רישום מסיק', icon: Tractor },
     { href: '/olive/yield', label: 'הערכת יבול', icon: Scale },

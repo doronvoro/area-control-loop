@@ -4,17 +4,7 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import {
-  AlertTriangle,
-  FileText,
-  Loader2,
-  MapPin,
-  Plus,
-  StickyNote,
-  User,
-  Users,
-  X,
-} from 'lucide-react';
+import { AlertTriangle, FileText, Loader2, MapPin, StickyNote, User, Users, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -35,6 +25,7 @@ import {
 } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { Textarea } from '@/components/ui/textarea';
+import { AliasField } from '@/components/shared/AliasField';
 import { showToast } from '@/lib/toast';
 import { NONE, fromFormValue, toFormValue } from '@/lib/forms/none-sentinel';
 import { PLOT_TYPE_OPTIONS } from '@/types/database';
@@ -266,7 +257,7 @@ function GrowerFormBody({
               </div>
             )}
 
-            <section className="olive-section">
+            <section className="olive-section px-5 py-4">
               <h3 className="mb-3 flex items-center gap-2 text-base font-bold">
                 <Users className="text-primary size-4" />
                 פרטי המגדל
@@ -293,9 +284,13 @@ function GrowerFormBody({
 
                 <div className="md:col-span-2">
                   <AliasField
+                    id="grower-alias-input"
                     aliases={aliases}
                     ownName={form.watch('name')}
                     onChange={setAliases}
+                    description="שמות שהמגדל מופיע תחתם בקובץ הייבוא. ייבוא שימצא אחד מהם ישייך את החלקה למגדל הזה במקום ליצור מגדל חדש."
+                    placeholder="לדוגמה: קיבוץ גשור דרום"
+                    ownNameLabel="זהו שם המגדל עצמו"
                   />
                 </div>
 
@@ -368,7 +363,7 @@ function GrowerFormBody({
               />
             </section>
 
-            <section className="olive-section">
+            <section className="olive-section px-5 py-4">
               <h3 className="mb-3 flex items-center gap-2 text-base font-bold">
                 <User className="text-primary size-4" />
                 איש קשר
@@ -449,7 +444,7 @@ function GrowerFormBody({
               </div>
             </section>
 
-            <section className="olive-section">
+            <section className="olive-section px-5 py-4">
               <h3 className="mb-3 flex items-center gap-2 text-base font-bold">
                 <MapPin className="text-primary size-4" />
                 כתובת
@@ -485,7 +480,7 @@ function GrowerFormBody({
               </div>
             </section>
 
-            <section className="olive-section">
+            <section className="olive-section px-5 py-4">
               <h3 className="mb-3 flex items-center gap-2 text-base font-bold">
                 <StickyNote className="text-primary size-4" />
                 הערות
@@ -520,96 +515,5 @@ function GrowerFormBody({
         </form>
       </Form>
     </>
-  );
-}
-
-/**
- * The alias chips.
- *
- * An alias is not free text on the grower — it is a key the import resolver
- * looks names up by, so the two rules that would make it ambiguous are enforced
- * here as well as in the database: it may not repeat, and it may not be the
- * grower's own name. Everything cross-row (an alias that is ANOTHER grower's
- * name, or already taken) can only be answered by the server, and comes back as
- * the 409 in the banner above.
- */
-function AliasField({
-  aliases,
-  ownName,
-  onChange,
-}: {
-  aliases: string[];
-  ownName: string;
-  onChange: (next: string[]) => void;
-}) {
-  const [draft, setDraft] = useState('');
-
-  const trimmed = draft.trim();
-  const duplicate = trimmed !== '' && aliases.includes(trimmed);
-  const isOwnName = trimmed !== '' && trimmed === ownName.trim();
-  const canAdd = trimmed !== '' && !duplicate && !isOwnName;
-
-  const add = () => {
-    if (!canAdd) return;
-    onChange([...aliases, trimmed]);
-    setDraft('');
-  };
-
-  return (
-    <div className="space-y-2">
-      <label className="text-sm font-semibold" htmlFor="grower-alias-input">
-        שמות נוספים
-      </label>
-      <p className="olive-muted text-xs">
-        שמות שהמגדל מופיע תחתם בקובץ הייבוא. ייבוא שימצא אחד מהם ישייך את החלקה למגדל הזה במקום
-        ליצור מגדל חדש.
-      </p>
-
-      {aliases.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {aliases.map((alias) => (
-            <span
-              key={alias}
-              className="bg-muted flex items-center gap-1 rounded-md px-2 py-1 text-xs"
-            >
-              {alias}
-              <button
-                type="button"
-                onClick={() => onChange(aliases.filter((a) => a !== alias))}
-                aria-label={`הסר את השם הנוסף ${alias}`}
-                className="text-muted-foreground hover:text-destructive"
-              >
-                <X className="size-3" />
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
-
-      <div className="flex gap-2">
-        <Input
-          id="grower-alias-input"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          // Enter adds the chip instead of submitting the drawer, which would
-          // save a half-typed alias and close.
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              add();
-            }
-          }}
-          placeholder="לדוגמה: קיבוץ גשור דרום"
-          className="h-9"
-        />
-        <Button type="button" variant="outline" size="sm" onClick={add} disabled={!canAdd}>
-          <Plus className="ml-1 size-4" />
-          הוסף
-        </Button>
-      </div>
-
-      {duplicate && <p className="text-destructive text-xs">השם כבר ברשימה</p>}
-      {isOwnName && <p className="text-destructive text-xs">זהו שם המגדל עצמו</p>}
-    </div>
   );
 }

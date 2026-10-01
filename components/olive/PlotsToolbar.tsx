@@ -23,6 +23,8 @@ interface PlotsToolbarProps {
   onClear: () => void;
   /** Every grower of the tenant, plus the "no grower" entry. */
   growerOptions: SearchableSelectOption[];
+  /** The varieties the tenant's plots use, by varieties.id, plus "no variety". */
+  varietyOptions: SearchableSelectOption[];
   /** Keyed by PlotType value, plus 'all'. From plotTypeCounts. */
   typeCounts: Record<string, number>;
   /** Keyed by PlotCategory. From categoryCounts. */
@@ -41,6 +43,7 @@ export function PlotsToolbar({
   onFiltersChange,
   onClear,
   growerOptions,
+  varietyOptions,
   typeCounts,
   categoryCounts,
   urgencyCounts,
@@ -150,6 +153,20 @@ export function PlotsToolbar({
             placeholder="כל המגדלים"
             searchPlaceholder="חיפוש מגדל..."
             emptyMessage="לא נמצאו מגדלים"
+          />
+        </FilterField>
+
+        {/* Matches on variety_id, so a plot saved under an alias such as
+          "ארבקינה צעיר" is listed under ארבקינה with the rest. */}
+        <FilterField label="זן" htmlFor="plots-filter-variety">
+          <SearchableSelect
+            id="plots-filter-variety"
+            options={varietyOptions}
+            value={filters.varietyId}
+            onValueChange={(value) => set('varietyId', value)}
+            placeholder="כל הזנים"
+            searchPlaceholder="חיפוש זן..."
+            emptyMessage="לא נמצאו זנים"
           />
         </FilterField>
 

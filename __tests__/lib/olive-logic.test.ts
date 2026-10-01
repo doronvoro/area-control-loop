@@ -371,6 +371,25 @@ describe('computePlotStatus', () => {
     expect(s.headline).toBe('מסיק מיידי לפי NIR');
   });
 
+  it('matches a window by variety id when the spellings differ', () => {
+    const plot = { ...PLOT, variety: 'ארבקינה', variety_id: 'v-arb' };
+    const windows = [
+      { variety: 'ארבקינה בוגר', variety_id: 'v-arb', start_dm: '01/10', end_dm: '30/11' },
+    ];
+    const s = computePlotStatus(plot, nir({ oil: 12 }), RULES, CALM, windows, NOW);
+    expect(s.level).toBe('plan');
+    expect(s.windowLine).toContain('בתוך חלון הקטיף');
+  });
+
+  it('does not match a window of another variety id even when the text agrees', () => {
+    const plot = { ...PLOT, variety_id: 'v-arb' };
+    const windows = [
+      { variety: 'ארבקינה', variety_id: 'v-other', start_dm: '01/10', end_dm: '30/11' },
+    ];
+    const s = computePlotStatus(plot, nir({ oil: 12 }), RULES, CALM, windows, NOW);
+    expect(s.windowLine).toBe('');
+  });
+
   it('reports being outside the window without changing urgency', () => {
     const windows = [{ variety: 'ארבקינה', start_dm: '01/01', end_dm: '28/02' }];
     const s = computePlotStatus(PLOT, nir({ oil: 12 }), RULES, CALM, windows, NOW);
